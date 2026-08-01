@@ -25,6 +25,32 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#3 — AI-Native Company 설계 (Solomon) 브레인스토밍 및 설계 문서화</h2>
+    <div class="meta">2026-08-01 ~ 2026-08-02 · 요청자: Sam(Founder)</div>
+
+    <div class="req"><span class="label">요청 요지:</span>
+Sam(1인 기업, CS 박사)이 AI 도움으로 소프트웨어 개발 기업의 일(기획→제안→설계→구현→배포)을 수행하는 AI-Native Company 설계.
+AI CEO=Solomon, 창업자=Sam, Slack 브레인스토밍. 개념 문서는 완벽하지 않으니 최신 파악 내용 기반으로 비판적 검토 후 설계.
+주요 검토 지시: LLM Wiki 정당성 / 24시간 학습 근거 / 메모리·스킬·MCP 관리 / 성장(복리) / 미션별 파이프라인+체크리스트 검증 /
+Solomon은 기획자(구현 참여 여부) / subagent vs profile / Kanban vs Git issue / 코드 구현≠검증 에이전트.</div>
+
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li>브레인스토밍 스킬 적용, 창업 구상 비판적 검토(스코프·LLM Wiki 정당성·24시간 학습·복리 성장)</li>
+      <li>Explore 에이전트로 Hermes subagent vs profile, Kanban 존재 여부 추가 조사(→ 네이티브 Kanban 발견)</li>
+      <li>한 번에 하나씩 명확화 질문 → 결정: 미션 A 우선 / 제로 인프라 / Markdown+Slack+Git / 상용 API / Option B</li>
+      <li>Solomon 역할 경계(기획·검증총괄, 구현 안 함)·코드 구현≠검증 profile 확정</li>
+      <li>설계 문서 5종 작성: <code>02_company_design</code>, <code>03_mission_pipeline_and_workflow</code>, <code>04_mvp_research_trend_report_spec</code>, <code>05_stage0_setup_guide</code>, <code>06_design_decision_log</code></li>
+      <li>본 <code>history.html</code> 갱신, 커밋·푸시</li>
+    </ol>
+
+    <div class="result"><span class="label">결과:</span>
+      아키텍처 확정(Option B: Hermes 네이티브 Kanban=워크플로우 관리자 + 전문 profile, subagent=단계 내 병렬, llm-wiki 별도 repo, Docker 로컬).
+      1호 미션(연구·기술 동향 보고서) 11단계 파이프라인 SPEC + Sam용 Stage 0 구축 가이드 + 의사결정 기록(ADR 8건) 문서화.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#2 — Hermes Agent · LLM Wiki 조사 및 문서화</h2>
     <div class="meta">2026-08-01 · 요청자: CEO(sghan@kisti.re.kr)</div>
 
