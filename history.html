@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>작업 이력 — my-hermes-company-2026</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; line-height: 1.6; max-width: 900px; margin: 0 auto; padding: 2rem; color: #222; }
+    h1 { border-bottom: 3px solid #2c3e50; padding-bottom: .5rem; }
+    .entry { border: 1px solid #e1e4e8; border-radius: 8px; padding: 1rem 1.25rem; margin: 1.25rem 0; background: #fafbfc; }
+    .entry h2 { margin: 0 0 .5rem; font-size: 1.15rem; color: #2c3e50; }
+    .meta { color: #6a737d; font-size: .85rem; margin-bottom: .75rem; }
+    .req { background: #eef4fb; border-left: 4px solid #3498db; padding: .6rem .9rem; border-radius: 4px; margin: .5rem 0; white-space: pre-wrap; }
+    .steps { margin: .5rem 0; }
+    .steps li { margin: .2rem 0; }
+    .result { background: #eefbf1; border-left: 4px solid #27ae60; padding: .6rem .9rem; border-radius: 4px; margin: .5rem 0; }
+    code { background: #f0f0f0; padding: .1rem .35rem; border-radius: 3px; font-size: .9em; }
+    .label { font-weight: 600; color: #2c3e50; }
+  </style>
+</head>
+<body>
+  <h1>작업 이력 (History)</h1>
+  <p class="meta">프로젝트: <code>my-hermes-company-2026</code> — 사용자 요청과 주요 작업 단계·결과를 기록합니다.</p>
+
+  <!-- 최신 항목이 위로 오도록 역순 기록 -->
+
+  <div class="entry">
+    <h2>#2 — Hermes Agent · LLM Wiki 조사 및 문서화</h2>
+    <div class="meta">2026-08-01 · 요청자: CEO(sghan@kisti.re.kr)</div>
+
+    <div class="req"><span class="label">요청:</span>
+docs/ai_native_company_개념.md 파일 내용을 검토하라.
+이 내용과 관련하여 먼저 hermes agent 에 관한 최신 자료 및 llm-wiki를 조사하여 docs/ 밑에 md 파일로 각각 정리하여 저장하라.
+- hermes agent: https://hermes-agent.nousresearch.com/ , https://github.com/nousresearch/hermes-agent
+- llm-wiki: https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f</div>
+
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li>개념 문서 <code>docs/ai_native_company_개념.md</code> 전체 검토</li>
+      <li>Explore 에이전트로 Hermes Agent 공식 사이트·GitHub 문서 조사(아키텍처·profile·Slack·cron·설치)</li>
+      <li>Explore 에이전트로 Karpathy LLM Wiki gist 및 Astro-Han 참고 구현 조사</li>
+      <li>작업 계획 문서 <code>docs/01_hermes_llm-wiki_조사_계획.md</code> 작성</li>
+      <li>조사 문서 <code>docs/hermes_agent_조사.md</code> 작성</li>
+      <li>조사 문서 <code>docs/llm_wiki_조사.md</code> 작성</li>
+      <li>본 <code>history.html</code> 갱신</li>
+      <li>변경 사항 커밋 및 원격(origin) 푸시</li>
+    </ol>
+
+    <div class="result"><span class="label">결과:</span>
+      계획 1건 + 조사 문서 2건 생성. 각 조사 문서는 출처 URL, 조사 기준일(2026-08-01),
+      개념 문서와의 연결점(및 Hermes 문서의 각주 검증표)을 포함. 세부 수치는 공식 문서 재확인 권고 주의문 포함.
+    </div>
+  </div>
+
+  <div class="entry">
+    <h2>#1 — 프로젝트 작업 규칙 기억</h2>
+    <div class="meta">2026-08-01 · 요청자: CEO</div>
+    <div class="req"><span class="label">요청:</span> 프로젝트 작업 규칙을 기억하라.</div>
+    <div class="result"><span class="label">결과:</span>
+      작업 규칙(① docs/ 번호 접두 계획 파일, ② history.html 이력 기록, ③ 단계별 커밋·푸시, ④ 릴리스는 요청 시에만)을
+      에이전트 메모리에 저장.
+    </div>
+  </div>
+
+</body>
+</html>
