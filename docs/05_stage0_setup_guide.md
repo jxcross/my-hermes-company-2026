@@ -62,12 +62,18 @@
 
 ---
 
-## 단계 0-C. 초기 설정 + Solomon 정체성 배포
-1. **초기 설정(대화형)** — 제공자·모델·키를 지정:
+## 단계 0-C. 초기 설정(OAuth) + Solomon 정체성 배포
+> **인증 방식: OAuth(ChatGPT 구독) — 기본 모델 GPT-5.5(provider `openai-codex`).** API 키 아님.
+> OAuth 인증정보는 `hermes-home/auth.json`에 저장되어 지속된다(재로그인 불필요).
+
+1. **초기 설정 + OAuth 로그인(대화형)** — Sam이 직접 실행(브라우저·ChatGPT 계정 필요):
    ```bash
-   docker compose run --rm hermes-solomon setup
+   docker compose run --rm hermes-solomon hermes setup
    ```
-   - 제공자/모델: **Anthropic Claude 권장**(예: `anthropic/claude-sonnet-4`). `ANTHROPIC_API_KEY`는 `.env`에서 읽힘.
+   - 진입점 충돌 방지를 위해 **`hermes` 접두어**를 붙여 호출한다.
+   - 위저드에서 제공자 = **openai-codex(ChatGPT OAuth)**, 모델 = **gpt-5.5** 선택.
+   - OAuth가 "URL 열기/코드 입력" 흐름이면 안내 URL을 브라우저에서 완료. (localhost 콜백 방식이면 포트 공개가 필요할 수 있음 → 필요 시 `docker compose run --service-ports ...` 로 재실행)
+   - 대안: 로그인만 별도로 → `docker compose run --rm hermes-solomon hermes login`
 2. **Solomon 정체성 배포** — repo의 버전관리 소스(`solomon-profile/`)를 데이터 홈에 복사:
    ```bash
    cp solomon-profile/SOUL.md hermes-home/SOUL.md
