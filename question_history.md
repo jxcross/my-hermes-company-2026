@@ -127,7 +127,17 @@ https://github.com/jxcross/my-hermes-company-llm-wiki-2026.git
 Stage 0 구축을 함께 진행하자. question_history.md 파일 등 네가 수정하지 않은 파일들도 깃 커밋에 추가하라.
 ```
 
+```
+~/.hermes 는 다른 프로젝트에서 사용하는 hermes agent 이다.
+본 프로젝트에서는 별도로 설치하여 혼선이 없어야 한다.
+https://hub.docker.com/r/nousresearch/hermes-agent 으로 (a) 방식 설치하면 안되나?
+docker-compose.yml 구성하여 설치하라.
+주요 디렉토리는 마운트하라.
+```
 
+```
+솔로몬 등 기본 모델은 oauth 방식으로 gpt-5.5 모델을 사용할 것이다.
+```
 
 
 
