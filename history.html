@@ -33,12 +33,13 @@
       <li>결정: 모델=품질우선, 유료여부=먼저검증후결정, 저장=설계대로 분리(복사는 write-safe-root 확장으로 제거)</li>
       <li>GPT-5.6 조사(Sol $5/$30·Terra $2.50/$15·Luna $1/$6, 105만 컨텍스트) + <b>terra·luna·sol 전부 무료 OAuth(openai-codex) 서빙 확인</b>(유료 불필요)</li>
       <li><code>HERMES_WRITE_SAFE_ROOT=/opt/data:/work/company:/work/llm-wiki</code> (마운트 볼륨과 일치) → 워커 직접쓰기, <b>복사 근본 제거</b>. 검증: 워커가 맥 reports/에 직접 생성 ✅</li>
-      <li>Tavily 배선(force-recreate) → <code>check_web_api_key=True</code>, API 직접호출·terra web_search 실제 결과 ✅. (scout=luna는 원샷서 curl 폴백 — caveat 기록)</li>
-      <li>모델 배치: scout=luna, reader·writer·Solomon=terra (profiles-src + hermes-home 둘 다), scout SOUL에 web 우선 지침</li>
+      <li>Tavily 배선 → 근본원인 규명: named 프로필은 홈 .env가 아닌 <b>프로세스 env(os.environ)</b>에서 키를 봐야 web 활성. repo .env(compose env_file)에 <code>TAVILY_API_KEY</code> 추가 → force-recreate</li>
+      <li><b>검증:</b> default·scout 모두 컷오프 이후 쿼리를 web_search로 실검색(curl/browser 금지 상태서 실제 결과) ✅. (초기 scout 실패는 luna 아닌 키 스코프 문제였음)</li>
+      <li>모델 배치: scout·reader·writer·Solomon=terra (Sam이 scout를 Terra로 결정), scout SOUL에 web 우선 지침</li>
       <li>docs/10 §4.2 정비, 커밋·푸시</li>
     </ol>
     <div class="result"><span class="label">결과:</span>
-      복사 제거·Tavily 적용·GPT-5.6 품질우선 배치 완료(전부 무료 OAuth). <b>미해결 관찰:</b> scout(luna) 도구사용 신뢰성 — 다음 실제 미션에서 재검증, 불안정 시 scout를 Terra로 상향 검토(Sam 결정 대기).
+      복사 근본제거 + Tavily 전 프로필 web_search 작동 + GPT-5.6 품질우선 배치 완료(전부 무료 OAuth). Sam 질문(모델 내장 검색?) 관련: 현 구성의 실검색은 Hermes <code>web</code> 도구(Tavily 백엔드) 경유이며, curl 금지 상태서도 동작 확인.
     </div>
   </div>
 

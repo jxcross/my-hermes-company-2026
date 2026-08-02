@@ -100,12 +100,12 @@ hermes kanban swarm "핵심 주장 교차검증" \
 ## 4.2 프로덕션화 개선 (2026-08-02, §4.1 제약 해소)
 슬라이스 완주 후 Sam 지시로 인프라를 정비. `docker-compose.yml` + force-recreate로 배치:
 - **write-safe-root = 마운트 볼륨과 일치**: `HERMES_WRITE_SAFE_ROOT=/opt/data:/work/company:/work/llm-wiki`. 다중경로 지원(`file_safety.py`). → 워커가 회사 repo(모든 미션 유형·디렉터리)·llm-wiki에 **직접쓰기**, **복사 근본 제거**. 안전망=git+Solomon 게이트+태스크 워크스페이스 스코핑. 미션 워크스페이스는 `dir:/work/company/reports/<mission>` 관례.
-- **Tavily 웹 검색 적용**: `TAVILY_API_KEY`(hermes-home/.env) → hermes가 `/opt/data/.env` 로드(`config.py`). `web.backend=tavily` 자동, `check_web_api_key=True`. **검증**: Tavily API 직접호출·terra 프로필 web_search 실제 결과 반환 ✅.
-  - ⚠️ **caveat(관찰)**: scout(gpt-5.6-luna)는 `-z` 원샷에서 web_search 도구를 못 잡고 `curl` 폴백 사용(플러그인 로딩 레이스 or luna 도구사용 약점). terra는 정상. → scout SOUL은 "web 우선, curl 폴백"이라 산출물은 정상. **다음 실제 미션(kanban 워커)에서 scout+web_search 재검증 필요**; 불안정하면 scout를 Terra로 상향 검토.
+- **Tavily 웹 검색 적용**: `web.backend=tavily` 자동, `check_web_api_key=True`. **검증**: Tavily API 직접호출 + default·scout 프로필이 **컷오프 이후 쿼리를 web_search로 실검색**(curl/browser 금지 상태에서 실제 결과 반환) ✅.
+  - ⚠️ **핵심 함정(해결됨, 재현 필독)**: `check_web_api_key`→`get_provider_env`는 `os.environ` → **프로필 홈 `.env`** 순으로 키를 찾는다. `TAVILY_API_KEY`를 `hermes-home/.env`에만 두면 **default 프로필만** web 활성; named 프로필(scout/reader/writer)은 자기 `.env`(빈 값)를 봐서 web 도구가 꺼진다. → **키를 프로세스 env에 노출**해야 모든 프로필이 사용: repo `.env`(compose `env_file`, gitignore)에 `TAVILY_API_KEY` 추가 → force-recreate. (초기 "scout가 web 못 씀"은 luna 탓이 아니라 이 스코프 문제였음.)
 - **모델 배치(품질우선, GPT-5.6, 전부 openai-codex OAuth 서빙 확인)**:
   | 프로필 | 모델 | 근거 |
   |---|---|---|
-  | scout | `gpt-5.6-luna` | 대량 수집·저비용 (단 도구사용 caveat) |
+  | **scout** | `gpt-5.6-terra` | 도구(web_search·fetch·write) 집약 → 신뢰성 위해 Terra (Sam 결정). 근본원인은 키 스코프였으므로 비용 원하면 Luna 복귀도 가능. |
   | reader·writer·**Solomon(default)**·(추후)synthesizer·curator | `gpt-5.6-terra` | GPT-5.5급·절반가·프로덕션 표준 |
   | (추후)fact-checker·reviewer | `gpt-5.6-sol` | 최심층 추론=독립검증 |
   - 설정: `hermes-home/config.yaml`(Solomon) + `profiles/<name>/config.yaml`. 버전관리 소스=`profiles-src/`.
