@@ -25,6 +25,31 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#5 — Stage 0 구축 (Solomon 격리 Hermes 컨테이너 + Slack + Kanban)</h2>
+    <div class="meta">2026-08-02 · 요청자: Sam(Founder) · 함께 진행</div>
+
+    <div class="req"><span class="label">요청 요지:</span>
+Stage 0 구축을 함께 진행. 공식 Docker 이미지(nousresearch/hermes-agent)로 (a) 전체 컨테이너화, docker-compose 구성·주요 디렉터리 마운트.
+호스트 ~/.hermes(다른 프로젝트)와 혼선 없이 별도 설치. 기본 모델은 OAuth(ChatGPT) GPT-5.5. question_history.md 등도 커밋에 포함.</div>
+
+    <div class="label">수행 단계 / 결과:</div>
+    <ol class="steps">
+      <li>git 정리: question_history.md 커밋</li>
+      <li>공식 이미지 조사·pull(nousresearch/hermes-agent:latest), docker-compose.yml 작성(서비스 hermes-solomon, 포트 8652/9129, 마운트 3종: hermes-home·llm-wiki·회사repo)</li>
+      <li>격리 확인: 기존 스택(ainc-hermes 등)·호스트 ~/.hermes와 완전 분리(전용 ./hermes-home)</li>
+      <li>OAuth 로그인(Sam) → provider openai-codex, <b>기본 모델 gpt-5.5</b> 확인</li>
+      <li>Solomon 정체성(SOUL·USER) 배포 → 로컬 대화로 정체성/역할 경계 검증 ✅</li>
+      <li>Slack: 매니페스트로 앱 생성(봇명 Solomon), 토큰/ID를 .env에 입력(인라인 주석 혼입 수정), 게이트웨이 연결 → <b>아웃바운드 전송 성공</b>(#mission-log)</li>
+      <li>Kanban: create/list/archive 스모크 테스트 ✅, 웹 대시보드(게시판) 기동 확인(localhost:9129)</li>
+    </ol>
+
+    <div class="result"><span class="label">결과:</span>
+      Stage 0 완료. Solomon(AI CEO)이 격리 컨테이너에서 gpt-5.5(OAuth)로 구동, Slack 연결·Kanban 보드·웹 대시보드 동작.
+      다음: Stage 1 — 1호 미션(연구·기술 동향 보고서) 파이프라인 완주. (인바운드 @Solomon 최종 왕복 확인은 Sam 진행)
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#4 — 설계 Round 2 보강 (다이어그램·게시판·전문화·워크플로우 가시성)</h2>
     <div class="meta">2026-08-02 · 요청자: Sam(Founder)</div>
 
