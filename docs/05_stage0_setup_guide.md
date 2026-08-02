@@ -34,53 +34,52 @@
 ## 단계 0-B. Docker에서 Hermes 구동 (로컬)
 목표: Hermes를 컨테이너에서 실행하되, **영속 데이터는 볼륨으로 유지**한다.
 
-1. Hermes 설치 방식 확인(공식 문서 기준). 로컬 설치형은 보통:
+> **방식 확정: 공식 Docker 이미지 `nousresearch/hermes-agent:latest`로 (a) 전체 컨테이너화.**
+> 호스트 `~/.hermes`(다른 프로젝트 `ainc-hermes` 등)와 **완전 분리** — 데이터는 이 repo의 `./hermes-home`(컨테이너 `/opt/data`)에만 저장.
+> 포트도 기존 스택(8642·9219 사용 중)과 충돌 없게 **8652/9129**로 격리.
+
+이 repo에 **이미 구성 완료**된 파일:
+- `docker-compose.yml` — `hermes-solomon` 서비스(이미지·포트·마운트·리소스 제한)
+- `.env.example` — 키/토큰 템플릿 (→ `.env`로 복사해 채움, 커밋 금지)
+- `hermes-home/` — 격리 데이터 홈(gitignore)
+
+1. **환경변수 설정**:
    ```bash
-   curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+   cp .env.example .env    # ANTHROPIC_API_KEY, SLACK_* 채우기(0-C·0-D 진행하며)
    ```
-   그러나 우리는 **컨테이너 격리**를 원하므로, 다음 중 공식이 권장하는 방식을 택한다:
-   - (권장 확인 대상) 공식 Docker 이미지/Compose가 있으면 그것을 사용
-   - 없으면, `python:3.11-slim` 기반 컨테이너 안에서 설치 스크립트 실행하는 커스텀 `Dockerfile` 작성
-
-2. **볼륨 매핑 원칙** (컨테이너 재생성해도 유지되어야 하는 것):
-   | 유지(볼륨) | 격리(컨테이너 내부) |
-   |-----------|---------------------|
-   | `~/.hermes/` (profiles·memory·sessions·skills·cron·**kanban.db**) | 코드 실행 샌드박스 |
-   | llm-wiki repo 체크아웃 | 브라우저 프로세스 |
-   | Slack/API 토큰(`.env`) | 임시 캐시 |
-
-3. 예시 뼈대(`docker-compose.yml` 초안 — 실제 이미지/명령은 공식 문서로 확정):
-   ```yaml
-   services:
-     hermes:
-       build: .              # 또는 image: <공식 이미지>
-       env_file: .env        # SLACK_*, ANTHROPIC_API_KEY 등
-       volumes:
-         - ./hermes-home:/root/.hermes      # 영속: profiles·memory·kanban.db
-         - /Users/admin/DEVELOP/Y2026/GITHUB/01-JXCROSS/my-hermes-company-llm-wiki-2026:/work/llm-wiki   # 지식 repo(실제 경로)
-       restart: unless-stopped
+2. **이미지 받기**:
+   ```bash
+   docker compose pull      # 또는 docker pull nousresearch/hermes-agent:latest
    ```
+3. **컨테이너 데이터 경로(마운트)**:
+   | 컨테이너 경로 | 호스트(이 repo) | 용도 |
+   |---------------|-----------------|------|
+   | `/opt/data` | `./hermes-home` | Hermes 홈: profiles·memories·sessions·skills·cron·**kanban.db**·config·SOUL |
+   | `/work/llm-wiki` | `../my-hermes-company-llm-wiki-2026` | LLM Wiki repo |
+   | `/work/company` | `./` | 회사 repo(보고서 산출) |
 
-**검증**: 컨테이너 안에서 `hermes --version` (또는 상응 명령)이 동작. 컨테이너 재시작 후에도 `~/.hermes` 유지.
+**검증**: `docker compose run --rm hermes-solomon --help`(또는 `version`)이 동작. `~/.hermes`(다른 프로젝트)는 그대로.
 
 ---
 
-## 단계 0-C. Solomon profile 생성
-1. 프로필 생성(예):
+## 단계 0-C. 초기 설정 + Solomon 정체성 배포
+1. **초기 설정(대화형)** — 제공자·모델·키를 지정:
    ```bash
-   hermes profile create solomon
+   docker compose run --rm hermes-solomon setup
    ```
-2. **`SOUL.md`** 작성(정체성·운영 원칙). 핵심 포함 사항:
-   - "너는 AI-Native Company의 대표 AI **Solomon**이다. 사용자는 **Sam**이다."
-   - **브레인스토밍 우선**: 미션 실행 전 Sam과 협의해 미션 스펙(목표·완료조건·제약)을 합의한다.
-   - **직접 구현하지 않는다**: 조사·집필·코딩은 전문 profile에 위임하고, 너는 기획·오케스트레이션·게이트 검증·보고를 한다.
-   - **작성자 ≠ 검증자** 원칙 준수.
-   - **승인 게이트**: 개인정보·보안·비용·외부공개·파괴적작업은 Sam 승인. 승인 요청은 행동·이유·영향·위험·복구를 함께 제시.
-   - 모든 중요한 주장에 출처. 재사용 지식은 LLM Wiki·Skill로 축적.
-3. **`USER.md`** 작성: "Sam, 컴퓨터공학 박사, 한국어 소통 선호, 관심=AI/LLM 동향·논문·웹 시뮬레이션·웹개발."
-4. **`config.yaml`**: 사용할 상용 모델·비용 관련 옵션 설정(모델은 후속 확정).
+   - 제공자/모델: **Anthropic Claude 권장**(예: `anthropic/claude-sonnet-4`). `ANTHROPIC_API_KEY`는 `.env`에서 읽힘.
+2. **Solomon 정체성 배포** — repo의 버전관리 소스(`solomon-profile/`)를 데이터 홈에 복사:
+   ```bash
+   cp solomon-profile/SOUL.md hermes-home/SOUL.md
+   mkdir -p hermes-home/memories && cp solomon-profile/USER.md hermes-home/memories/USER.md
+   ```
+   > 기본 프로필을 Solomon으로 쓰는 구성(단순). named 프로필 방식은 `solomon-profile/README.md` 참고.
+3. **대화 확인(로컬)**:
+   ```bash
+   docker compose run --rm -it hermes-solomon
+   ```
 
-**검증**: `hermes -p solomon chat` (또는 상응)으로 로컬에서 Solomon과 대화 가능.
+**검증**: 컨테이너 대화에서 Solomon이 "나는 Solomon(AI CEO), 사용자는 Sam" 정체성으로 응답.
 
 ---
 

@@ -1,3 +1,6 @@
 .DS_Store
 .env
 other_projects/
+
+# Hermes(Solomon) 격리 데이터 홈 — 시크릿·세션·kanban 등 포함, 커밋 금지
+hermes-home/

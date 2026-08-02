@@ -1,0 +1,37 @@
+# Solomon (AI CEO) — 이 프로젝트 전용 격리 Hermes 인스턴스
+#
+# ⚠️ 격리 원칙:
+#  - 호스트 ~/.hermes (다른 프로젝트: ainc-hermes 등)와 절대 공유하지 않는다.
+#  - 데이터는 이 repo의 ./hermes-home 에만 저장(/opt/data 로 마운트).
+#  - 컨테이너명·포트를 기존 스택(ainc-hermes: 8642/9219 등)과 충돌하지 않게 고유화.
+#
+# 사용:
+#   1) .env.example → .env 복사 후 키 입력 (ANTHROPIC/OPENAI, SLACK_*)
+#   2) 초기 설정(대화형):  docker compose run --rm hermes-solomon setup
+#   3) 게이트웨이 기동:     docker compose up -d
+#   4) 대시보드(게시판):   http://localhost:9129   (API: http://localhost:8652)
+
+services:
+  hermes-solomon:
+    image: nousresearch/hermes-agent:latest
+    container_name: hermes-solomon
+    restart: unless-stopped
+    command: gateway run
+    env_file:
+      - .env
+    environment:
+      - HERMES_DASHBOARD=1
+      - HERMES_DASHBOARD_HOST=0.0.0.0
+      - HERMES_DASHBOARD_PORT=9119
+    ports:
+      - "127.0.0.1:8652:8642"   # gateway/API (호스트 8652 → 컨테이너 8642)
+      - "127.0.0.1:9129:9119"   # 웹 대시보드=게시판 (호스트 9129 → 컨테이너 9119)
+    volumes:
+      - ./hermes-home:/opt/data                                # 격리 Hermes 홈(profiles·kanban·sessions·memories·config·SOUL)
+      - ../my-hermes-company-llm-wiki-2026:/work/llm-wiki       # LLM Wiki repo (지식 자산)
+      - ./:/work/company                                       # 회사 repo (보고서 산출물)
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2.0"
