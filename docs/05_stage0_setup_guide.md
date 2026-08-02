@@ -19,15 +19,17 @@
 
 ---
 
-## 단계 0-A. Git 저장소 2개 준비 ✅ (완료됨)
+> 💡 **이 가이드는 새 PC 부트스트랩에도 그대로 쓰인다.** `.env`(시크릿)·`hermes-home/`(auth·kanban)는 git에 없으므로, 새 PC에서는 0-A~0-E를 다시 수행한다(OAuth는 재로그인).
+
+## 단계 0-A. Git 저장소 2개 준비
 1. 회사 저장소: `my-hermes-company-2026` (현재 repo).
-2. **별도 llm-wiki 저장소** — **이미 생성·클론 완료**:
+2. **별도 llm-wiki 저장소** — **형제 폴더에 clone**(회사 repo와 같은 상위 디렉터리):
    - 원격: `https://github.com/jxcross/my-hermes-company-llm-wiki-2026.git`
-   - 로컬: `/Users/admin/DEVELOP/Y2026/GITHUB/01-JXCROSS/my-hermes-company-llm-wiki-2026`
-   - 구조: `raw/ · wiki/ · reflections/` + 초기 커밋 존재.
+   - 구조: `raw/ · wiki/ · reflections/`
+   - `docker-compose.yml`은 이를 `../my-hermes-company-llm-wiki-2026` 상대경로로 마운트한다.
    → 이유: 지식 자산을 회사 코드와 **분리**해 독립적으로 버전관리·백업.
 
-**검증**: 두 repo가 GitHub에 존재하고 clone 가능. (llm-wiki는 확인 완료)
+**검증**: 두 repo가 같은 상위 폴더에 나란히 clone되어 있다.
 
 ---
 

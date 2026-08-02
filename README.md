@@ -78,6 +78,13 @@ docker compose up -d                 # 게이트웨이 기동
 
 ---
 
+## 새 세션 / 다른 PC에서 이어가기
+
+- 어느 PC의 새 Claude Code 세션이든 **[`CLAUDE.md`](CLAUDE.md)가 자동 로드**되어 맥락·규칙·상태를 복원한다.
+- **주의**: `.env`(시크릿)·`hermes-home/`(auth·kanban·sessions)·프로젝트 메모리는 **git에 없다(로컬 전용)**.
+  다른 PC에서는 [`docs/05_stage0_setup_guide.md`](docs/05_stage0_setup_guide.md)로 **부트스트랩**(repo 2개 clone → `docker compose pull` → `.env` 작성 → `hermes setup` OAuth 재로그인 → 정체성 배포 → `up -d`)한다.
+- 첫 메시지 예: *"my-hermes-company-2026 이어서 진행하자. v0.1.0/Stage 0 완료 상태 확인 후 Stage 1 계획을 제시하라."*
+
 ## 저장소 구조
 ```
 docs/               설계 문서(02~09) + 조사 자료
