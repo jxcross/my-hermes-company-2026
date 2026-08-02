@@ -23,6 +23,9 @@ services:
       - HERMES_DASHBOARD=1
       - HERMES_DASHBOARD_HOST=0.0.0.0
       - HERMES_DASHBOARD_PORT=9119
+      # 에이전트 파일쓰기 허용 범위 = 마운트된 볼륨 3개와 일치(맥 나머지는 격리).
+      # 워커가 회사 repo(모든 미션 산출물)·llm-wiki에 직접쓰기 → 복사 불필요.
+      - HERMES_WRITE_SAFE_ROOT=/opt/data:/work/company:/work/llm-wiki
     ports:
       - "127.0.0.1:8652:8642"   # gateway/API (호스트 8652 → 컨테이너 8642)
       - "127.0.0.1:9129:9119"   # 웹 대시보드=게시판 (호스트 9129 → 컨테이너 9119)

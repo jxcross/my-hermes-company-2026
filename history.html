@@ -25,6 +25,24 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#9 — 파이프라인 인프라 프로덕션화 (Tavily·복사제거·GPT-5.6 재배치)</h2>
+    <div class="meta">2026-08-02 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> ① Tavily API키 적용 ② 워크스페이스 복사 필요성 검토 ③ 새 GPT-5.6 모델(sol/terra/luna 등) 역할별 적용 ④ 보고서/지식 저장 위치·사후처리.</div>
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li>결정: 모델=품질우선, 유료여부=먼저검증후결정, 저장=설계대로 분리(복사는 write-safe-root 확장으로 제거)</li>
+      <li>GPT-5.6 조사(Sol $5/$30·Terra $2.50/$15·Luna $1/$6, 105만 컨텍스트) + <b>terra·luna·sol 전부 무료 OAuth(openai-codex) 서빙 확인</b>(유료 불필요)</li>
+      <li><code>HERMES_WRITE_SAFE_ROOT=/opt/data:/work/company:/work/llm-wiki</code> (마운트 볼륨과 일치) → 워커 직접쓰기, <b>복사 근본 제거</b>. 검증: 워커가 맥 reports/에 직접 생성 ✅</li>
+      <li>Tavily 배선(force-recreate) → <code>check_web_api_key=True</code>, API 직접호출·terra web_search 실제 결과 ✅. (scout=luna는 원샷서 curl 폴백 — caveat 기록)</li>
+      <li>모델 배치: scout=luna, reader·writer·Solomon=terra (profiles-src + hermes-home 둘 다), scout SOUL에 web 우선 지침</li>
+      <li>docs/10 §4.2 정비, 커밋·푸시</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      복사 제거·Tavily 적용·GPT-5.6 품질우선 배치 완료(전부 무료 OAuth). <b>미해결 관찰:</b> scout(luna) 도구사용 신뢰성 — 다음 실제 미션에서 재검증, 불안정 시 scout를 Terra로 상향 검토(Sam 결정 대기).
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#8 — Stage 1 1호 미션 완주: research-trend-report (M-2026-001)</h2>
     <div class="meta">2026-08-02 · 요청자: Sam(Founder) · 주제 승인·자동실행</div>
     <div class="req"><span class="label">요청:</span> 축소 파이프라인(scout→reader→writer + Solomon 게이트)으로 "최근 3개월 Agentic AI/LLM 에이전트 동향" 보고서를 실제로 완주시켜 시스템이 도는 것을 증명.</div>

@@ -97,6 +97,19 @@ hermes kanban swarm "핵심 주장 교차검증" \
 - **Deliver 카드를 `default`(Solomon)에 할당 + ready 상태로 두면 자율 실행되어 rerun 카드를 만들 수 있음.** → Deliver는 writer 완료 전까지 **`block --kind needs_input` 유지**. (Solomon이 중복을 스스로 SUPERSEDED 처리해 무해했으나, 게이트 유지가 정석.)
 - **결과:** scout 13편 수집 → reader 13 분석 → writer `report.md`(출처13·불확실성/상충 명시) 완주. 산출물 `reports/M-2026-001/`.
 
+## 4.2 프로덕션화 개선 (2026-08-02, §4.1 제약 해소)
+슬라이스 완주 후 Sam 지시로 인프라를 정비. `docker-compose.yml` + force-recreate로 배치:
+- **write-safe-root = 마운트 볼륨과 일치**: `HERMES_WRITE_SAFE_ROOT=/opt/data:/work/company:/work/llm-wiki`. 다중경로 지원(`file_safety.py`). → 워커가 회사 repo(모든 미션 유형·디렉터리)·llm-wiki에 **직접쓰기**, **복사 근본 제거**. 안전망=git+Solomon 게이트+태스크 워크스페이스 스코핑. 미션 워크스페이스는 `dir:/work/company/reports/<mission>` 관례.
+- **Tavily 웹 검색 적용**: `TAVILY_API_KEY`(hermes-home/.env) → hermes가 `/opt/data/.env` 로드(`config.py`). `web.backend=tavily` 자동, `check_web_api_key=True`. **검증**: Tavily API 직접호출·terra 프로필 web_search 실제 결과 반환 ✅.
+  - ⚠️ **caveat(관찰)**: scout(gpt-5.6-luna)는 `-z` 원샷에서 web_search 도구를 못 잡고 `curl` 폴백 사용(플러그인 로딩 레이스 or luna 도구사용 약점). terra는 정상. → scout SOUL은 "web 우선, curl 폴백"이라 산출물은 정상. **다음 실제 미션(kanban 워커)에서 scout+web_search 재검증 필요**; 불안정하면 scout를 Terra로 상향 검토.
+- **모델 배치(품질우선, GPT-5.6, 전부 openai-codex OAuth 서빙 확인)**:
+  | 프로필 | 모델 | 근거 |
+  |---|---|---|
+  | scout | `gpt-5.6-luna` | 대량 수집·저비용 (단 도구사용 caveat) |
+  | reader·writer·**Solomon(default)**·(추후)synthesizer·curator | `gpt-5.6-terra` | GPT-5.5급·절반가·프로덕션 표준 |
+  | (추후)fact-checker·reviewer | `gpt-5.6-sol` | 최심층 추론=독립검증 |
+  - 설정: `hermes-home/config.yaml`(Solomon) + `profiles/<name>/config.yaml`. 버전관리 소스=`profiles-src/`.
+
 ## 5. full 11단계 확장 백로그 (슬라이스 완주 후)
 - profile 추가: `fact-checker`(6, ≠reader) · `synthesizer`(7) · `reviewer`(9, ≠writer) · `curator`(4·10).
 - Skill: **PRISMA식 체계적 문헌조사 + 근거등급** · **karpathy-llm-wiki**(ingest/query/lint).
