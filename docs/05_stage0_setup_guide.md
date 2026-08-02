@@ -19,20 +19,15 @@
 
 ---
 
-## 단계 0-A. Git 저장소 2개 준비
-1. 회사 저장소: 이미 있음 → `my-hermes-company-2026` (현재 repo).
-2. **별도 llm-wiki 저장소** 생성:
-   ```bash
-   # GitHub에서 빈 private repo 생성: my-hermes-llm-wiki
-   git clone https://github.com/jxcross/my-hermes-llm-wiki.git
-   cd my-hermes-llm-wiki
-   mkdir -p raw wiki reflections
-   printf "# LLM Wiki (Solomon)\n" > README.md
-   git add . && git commit -m "chore: init llm-wiki structure" && git push
-   ```
+## 단계 0-A. Git 저장소 2개 준비 ✅ (완료됨)
+1. 회사 저장소: `my-hermes-company-2026` (현재 repo).
+2. **별도 llm-wiki 저장소** — **이미 생성·클론 완료**:
+   - 원격: `https://github.com/jxcross/my-hermes-company-llm-wiki-2026.git`
+   - 로컬: `/Users/admin/DEVELOP/Y2026/GITHUB/01-JXCROSS/my-hermes-company-llm-wiki-2026`
+   - 구조: `raw/ · wiki/ · reflections/` + 초기 커밋 존재.
    → 이유: 지식 자산을 회사 코드와 **분리**해 독립적으로 버전관리·백업.
 
-**검증**: 두 repo가 GitHub에 존재하고 clone 가능.
+**검증**: 두 repo가 GitHub에 존재하고 clone 가능. (llm-wiki는 확인 완료)
 
 ---
 
@@ -61,8 +56,8 @@
        build: .              # 또는 image: <공식 이미지>
        env_file: .env        # SLACK_*, ANTHROPIC_API_KEY 등
        volumes:
-         - ./hermes-home:/root/.hermes      # 영속: profiles·memory·kanban
-         - ./llm-wiki:/work/llm-wiki        # 지식 repo
+         - ./hermes-home:/root/.hermes      # 영속: profiles·memory·kanban.db
+         - /Users/admin/DEVELOP/Y2026/GITHUB/01-JXCROSS/my-hermes-company-llm-wiki-2026:/work/llm-wiki   # 지식 repo(실제 경로)
        restart: unless-stopped
    ```
 
@@ -112,14 +107,16 @@
 
 ---
 
-## 단계 0-E. Kanban 활성화 (소규모 검증)
-> Kanban은 비교적 신기능이므로 **소규모로 먼저 검증**.
+## 단계 0-E. Kanban 활성화 + 웹 대시보드 (소규모 검증)
+> Kanban은 비교적 신기능이므로 **소규모로 먼저 검증**. 게시판·실행상태 뷰의 근간이다([09](./09_mission_board_and_visibility.md)).
 
 1. 공식 문서로 Kanban 활성화·디스패처 설정 확인(`kanban.dispatch_in_gateway` 등).
-2. 테스트: task 1개 생성 → 담당 profile 할당 → 상태 변경 시 `#mission-log`에 알림 오는지 확인.
-3. 의존(task_links)·block/unblock 동작 확인(사람 승인 흐름 리허설).
+2. **웹 대시보드 접속**: Kanban 대시보드(상태 컬럼·profile 레인·카드 코멘트)를 브라우저에서 연다(포트/명령은 공식 문서 확인). → Sam의 "게시판".
+3. 테스트: `hermes kanban create "테스트 미션"`(부모) → 자식 task 생성·profile 할당 → 상태 변경 시 대시보드/`#mission-log` 반영 확인.
+4. 의존(task_links)·block/unblock 동작 확인(사람 승인 흐름 리허설).
+5. `~/.hermes/kanban.db` 경로·읽기 접근 확인(후속 Control Plane 대비).
 
-**검증**: task 상태 변화가 Slack에 알림되고, block→unblock으로 사람 개입이 작동.
+**검증**: 웹 대시보드에서 미션(부모)-단계(자식) 구조와 상태가 보이고, Slack 알림 + block→unblock 사람 개입이 작동.
 
 ---
 

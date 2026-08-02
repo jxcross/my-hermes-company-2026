@@ -25,6 +25,33 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#4 — 설계 Round 2 보강 (다이어그램·게시판·전문화·워크플로우 가시성)</h2>
+    <div class="meta">2026-08-02 · 요청자: Sam(Founder)</div>
+
+    <div class="req"><span class="label">요청 요지:</span>
+1) llm-wiki git 저장소 생성 완료(my-hermes-company-llm-wiki-2026) 반영
+2) 미션 (C)시뮬레이션 플랫폼 → (D)웹개발로 통합
+3) 지금까지 설계를 다이어그램(md)으로 작성
+4) 미션 전과정에서 에이전트 작업을 Sam이 보는 게시판(미션 게시글→에이전트 순서 기록, Kanban 매칭)
+5) SOUL.md/전문화(agent-skill-누적메모리-누적지식) 관리 체계 검토 후 적용
+6) 워크플로우 노드 구성과 Kanban 연결, 실행 상태 뷰</div>
+
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li>llm-wiki 실제 클론 확인, Explore로 Hermes Kanban 사람열람·대시보드 기능 조사(웹 대시보드·SQLite 개방 확인)</li>
+      <li>검토 결론: 미션 C→D 통합 동의 / 전문화 필요성 옳음(4계층 스택) / 게시판·가시성은 네이티브 Kanban으로 해결</li>
+      <li>신규 문서 3종: <code>07_diagrams</code>(Mermaid 9종), <code>08_agent_specialization_and_governance</code>, <code>09_mission_board_and_visibility</code></li>
+      <li>기존 문서 갱신: <code>02</code>(미션 A/B/D·llm-wiki 실제 repo·참조), <code>03</code>(노드↔Kanban), <code>05</code>(0-A 완료·대시보드), <code>06</code>(ADR-009·010·011)</li>
+      <li>본 <code>history.html</code> 갱신, 커밋·푸시</li>
+    </ol>
+
+    <div class="result"><span class="label">결과:</span>
+      다이어그램 9종 + 전문화 거버넌스 + 미션 게시판/가시성 설계 추가. 미션 아키타입 A/B/D로 단순화, llm-wiki 실제 repo 반영.
+      게시판·실행상태는 Hermes 네이티브 Kanban 웹 대시보드+Slack+Git 저널로, 고급 DAG 뷰는 후속 Control Plane(Stage 4+)로 결정.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#3 — AI-Native Company 설계 (Solomon) 브레인스토밍 및 설계 문서화</h2>
     <div class="meta">2026-08-01 ~ 2026-08-02 · 요청자: Sam(Founder)</div>
 

@@ -2,7 +2,7 @@
 
 > 작성일: 2026-08-02 · 상태: 설계 확정본(Stage 0 착수 전)
 > 관련: [`ai_native_company_개념.md`](./ai_native_company_개념.md) · [`hermes_agent_조사.md`](./hermes_agent_조사.md) · [`llm_wiki_조사.md`](./llm_wiki_조사.md)
-> 함께 볼 것: [`03_mission_pipeline_and_workflow.md`](./03_mission_pipeline_and_workflow.md) · [`04_mvp_research_trend_report_spec.md`](./04_mvp_research_trend_report_spec.md) · [`06_design_decision_log.md`](./06_design_decision_log.md)
+> 함께 볼 것: [`03_mission_pipeline_and_workflow.md`](./03_mission_pipeline_and_workflow.md) · [`04_mvp_research_trend_report_spec.md`](./04_mvp_research_trend_report_spec.md) · [`06_design_decision_log.md`](./06_design_decision_log.md) · [`07_diagrams.md`](./07_diagrams.md) · [`08_agent_specialization_and_governance.md`](./08_agent_specialization_and_governance.md) · [`09_mission_board_and_visibility.md`](./09_mission_board_and_visibility.md)
 
 ---
 
@@ -15,14 +15,14 @@ Sam(창업자, CS 박사, 1인 기업)이 AI의 도움으로 **기획→제안�
 - Sam은 Solomon과 **브레인스토밍 협의 후 실행**한다.
 - 회사는 **시간이 지날수록 결과물 품질·개발 속도·성능이 좋아지는(복리 성장)** 조직이어야 한다.
 
-**초기 회사 업무(Sam의 실제 담당 업무)**
+**초기 회사 업무(Sam의 실제 담당 업무) — 3개 아키타입**
 - (A) 최신 연구·기술 동향 분석 보고서 (AI·LLM 등) ← **1호 미션**
 - (B) 학술 논문 작성 (AI 활용 등)
-- (C) 웹 기반 시뮬레이션 플랫폼 개발
-- (D) 최신 웹 기술 프로그램 개발
+- (D) 최신 웹 기술 프로그램 개발 — **웹 기반 시뮬레이션 플랫폼 포함**
 
-> (A)(B)는 **지식 생산**, (C)(D)는 **소프트웨어 생산**. 한 번에 다 만들지 않고 **미션 A부터 완주**해
+> (A)(B)는 **지식 생산**, (D)는 **소프트웨어 생산**. 한 번에 다 만들지 않고 **미션 A부터 완주**해
 > 시스템을 증명한 뒤 동일 골격으로 확장한다.
+> *(구 미션 C "웹 시뮬레이션 플랫폼"은 웹개발의 특수 사례이므로 (D)로 통합했다 — [ADR-009](./06_design_decision_log.md).)*
 
 ---
 
@@ -87,7 +87,9 @@ Sam ──Slack──> Solomon (대표 profile: 기획·디스패처·검증총�
 | **Mission Pipeline Framework** | 미션 = 단계별(산출물·체크리스트·게이트) 파이프라인. Hermes Kanban으로 구현 | [03](./03_mission_pipeline_and_workflow.md) |
 | **Skill Library** | 표준 방법론(PRISMA·IMRaD·PRD/ERD·karpathy-llm-wiki)을 Skill로 보유 | [03](./03_mission_pipeline_and_workflow.md) |
 | **Workflow Manager** | Hermes **네이티브 Kanban** 사용(커스텀 관리시스템 미개발) | [03](./03_mission_pipeline_and_workflow.md) |
-| **LLM Wiki** | **별도 Git repo**. 수요 기반 복리 지식자산(raw→wiki→reflection) | [llm_wiki_조사](./llm_wiki_조사.md) |
+| **LLM Wiki** | **별도 Git repo**(`my-hermes-company-llm-wiki-2026`). 수요 기반 복리 지식자산(raw→wiki→reflection) | [llm_wiki_조사](./llm_wiki_조사.md) |
+| **에이전트 전문화 & 거버넌스** | 좁은 SOUL·역할 skill·누적 memory·공유 knowledge의 4계층 + 오염 방지 | [08](./08_agent_specialization_and_governance.md) |
+| **미션 게시판 & 가시성** | 미션→에이전트 순서 기록. Kanban 웹 대시보드+Slack+Git 저널 | [09](./09_mission_board_and_visibility.md) |
 | **Memory/Skill/MCP 거버넌스** | 고정사실/절차/외부툴 구분 + 생성·갱신·폐기 관리 | [03](./03_mission_pipeline_and_workflow.md) |
 
 ### LLM Wiki를 두는 이유 (수요 기반 복리 자산)
@@ -126,8 +128,8 @@ Sam ──Slack──> Solomon (대표 profile: 기획·디스패처·검증총�
 | **1 — 1호 미션 MVP** | Kanban에 `research-trend-report` 파이프라인 + 최소 전문 profile 세트 + subagent 팬아웃 → 보고서 완주 | Markdown 보고서(Git) + Slack 요약 + Wiki 시딩 |
 | **2 — 복리 루프** | `/research-trend` Skill 추출, Reflection, Wiki 재사용, profile 메모리 성장 | 성장 지표 최초 측정 |
 | **3 — 24시간 학습** | Cron 수요기반 축적(도메인 allowlist·일일 상한) | idle 지식 축적 |
-| **4 — 부서 확장** | profile fleet 확대 + profile distribution, Kanban 다중 보드 | research-lab 등 부서화 |
-| **5+ — 미션 B/C/D** | 논문(IMRaD)·시뮬레이션 플랫폼·웹개발. C/D는 구현≠검증 profile + Git issue/PR | 지식·소프트웨어 생산 확장 |
+| **4 — 부서 확장 + Control Plane** | profile fleet 확대 + profile distribution, Kanban 다중 보드, **고급 실행상태 웹뷰**(DAG·통계) | research-lab 등 부서화 + [09 Control Plane](./09_mission_board_and_visibility.md) |
+| **5+ — 미션 B/D** | 논문(IMRaD) · 웹개발(D, 시뮬레이션 플랫폼 포함). D는 **구현≠검증 profile + Git issue/PR** | 지식·소프트웨어 생산 확장 |
 
 > **현재 위치**: Stage 0 착수 전. Stage 0 구축은 Sam이 [05 가이드](./05_stage0_setup_guide.md)를 따라 수행한다.
 

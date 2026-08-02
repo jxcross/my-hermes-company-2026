@@ -58,6 +58,12 @@ todo → ready → running → done → archived
 - **P3 Voting/Quorum**: 다수 검증자 → 집계(중요 주장 교차검증에 활용 가능)
 - **P5 Human-in-the-loop**: block→comment→unblock (Sam 승인 게이트)
 
+### 2.4 워크플로우 노드 ↔ Kanban (미션=부모, 단계=자식)
+- **미션(프로젝트) = 부모 task**, **각 파이프라인 노드(단계) = 자식 task**(assignee=담당 profile, `parents`로 순서·게이트).
+- **에이전트 기록 = task_comment + task_runs**(시간순), **상태 = status**, **감사 = task_events**.
+- Sam은 **부모 카드**에서 하위 진행·에이전트 순서 기록·현재 실행 상태를 열람(웹 대시보드·Slack·Git 저널).
+- 상세 매핑표·게시판·실행상태 뷰: **[09_mission_board_and_visibility.md](./09_mission_board_and_visibility.md)**.
+
 ---
 
 ## 3. Skill Library — 표준·안전한 방법론 채택
@@ -95,7 +101,7 @@ Skill은 agentskills.io 표준(Hermes 호환)이며 Git으로 버전관리한다
 ### 5.1 미션 A `research-trend-report` (상세: [04](./04_mvp_research_trend_report_spec.md))
 `Scoping(Solomon+Sam)→Search(Scout)→Collection(Scout)→Dedup·Relevance(Curator)→Deep Analysis(Reader)→Cross-Verify(Fact-Checker)→Synthesis(Synthesizer)→Report Draft(Writer)→Independent Review(Reviewer)→Wiki Update(Curator)→Deliver(Solomon)`
 
-### 5.2 미션 C/D `web-app` (Stage 5+, 개요)
+### 5.2 미션 D `web-app` (Stage 5+, 개요 — 웹 시뮬레이션 플랫폼 포함)
 `도메인정의→PRD→사용자시나리오→ERD→아키텍처→Backend→Frontend→테스트→보안검토→통합→문서화→배포승인→배포`
 - 각 단계 산출물·체크리스트·게이트.
 - **Implementer profile ≠ Reviewer profile**(권한 분리), Git **PR 리뷰**가 코드 게이트.
@@ -108,7 +114,7 @@ Skill은 agentskills.io 표준(Hermes 호환)이며 Git으로 버전관리한다
 | 용도 | 도구 |
 |------|------|
 | 미션·파이프라인 단계 오케스트레이션(모든 미션) | **Hermes Kanban** |
-| 코드 작업 항목·코드 리뷰 게이트(미션 C/D) | **Git issue / PR** (Kanban과 병행) |
+| 코드 작업 항목·코드 리뷰 게이트(미션 D) | **Git issue / PR** (Kanban과 병행) |
 | 지식 축적·재사용 | **LLM Wiki**(별도 repo) |
 | 반복 절차 | **Skill**(Git 버전관리) |
 
