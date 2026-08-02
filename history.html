@@ -25,6 +25,24 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#8 — Stage 1 1호 미션 완주: research-trend-report (M-2026-001)</h2>
+    <div class="meta">2026-08-02 · 요청자: Sam(Founder) · 주제 승인·자동실행</div>
+    <div class="req"><span class="label">요청:</span> 축소 파이프라인(scout→reader→writer + Solomon 게이트)으로 "최근 3개월 Agentic AI/LLM 에이전트 동향" 보고서를 실제로 완주시켜 시스템이 도는 것을 증명.</div>
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li>Kanban 5-task 파이프라인 구성(미션 부모 + 단계 자식, task_links 게이트, Sam 승인 block)</li>
+      <li>1차 실행에서 인프라 블로커 2건 발견·수정: (a) 워커 web/browser 도구 미프로비저닝 → <code>terminal</code>+<code>curl</code>(HTTPS) 수집으로 전환, (b) 쓰기 샌드박스가 <code>/opt/data</code> 한정 → 공유 워크스페이스를 <code>/opt/data/workspace/M-2026-001</code>로 이전</li>
+      <li>재실행: scout 13개 1차 자료 수집(raw+메타) → reader 13개 분석노트(주장/근거 분리) → writer 보고서 초안(출처 포함)</li>
+      <li>중복 rerun 카드 발생(Deliver=default 자율 생성) → Solomon이 스스로 SUPERSEDED 처리(무해), 정리</li>
+      <li>Deliver 게이트: 완료조건 점검 → Sam 승인 → repo <code>reports/M-2026-001/</code> 커밋 + Slack #mission-log 요약</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      1호 미션 완주. 산출물: <code>reports/M-2026-001/report.md</code>(요약·핵심동향5·근거표·시사점·불확실성/상충·출처13) + raw/·analysis/.
+      전 주장 출처 링크, 데이터 한계·상충 명시(정직성). <b>한계:</b> 축소 슬라이스라 6단계 Fact-Checker·9단계 독립 Reviewer 미포함(독립검증 전 초안) → full 11단계 확장 백로그.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#7 — Stage 1 착수: 축소 파이프라인 준비 (계획 문서 + 전문 프로필 3종)</h2>
     <div class="meta">2026-08-02 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> 현재 상태를 확인하고 다음 할 일을 제안·착수. Stage 1을 얇은 수직 슬라이스로 먼저 증명하는 방식 채택.</div>

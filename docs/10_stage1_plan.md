@@ -90,6 +90,13 @@ hermes kanban swarm "핵심 주장 교차검증" \
 - [ ] `reports/M-2026-001/report.md` 생성·**출처 포함**·Git 커밋
 - [ ] Slack 요약 수신
 
+## 4.1 실행에서 발견한 인프라 제약 (검증됨 · 재현 시 필독)
+1호 미션(M-2026-001) 실제 실행에서 드러난 제약과 대응:
+- **워커 파일 쓰기는 `HERMES_WRITE_SAFE_ROOT`(=`/opt/data`) 내부로만 허용.** repo 마운트(`/work/company`)에 직접 쓰면 `Write denied`. → 공유 워크스페이스를 `dir:/opt/data/workspace/<mission>`로 두고, **Deliver(Solomon)가 repo `reports/`로 복사·커밋**(설계 정합).
+- **네이티브 `web`/`browser` 도구 미프로비저닝**(검색 API 키 없음·Chrome 없음). 단 **네트워크·egress는 정상**(HTTPS `curl` 200). → scout 브리프에서 `terminal`+`curl`(HTTPS: arXiv API·공식 블로그) 사용을 명시. full 버전은 web-search API 키(비용, Sam 승인) 검토.
+- **Deliver 카드를 `default`(Solomon)에 할당 + ready 상태로 두면 자율 실행되어 rerun 카드를 만들 수 있음.** → Deliver는 writer 완료 전까지 **`block --kind needs_input` 유지**. (Solomon이 중복을 스스로 SUPERSEDED 처리해 무해했으나, 게이트 유지가 정석.)
+- **결과:** scout 13편 수집 → reader 13 분석 → writer `report.md`(출처13·불확실성/상충 명시) 완주. 산출물 `reports/M-2026-001/`.
+
 ## 5. full 11단계 확장 백로그 (슬라이스 완주 후)
 - profile 추가: `fact-checker`(6, ≠reader) · `synthesizer`(7) · `reviewer`(9, ≠writer) · `curator`(4·10).
 - Skill: **PRISMA식 체계적 문헌조사 + 근거등급** · **karpathy-llm-wiki**(ingest/query/lint).
