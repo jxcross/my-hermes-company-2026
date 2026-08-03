@@ -40,3 +40,28 @@ services:
         limits:
           memory: 4G
           cpus: "2.0"
+
+  # 반려 게이트 자동화(게이트키퍼) — 검증 task(6·9) 판정이 FAIL 이면 산출물 재작업
+  # 루프(리비전→재검증)를 강제하고, 다음 단계(7·10)를 PASS 전까지 보류한다.
+  #  - 같은 kanban.db(./hermes-home) 를 공유해 보드를 폴링(scripts/gate_keeper.py).
+  #  - entrypoint 를 python 으로 덮어 s6/gateway 대신 게이트키퍼만 실행(이미지 내 hermes
+  #    CLI 로 kanban 조작·Slack 통지). 활성 게이트만 처리 → 완료 미션 재처리 안 함.
+  hermes-gatekeeper:
+    image: nousresearch/hermes-agent:latest
+    container_name: hermes-gatekeeper
+    restart: unless-stopped
+    depends_on:
+      - hermes-solomon
+    entrypoint: ["python3", "/work/company/scripts/gate_keeper.py"]
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1   # docker logs 로 게이트키퍼 폴 로그 즉시 확인
+    volumes:
+      - ./hermes-home:/opt/data
+      - ./:/work/company
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"

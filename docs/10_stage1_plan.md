@@ -119,7 +119,7 @@ hermes kanban swarm "핵심 주장 교차검증" \
 - 산출물: `reports/M-2026-002/`(report + raw/analysis/verify/synthesis/review 감사추적), llm-wiki repo.
 
 ### 발견한 개선점 (다음 반영)
-1. **반려 게이트 미강제**: 9→10 링크를 무조건 걸어, Reviewer `수정요청`인데도 stage 10(wiki)이 진행됨. → 검증 task 판정이 fail이면 산출물 task를 자동 `block`으로 되돌리는 게이팅 필요(수동 revision 카드로 우회함).
+1. ~~**반려 게이트 미강제**: 9→10 링크를 무조건 걸어, Reviewer `수정요청`인데도 stage 10(wiki)이 진행됨.~~ → **[해소 2026-08-03] 게이트키퍼 자동화** — 아래 §4.4 참조.
 2. **Scoping 자율분해 충돌**: `default`(Solomon) Scoping 워커가 스스로 파이프라인을 분해해 수동 11카드와 충돌 → 중복 archive. → Scoping은 Solomon 분해에 맡기거나, Scoping 완료 후 하위 생성.
 3. ~~**Slack 아웃바운드 실패**: 다중 force-recreate 후 `hermes send`가 빈 오류로 실패(status는 configured).~~ → **[해소 2026-08-03] 오진 정정**: 실제 근본원인은 force-recreate가 아니라 **호스트 네트워크가 slack.com에 도달 못함**(DNS는 해석되나 TCP443 타임아웃, 컨테이너·호스트 모두 HTTPS 000). 와이파이 변경으로 slack.com 200 회복 → 게이트웨이 Socket Mode 자가 재연결(신규 세션 수립, disconnect 루프 소멸) → 아웃바운드 정상. 토큰(봇 `auth.test` ok·앱 `apps.connections.open` ok)·홈채널ID(`C0BM8FK3RTM`)는 모두 정상이었음.
 
@@ -130,6 +130,32 @@ hermes kanban swarm "핵심 주장 교차검증" \
 3. **중복 Socket 연결**: 같은 App-Level Token을 쓰는 인스턴스가 둘 이상이면 disconnect 루프. `docker ps -a`로 확인(현 시점 타 프로젝트 `ainc-hermes`·`hermes`는 Slack 토큰 없어 무관).
 4. **복구는 down→up**: 네트워크 회복 후 게이트웨이가 15초 주기로 자가 재연결하나, 즉시 원하면 `docker compose down && docker compose up -d`(force-recreate 반복 대신 소켓 완전 정리).
 5. 스코프: 봇토큰이 `channels:read` 미보유면 `conversations.info`/`conversations.list`가 `missing_scope`로 실패(조회만 막힘, 전송 `chat:write`엔 무관). **[2026-08-03 해소]** Slack 앱 OAuth 페이지에 스코프를 추가만 하면 기존 토큰엔 반영 안 됨 — **Reinstall to Workspace**를 눌러야 토큰에 반영(이 앱은 재설치 시 토큰 값 불변·스코프만 확장돼 `.env` 교체 불필요했음). 현 봇토큰 스코프에 `channels:read` 등 포함. 봇 소속 채널: `C0BM8FK3RTM`=**#mission-log**(=`SLACK_HOME_CHANNEL`, bare 전송 목적지)·`C0BN935M0MN`=#ceo-office·`C0BN936JUM6`=#approvals.
+
+## 4.4 반려 게이트 자동화 (게이트키퍼, 2026-08-03)
+§4.3 개선점 1 해소. 검증 fail 시 산출물 재작업 루프를 시스템이 강제한다.
+
+**핵심 발견(설계 근거)**: 검증자(6 fact-checker, 9 reviewer)는 `수정요청`이어도 Kanban task를 정상
+`completed`로 끝낸다. 판정은 outcome이 아니라 **run summary·task comment·산출물 텍스트**로만 존재
+(예: `t_883c43f6` 최종 run outcome=`completed`, 판정은 코멘트/`review.md`에). 따라서 `watch --kinds blocked`로는
+못 잡고 **판정 텍스트를 파싱**해야 한다. 또 검증자 task 완료 시 링크된 downstream(7·10)은 **부모완료 승격으로
+`blocked`→`ready` 자동 전이**된다(초기 block이 안 버팀). → 게이트키퍼의 **반응형 re-block**이 실제 강제 수단.
+
+**구성요소**
+- **표준 VERDICT 토큰**: fact-checker·reviewer SOUL(운영원칙 6)에 마지막 코멘트 첫 줄을 `VERDICT: PASS|FAIL`로
+  의무화(`profiles-src/{fact-checker,reviewer}/SOUL.md`). 토큰은 예약어라 author-무관 파싱. **Fail-closed**: 없거나 애매하면 FAIL.
+- **게이트키퍼**(`scripts/gate_keeper.py`): 보드를 폴(기본 10초, 60초 daemon tick보다 빠름). 검증자(assignee∈{fact-checker,reviewer})
+  `done` task 중 **활성 게이트만**(downstream이 아직 done/archived 아님 → 완료 미션·과거 재처리 방지, 재시작 안전) 처리:
+  - `show --json`의 `parents`=producer(8·5)·`children`=downstream(10·7)으로 그래프 매핑(제목 파싱 불필요).
+  - **PASS** → downstream `unblock`(다음 단계 진행). **FAIL** → downstream `blocked` 유지 + **리비전 루프 카드 자동 생성**
+    (`GNR Revision`(producer profile, body=수정지시) → `GNR Re-Verify`(검증자) → link→downstream. `--idempotency-key`로 중복 방지).
+    재검증 카드는 다시 검증자 task라 다음 폴에서 재평가(재귀; PASS면 promote). 실행결과·수정지시는 Slack `#mission-log` 통지.
+- **상시 실행**: `docker-compose.yml`의 `hermes-gatekeeper` 사이드카(동일 이미지, `entrypoint: python3 gate_keeper.py`로 s6/gateway
+  대신 스크립트만; `./hermes-home`·`./` 공유, `restart: unless-stopped`). 크로스 컨테이너 SQLite 읽기/쓰기 실측 OK.
+- **게이트 구조**: `scripts/build_pipeline.sh`가 downstream(7·10)을 `--initial-status blocked`로 생성(1·11은 Sam `needs_input`).
+
+**검증(E2E 실측)**: FAIL→리비전루프+downstream보류 · 멱등 재실행 무중복 · PASS→downstream `ready` · fail-closed(토큰없음→FAIL) ·
+활성게이트만 처리(완료 미션 스킵) · 사이드카 자율 처리(수동실행 없이 10초 내). ⚠️ 주의: 게이트키퍼 폴은 **보드 전체**를 보므로
+초기 개발 중 완료 미션 재처리로 실수 유발 가능 → "활성 게이트만" 가드로 방지(테스트 카드는 스크래치 미션으로 한정·archive).
 
 ## 5. full 11단계 확장 백로그 (슬라이스 완주 후)
 - profile 추가: `fact-checker`(6, ≠reader) · `synthesizer`(7) · `reviewer`(9, ≠writer) · `curator`(4·10).

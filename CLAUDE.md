@@ -25,7 +25,8 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 - **프로필 8종**: default(Solomon)·scout·reader·writer·synthesizer·curator=`gpt-5.6-terra`, **fact-checker·reviewer=`gpt-5.6-sol`**(검증자). 소스=`profiles-src/`.
 - **인프라 정비 완료**: `HERMES_WRITE_SAFE_ROOT=/opt/data:/work/company:/work/llm-wiki`(워커 직접쓰기, 복사 불필요) · **Tavily 웹검색**(키는 repo `.env`의 `TAVILY_API_KEY`, 전 프로필 os.environ 노출 필수) · **`WIKI_PATH=/work/llm-wiki`**(Curator의 karpathy-llm-wiki 스킬).
 - **미션 산출물**: 보고서→`reports/M-2026-NNN/`, 지식→llm-wiki repo(raw/entities/concepts/reflections, 재사용률 추적). Kanban 게이트: 미션=부모·단계=자식, `link`=순차, `block --kind needs_input`=Sam 게이트, `--workspace dir:/work/company/reports/<mission>`.
-- 웹 대시보드 `http://localhost:9129`, Slack `#ceo-office`/`#approvals`/`#mission-log`. 기동 `docker compose up -d` · `.env`/compose 변경 시 `--force-recreate`.
+- **반려 게이트 자동화(게이트키퍼)**: 사이드카 컨테이너 **`hermes-gatekeeper`**(`docker-compose.yml`, `scripts/gate_keeper.py`). 검증 task(6·9) 판정이 `VERDICT: FAIL`이면 산출물 재작업 루프(리비전→재검증) 자동 생성 + downstream(7·10) PASS 전까지 보류. **활성 게이트만** 처리(완료 미션 스킵, 재시작 안전). 파이프라인은 `scripts/build_pipeline.sh`로 인스턴스화(downstream `blocked` 시작). 상세 `docs/10 §4.4`.
+- 웹 대시보드 `http://localhost:9129`, Slack `#ceo-office`/`#approvals`/`#mission-log`. 기동 `docker compose up -d`(게이트키퍼 포함) · `.env`/compose 변경 시 `--force-recreate`.
 - **미해결 이슈**: ~~Slack 아웃바운드 실패~~ → **[해소 2026-08-03]** 근본원인은 **네트워크가 slack.com 도달 불가**(force-recreate 오진). 와이파이 변경 후 복구·전송 검증 완료. Slack 이상 시 **1순위 진단=`curl https://slack.com/api/auth.test` 도달성**(status의 `configured`는 토큰존재만 의미). 진단 runbook·홈채널ID(`C0BM8FK3RTM`)는 `docs/10 §4.3`. · 반려 게이트 미강제(9→10 무조건 링크). Scoping은 Solomon이 자율분해하므로 수동 카드와 충돌 주의.
 
 ## ‼️ 로컬 전용 (git에 없음 — PC마다 재구성 필요)
@@ -35,12 +36,12 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 - **Claude Code 프로젝트 메모리**: 로컬. 이 CLAUDE.md가 대체 컨텍스트 역할.
 
 ## 새 PC 부트스트랩 (순서)
-`docs/05_stage0_setup_guide.md` 참조. 요약: repo 2개 clone → `docker compose pull` → `cp .env.example .env`(SLACK·`TAVILY_API_KEY` 값 채움) → `hermes setup`(OAuth) → `solomon-profile/`의 SOUL·USER를 `hermes-home/`에 복사 → **전문 프로필 7종 재생성**(`profiles-src/<name>/`의 SOUL·config를 `hermes profile create` 후 `hermes-home/profiles/<name>/`에 복사: scout·reader·writer·synthesizer·curator·fact-checker·reviewer) → `docker compose up -d` → 대시보드/Slack/`hermes profile list`(모델 terra/sol) 확인.
+`docs/05_stage0_setup_guide.md` 참조. 요약: repo 2개 clone → `docker compose pull` → `cp .env.example .env`(SLACK·`TAVILY_API_KEY` 값 채움) → `hermes setup`(OAuth) → `solomon-profile/`의 SOUL·USER를 `hermes-home/`에 복사 → **전문 프로필 7종 재생성**(`profiles-src/<name>/`의 SOUL·config를 `hermes profile create` 후 `hermes-home/profiles/<name>/`에 복사: scout·reader·writer·synthesizer·curator·fact-checker·reviewer) → `docker compose up -d`(hermes-solomon + **hermes-gatekeeper 사이드카** 동시 기동) → 대시보드/Slack/`hermes profile list`(모델 terra/sol)·`docker compose ps`(게이트키퍼 Up) 확인.
 
 ## 다음 할 일 (우선순위 후보)
 1. ✅ ~~**Slack 아웃바운드 재연결**~~ — **[해소 2026-08-03]** 근본원인=네트워크 slack.com 도달불가(와이파이 변경으로 복구, 전송 검증 완료). 진단 runbook `docs/10 §4.3`.
-2. **반려 게이트 자동화** — 검증 task(6·9) fail 판정 시 산출물 task를 자동 `block`으로 되돌리는 루프(현재 수동 revision 카드로 우회). `kanban swarm`(다수 검증자 quorum, P3)도 검토. ← **현 최우선 후보**
-3. **미션 아키타입 확장** — B(논문, IMRaD) · D(웹개발, PRD→ERD→구현→PR 리뷰). 각 파이프라인·게이트 설계.
+2. ✅ ~~**반려 게이트 자동화**~~ — **[해소 2026-08-03]** 게이트키퍼 사이드카(`hermes-gatekeeper`)로 구현. E2E 검증 완료. `kanban swarm`(다수 검증자 quorum, P3)은 후속 검토. 상세 `docs/10 §4.4`.
+3. **미션 아키타입 확장** — B(논문, IMRaD) · D(웹개발, PRD→ERD→구현→PR 리뷰). 각 파이프라인·게이트 설계. ← **현 최우선 후보**
 4. **성장 지표 대시보드** — 재작업률·wiki 재사용률(현 41.2%)·소요시간 누적 관찰.
 
 새 세션 시작 시: 최신 `git log`와 `docker compose ps`·`hermes profile list`로 상태 확인 → `docs/10 §4.3`(실행결과·개선점) 읽고 → 위 우선순위 중 Sam이 지정한 것부터 계획 제시.
