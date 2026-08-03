@@ -56,6 +56,13 @@ LLM Wiki 복리 루프의 씨앗을 심는 것이다.
 
 > 단계 6·9는 **작성자와 다른 profile**이 검증한다(핵심: 작성자 ≠ 검증자). 필요 시 6단계는 Kanban P3(다수 검증자→집계)로 강화 가능.
 
+### 2.1 템플릿·이중 게이트 (2026-08-03, docs/11 Pilot 반영)
+이 11단계는 이제 **선언적 템플릿** `templates/trend-report.yaml`로 정의되고 `scripts/instantiate_template.py`가 Kanban 그래프로 번역한다(하드코딩 `build_pipeline.sh` deprecated). 검증 게이트(6·9)는 **이중**이다:
+- **객관 게이트(Python, `scripts/gates/`)**: `recency_check`(인용 최신성 비율) · `source_balance`(출처 taxonomy 균형). LLM 없이 exit 0/1, 우회 불가.
+- **LLM 검증자**(Fact-Checker/Reviewer의 `VERDICT: PASS|FAIL`): 의미적 판정. `gate_keeper.py`가 두 신호를 결합(객관 FAIL이면 자동 FAIL).
+- **`raw/sources.yaml` 계약**(Scout 방출): 각 소스 `id·title·url·published_year·source_type·collected_at·status·seminal?`. `source_type` taxonomy = `academic·vendor·research_org·standards·news`(정책은 template의 `source_balance_policy`, 미션별 조정). 인간용 `raw/sources.md` 표와 병행.
+- 정책(`recency_policy`·`source_balance_policy`)은 Scoping이 `SCOPE.md`에 명시하고 `reports/<MID>/pipeline.json`에도 기록됨.
+
 ---
 
 ## 3. Kanban 구성 (task 매핑)

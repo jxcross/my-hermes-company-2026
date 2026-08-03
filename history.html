@@ -25,6 +25,23 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#16 — Pilot P4: 실미션 M-2026-003 완주 + 라이브 발견 결함 수정</h2>
+    <div class="meta">2026-08-03 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> 템플릿 기반 미션 시스템 Pilot을 실미션으로 end-to-end 증명. 주제="AI 에이전트 메모리·컨텍스트 관리 동향".</div>
+    <div class="label">수행·발견:</div>
+    <ol class="steps">
+      <li>템플릿 인스턴스화(11단계) → Scoping 협상(mermaid DAG) → 개시. 라이브 검증: <b>자율분해 안 함</b> · scout <b>sources.yaml 정규화 taxonomy 방출</b>(academic4·vendor4·research_org2·standards2) · <b>이중 게이트 실작동</b>.</li>
+      <li><b>발견①·수정 무한 리비전 루프</b>: 검증자가 본질적 미검증에 계속 FAIL → 비수렴. gate_keeper 루프상한(2회→Sam 에스컬레이션) + fact-checker/reviewer 판정 정교화(미검증 건수만으로 FAIL 금지, M-2026-002 선례).</li>
+      <li><b>발견②·수정 gate_keeper race</b>: 검증자 done 직후 VERDICT 코멘트 in-flight → fail-closed 오판정. 신호 미확정 시 재시도(defer). stage_tag 버그·notify 타임아웃도 수정.</li>
+      <li>stage6·9 이중 게이트 통과 후 Wiki·Deliver. <b>Deliver</b>: Solomon이 로컬 커밋했으나 <b>컨테이너 GitHub 자격증명 부재로 push 실패→정직하게 self-block</b>. Sam이 Slack #approvals 승인(단 Solomon이 Kanban unblock 자동배선 안 됨→갭). 호스트 폴백 push(b7ec055).</li>
+      <li>docs/11 §7에 P4 결과·발견·Phase 2 개선점 기록. gate_keeper·SOUL·template·docs 커밋.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      <b>11/11 완주</b> — 템플릿→Kanban 런타임·이중 게이트·반려 루프·Sam 게이트를 <b>실미션으로 완전 검증</b>. report.md(출처12·전부2024+·미검증14 정직 공개). 실미션이 아니었으면 못 봤을 <b>3개 결함(무한루프·race·stage_tag) 수정</b> + <b>3개 인프라 갭(컨테이너 git creds·Slack승인 배선·pre-blocked 게이트 알림)</b> 발견→Phase 2. 최대 병목=순차실행(병렬화가 다음 우선).
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#15 — Pilot 구현(P0–P3): 템플릿 번역기 + 객관 게이트 + 이중 게이트</h2>
     <div class="meta">2026-08-03 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> docs/11 Pilot 구현(아키타입 A 템플릿화 + 번역기 + 객관 게이트 + 실미션). 최대 범위 승인.</div>

@@ -42,6 +42,10 @@ VERIFIERS = {"fact-checker", "reviewer"}         # 검증자 profile
 STATE_PATH = os.environ.get("GATE_KEEPER_STATE", "/opt/data/gate_keeper_state.json")
 SLACK_TARGET = os.environ.get("GATE_KEEPER_SLACK", "slack")  # bare = home(#mission-log)
 COMPANY_ROOT = os.environ.get("GATE_KEEPER_COMPANY_ROOT", "/work/company")  # repo 마운트 경로
+MAX_REVISION_ROUNDS = int(os.environ.get("GATE_KEEPER_MAX_ROUNDS", "2"))  # 게이트별 자동 리비전 상한
+NOTIFY_TIMEOUT = int(os.environ.get("GATE_KEEPER_NOTIFY_TIMEOUT", "60"))  # Slack 통지 타임아웃(초)
+MAX_DEFER = int(os.environ.get("GATE_KEEPER_MAX_DEFER", "6"))  # 판정 신호 미확정 시 재시도 횟수(race 방지)
+_DEFER_COUNTS: dict = {}  # key -> 재시도 횟수(검증자 done 직후 VERDICT 코멘트 in-flight 대비)
 HERMES = ["hermes", "kanban"]
 VERDICT_RE = re.compile(r"VERDICT:\s*(PASS|FAIL)", re.IGNORECASE)
 # fail-closed 폴백 키워드(표준 토큰이 없는 구 미션·누락 대비)
@@ -82,7 +86,7 @@ def notify(text: str, dry: bool) -> None:
         return
     try:
         subprocess.run(["hermes", "send", "--to", SLACK_TARGET, text],
-                       capture_output=True, text=True, timeout=30)
+                       capture_output=True, text=True, timeout=NOTIFY_TIMEOUT)
     except Exception as e:  # noqa: BLE001 — 통지는 게이트 로직을 막지 않는다
         log(f"WARN notify failed: {e}")
 
@@ -113,6 +117,17 @@ def verdict_texts(show: dict) -> list[str]:
     return texts
 
 
+def verdict_signal_present(show: dict) -> bool:
+    """명시 VERDICT 토큰 또는 pass/fail 키워드가 하나라도 있으면 True.
+    검증자가 done 됐지만 아직 아무 신호가 없으면(코멘트 in-flight) False → 재시도."""
+    for body in verdict_texts(show):
+        if VERDICT_RE.search(body):
+            return True
+        if any(w in body for w in FAIL_WORDS) or any(w in body for w in PASS_WORDS):
+            return True
+    return False
+
+
 def parse_verdict(show: dict, assignee: str) -> str:
     """PASS/FAIL 판정. VERDICT 토큰은 예약어이므로 author-무관 스캔. fail-closed.
 
@@ -137,8 +152,8 @@ def mission_of(title: str) -> str:
 
 
 def stage_tag(title: str) -> str:
-    """검증자 제목에서 게이트 단계 태그 추출('… · 9 Independent Review' → 'G9')."""
-    m = re.search(r"·\s*(\d+\w*)", title or "")
+    """게이트 단계 태그. '· 9 Independent Review'·'· G9R Re-Verify' 모두 'G9'."""
+    m = re.search(r"·\s*G?(\d+)", title or "")
     return f"G{m.group(1)}" if m else "G"
 
 
@@ -204,6 +219,14 @@ def task_status(task_id: str) -> str | None:
 
 
 # ── 게이트 처리 ──────────────────────────────────────────────────────────
+def revision_round_count(mission: str, tag: str) -> int:
+    """해당 미션·게이트(tag)에서 이미 생성된 리비전 라운드 수(archive 제외)."""
+    tasks = kanban_json(["list", "--json"]) or []
+    prefix = f"{mission} · {tag}R"
+    return sum(1 for t in tasks
+               if (t.get("title") or "").startswith(prefix) and "Revision" in (t.get("title") or ""))
+
+
 def handle_pass(vid: str, title: str, children: list[str], dry: bool) -> None:
     if not children:
         log(f"PASS {vid} ({title}) — downstream 없음(종단). no-op")
@@ -241,6 +264,20 @@ def handle_fail(vid: str, title: str, assignee: str, parents: list[str],
     producer = parents[0]
     prod_profile = task_assignee(producer) or "writer"
     tag = stage_tag(title)
+
+    # ── 루프 상한: 같은 게이트에서 이미 MAX회 리비전했으면 자동 반복 중단하고 Sam 에스컬레이션 ──
+    #   무한 반려 루프(예: 본질적 미검증 주장으로 검증자가 계속 FAIL) 방지. harness 의 'max 2회'와 정렬.
+    prior = revision_round_count(mission, tag)
+    if prior >= MAX_REVISION_ROUNDS:
+        if dry:
+            log(f"[dry] FAIL {vid} — 루프 상한({MAX_REVISION_ROUNDS}) 도달 → Sam 에스컬레이션")
+            return
+        run(["block", producer, f"자동 리비전 {prior}회 후에도 게이트 미통과({tag}) — Sam 판단 필요",
+             "--kind", "needs_input"])
+        log(f"FAIL {vid} → 루프 상한({MAX_REVISION_ROUNDS}) 도달. producer {producer} 에스컬레이션(blocked). 자동 리비전 중단.")
+        notify(f"🟠 게이트 루프 상한 — {title} ({tag}) 자동 리비전 {prior}회 후에도 미통과.\n"
+               f"검증자 판정이 수렴하지 않음(예: 본질적 미검증). Sam 검토·판단 요망.\n마지막 지시: {instr[:300]}", dry)
+        return
 
     # 리비전 루프 카드(--parent 없음: producer 재작업은 즉시 ready).
     #   producer_rev ─link→ reverify ─link→ downstream. downstream 은 blocked 유지,
@@ -321,6 +358,15 @@ def poll_once(processed: set, dry: bool) -> None:
             if not dry:
                 processed.add(key)
             continue
+        # race 방지: 검증자가 done 이지만 VERDICT 신호가 아직 없으면(코멘트 in-flight)
+        # 이번 폴은 건너뛰고(처리셋 미기록) 다음 폴에서 재시도. MAX_DEFER 후에도 없으면 fail-closed.
+        if not verdict_signal_present(show):
+            n = _DEFER_COUNTS.get(key, 0) + 1
+            _DEFER_COUNTS[key] = n
+            if n <= MAX_DEFER:
+                log(f"판정 신호 미확정: {vid} '{title}' — 재시도 {n}/{MAX_DEFER}(코멘트 in-flight 대비)")
+                continue
+            log(f"판정 신호 없음: {vid} — {MAX_DEFER}회 후 fail-closed(FAIL)")
         llm_verdict = parse_verdict(show, assignee)
         obj_status, obj_detail = objective_verdict(vid, title)
         # 이중 게이트 결합: 객관 FAIL 이면 LLM 무관 FAIL(fail-closed). 그 외 LLM 판정 채택.

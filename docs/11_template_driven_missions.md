@@ -102,7 +102,21 @@ scout를 `academic/industry/patents/news` **4워커로 분화** + `source_type` 
 
 ## 7. 권장 단계 (phasing) — 각 phase는 별도 구현 계획
 1. **Pilot: A를 템플릿화** — `trend-report.yaml` + 번역기로 아키타입 A를 재현(현 build_pipeline 대체), 객관 게이트(recency/source_balance)를 1개 미션에 적용. "템플릿→런타임" 경로 증명.
-   **[2026-08-03 구현·검증(P0–P3)]**: `templates/trend-report.yaml` + `scripts/instantiate_template.py`(--dry-run --render mermaid, pipeline.json 기록, 인라인 불변식) — dry-run 그래프가 build_pipeline과 동형 확인. `scripts/gates/{recency_check,source_balance}.py`(harness 이식, 카테고리 정책화) — 픽스처 3종 정확 판정. `gate_keeper.py` 이중 게이트 통합(객관 FAIL→VERDICT FAIL, 재검증 카드 폴백) — 스크래치 3결합 검증. `scout/SOUL.md` sources.yaml 방출 계약. **게이트 통일 개선**: 모든 게이트(Sam+검증자 downstream)를 링크 전 `needs_input` block으로 통일 → auto-promote race·Deliver 게이트 버그 해소. **[P4 남음]** 실미션 M-2026-003 end-to-end.
+   **[2026-08-03 구현·검증(P0–P3)]**: `templates/trend-report.yaml` + `scripts/instantiate_template.py`(--dry-run --render mermaid, pipeline.json 기록, 인라인 불변식) — dry-run 그래프가 build_pipeline과 동형 확인. `scripts/gates/{recency_check,source_balance}.py`(harness 이식, 카테고리 정책화) — 픽스처 3종 정확 판정. `gate_keeper.py` 이중 게이트 통합(객관 FAIL→VERDICT FAIL, 재검증 카드 폴백) — 스크래치 3결합 검증. `scout/SOUL.md` sources.yaml 방출 계약. **게이트 통일 개선**: 모든 게이트(Sam+검증자 downstream)를 링크 전 `needs_input` block으로 통일 → auto-promote race·Deliver 게이트 버그 해소.
+
+   **[2026-08-03 P4 실미션 M-2026-003 완주]** 주제 "AI 에이전트 메모리·컨텍스트 관리 동향". 11/11 단계 완주, report.md(출처12·전부2024+·확인20/상충0/미검증14 공개), 커밋 `b7ec055`. **라이브 검증**: Scoping 자율분해 안 함(분해금지 지시) · scout sources.yaml 정규화 taxonomy 방출 · **이중 게이트 실작동**(stage6 객관PASS+LLM FAIL→반려; stage9 객관PASS+LLM FAIL→writer수정→재검증 PASS) · Sam 게이트(Scoping·Deliver) 강제.
+
+   **실미션이 발견·수정한 결함(P4 fixes)**:
+   - **무한 리비전 루프** — 검증자가 본질적 미검증에 계속 FAIL → 비수렴. **수정**: gate_keeper `MAX_REVISION_ROUNDS`(2회→Sam 에스컬레이션) + fact-checker/reviewer SOUL 판정 정교화(미검증 '건수'만으로 FAIL 금지; 상충 없고 검증가능 주장 전수 확인 + 잔여 미검증 본질적·공개면 PASS, M-2026-002 선례).
+   - **gate_keeper race** — 검증자 done 직후 VERDICT 코멘트 in-flight → 신호 없어 fail-closed 오판정. **수정**: `verdict_signal_present` 미확정 시 최대 `MAX_DEFER`회 재시도.
+   - **stage_tag 버그** — 재검증 카드('G6R Re-Verify')가 태그 오추출('G'). **수정**: `·\s*G?(\d+)`.
+   - notify 타임아웃 30→60s.
+
+   **미해결(Phase 2 개선점)**:
+   - **컨테이너 GitHub push 자격증명 없음** — Deliver가 로컬 커밋 후 push 실패로 self-block(정직). 현재 호스트 폴백 push. → 컨테이너에 GITHUB_TOKEN 프로비저닝 또는 Deliver=로컬커밋+별도 push 단계.
+   - **Slack 승인→Kanban unblock 미배선** — Sam이 Slack 승인해도 Solomon(대화형)이 해당 task를 unblock 안 함(대화 응답만). → Solomon이 승인 메시지→`kanban unblock` 표준 처리, 또는 브리지.
+   - **pre-blocked Sam 게이트 무알림** — Deliver가 인스턴스화때부터 blocked라 상위 완료 시 "승인 차례" 알림 없음. → 게이트키퍼가 상위 done 시 #approvals 자동 게시.
+   - **속도** — 순차 실행·병렬화 미구현이 최대 병목. → §5 아키타입 A 개선(4워커 수집·병렬 분석/집필) 우선.
 2. **일반화** — 린터·매처·manifest. B/D 템플릿 추가.
 3. **매칭 자동화** — Solomon이 미션→템플릿 선택.
 

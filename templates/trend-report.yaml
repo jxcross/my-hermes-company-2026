@@ -45,7 +45,7 @@ stages:
     profile: default          # Solomon
     sam_gate: true
     upstream: []
-    body: "미션 스펙(목표·완료조건·제약·N) + recency/source_balance 정책 확정. SCOPE.md 산출."
+    body: "미션 스펙(목표·완료조건·제약·N) + recency/source_balance 정책을 reports/<MID>/SCOPE.md에 작성. ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라(중복 방지). 오직 SCOPE.md 산출과 이 task 완료만."
   - id: 2
     name: Search Strategy
     profile: scout
