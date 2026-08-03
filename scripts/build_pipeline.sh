@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────
+# ⚠️ DEPRECATED (2026-08-03) — scripts/instantiate_template.py 로 대체됨.
+#   하드코딩 11단계 대신 templates/trend-report.yaml 을 읽는 결정적 번역기를 쓴다.
+#   또한 이 스크립트는 잠재 결함(Deliver Sam 게이트가 todo 상태라 block 실패,
+#   generic --initial-status blocked 의 auto-promote 불안정)을 갖고 있다.
+#   신규 미션: python3 scripts/instantiate_template.py trend-report <MID> --topic "..."
+#   협상 미리보기: ... --dry-run --render mermaid
+# 아래는 참고용 원본. 새 미션에 사용하지 말 것.
+# ─────────────────────────────────────────────────────────────────────────
 # 게이트 내장 11단계 미션 파이프라인 인스턴스화
 #
 # docs/04 파이프라인 표를 그대로 카드로 만들되, "9→10 무조건 링크" 근본원인을

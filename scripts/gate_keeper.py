@@ -41,6 +41,7 @@ import time
 VERIFIERS = {"fact-checker", "reviewer"}         # 검증자 profile
 STATE_PATH = os.environ.get("GATE_KEEPER_STATE", "/opt/data/gate_keeper_state.json")
 SLACK_TARGET = os.environ.get("GATE_KEEPER_SLACK", "slack")  # bare = home(#mission-log)
+COMPANY_ROOT = os.environ.get("GATE_KEEPER_COMPANY_ROOT", "/work/company")  # repo 마운트 경로
 HERMES = ["hermes", "kanban"]
 VERDICT_RE = re.compile(r"VERDICT:\s*(PASS|FAIL)", re.IGNORECASE)
 # fail-closed 폴백 키워드(표준 토큰이 없는 구 미션·누락 대비)
@@ -139,6 +140,57 @@ def stage_tag(title: str) -> str:
     """검증자 제목에서 게이트 단계 태그 추출('… · 9 Independent Review' → 'G9')."""
     m = re.search(r"·\s*(\d+\w*)", title or "")
     return f"G{m.group(1)}" if m else "G"
+
+
+def load_pipeline(mission: str) -> dict | None:
+    """reports/<MID>/pipeline.json — 템플릿 번역기가 기록한 게이트 설정."""
+    path = os.path.join(COMPANY_ROOT, "reports", mission, "pipeline.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+def objective_verdict(vid: str, title: str) -> tuple[str, str]:
+    """검증자 task 의 객관(Python) 게이트 실행. 반환 (status, detail).
+    status: PASS(모두 exit0) · FAIL(하나라도 실패; usage/missing 도 fail-closed) · SKIP(선언 없음/구 미션)."""
+    mission = mission_of(title)
+    pl = load_pipeline(mission)
+    if not pl:
+        return "SKIP", "pipeline.json 없음"
+    stages = pl.get("stages", [])
+    stage = next((s for s in stages if s.get("task_id") == vid), None)
+    if not stage:
+        # 리비전 재검증 카드(pipeline.json 미등록) → 제목의 단계번호(예 'G9R')로 원 stage 매칭
+        m = re.search(r"(?:·\s*|G)(\d+)", title)
+        if m:
+            sid = int(m.group(1))
+            stage = next((s for s in stages if s.get("id") == sid), None)
+    gate = (stage or {}).get("gate") or {}
+    objs = gate.get("objective") or []
+    if not objs:
+        return "SKIP", "객관 게이트 선언 없음"
+    policy = os.path.join(COMPANY_ROOT, "reports", mission, "pipeline.json")  # 정책은 pipeline.json 안
+    sources = os.path.join(COMPANY_ROOT, pl.get("sources_file") or f"reports/{mission}/raw/sources.yaml")
+    draft = gate.get("draft")
+    draft_abs = os.path.join(COMPANY_ROOT, draft) if draft else None
+    results = []
+    for g in objs:
+        script = os.path.join(COMPANY_ROOT, "scripts", "gates", f"{g}.py")
+        cmd = ["python3", script, "--policy", policy, "--sources", sources]
+        if draft_abs:
+            cmd += ["--draft", draft_abs]
+        try:
+            rc = subprocess.run(cmd, capture_output=True, text=True, timeout=60).returncode
+        except Exception as e:  # noqa: BLE001
+            log(f"  객관게이트 {g}: 실행오류 {e} → fail-closed")
+            rc = 2
+        ok = rc == 0
+        note = "PASS" if ok else ("FAIL(입력없음·fail-closed)" if rc == 2 else "FAIL")
+        log(f"  객관게이트 {g}: exit={rc} {note}")
+        results.append(ok)
+    return ("PASS" if all(results) else "FAIL"), f"gates={objs}"
 
 
 def task_assignee(task_id: str) -> str | None:
@@ -269,12 +321,18 @@ def poll_once(processed: set, dry: bool) -> None:
             if not dry:
                 processed.add(key)
             continue
-        verdict = parse_verdict(show, assignee)
-        log(f"검증자 완료 감지: {vid} '{title}' assignee={assignee} → VERDICT={verdict} (downstream {actionable})")
+        llm_verdict = parse_verdict(show, assignee)
+        obj_status, obj_detail = objective_verdict(vid, title)
+        # 이중 게이트 결합: 객관 FAIL 이면 LLM 무관 FAIL(fail-closed). 그 외 LLM 판정 채택.
+        verdict = "FAIL" if obj_status == "FAIL" else llm_verdict
+        log(f"검증자 완료 감지: {vid} '{title}' assignee={assignee} → "
+            f"객관={obj_status} · LLM={llm_verdict} ⇒ VERDICT={verdict} (downstream {actionable})")
         if verdict == "PASS":
             handle_pass(vid, title, actionable, dry)
         else:
             instr = verifier_instruction(show, assignee)
+            if obj_status == "FAIL":
+                instr = f"[객관 게이트 실패 {obj_detail}] " + instr
             handle_fail(vid, title, assignee, parents, actionable, instr, dry)
         if not dry:
             processed.add(key)

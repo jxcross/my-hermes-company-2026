@@ -41,7 +41,7 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 ## 다음 할 일 (우선순위 후보)
 1. ✅ ~~**Slack 아웃바운드 재연결**~~ — **[해소 2026-08-03]** 근본원인=네트워크 slack.com 도달불가(와이파이 변경으로 복구, 전송 검증 완료). 진단 runbook `docs/10 §4.3`.
 2. ✅ ~~**반려 게이트 자동화**~~ — **[해소 2026-08-03]** 게이트키퍼 사이드카(`hermes-gatekeeper`)로 구현. E2E 검증 완료. `kanban swarm`(다수 검증자 quorum, P3)은 후속 검토. 상세 `docs/10 §4.4`.
-3. **템플릿 기반 미션 시스템** — 파이프라인을 하드코딩 대신 선언적 템플릿으로. 설계 승인·문서화 완료(`docs/11_template_driven_missions.md`). ← **현 최우선 후보**. 다음: Pilot(아키타입 A 템플릿화 + 번역기 + 객관 게이트) 구현 계획. 미션 아키타입 확장(B 논문·D 웹개발)은 이 시스템 위에서.
+3. **템플릿 기반 미션 시스템** — 파이프라인을 하드코딩 대신 선언적 템플릿으로. 설계·문서 `docs/11`. **Pilot P0–P3 구현·검증 완료**(`templates/trend-report.yaml` + `scripts/instantiate_template.py`(--render mermaid) + `scripts/gates/*` 객관 게이트 + `gate_keeper.py` 이중 게이트 + scout sources.yaml). build_pipeline.sh는 deprecated. ← **현 최우선**: **[P4]** 실미션 M-2026-003 end-to-end(Sam 주제·승인). 신규 미션: `python3 scripts/instantiate_template.py trend-report <MID> --topic "..."`(협상 미리보기 `--dry-run --render mermaid`).
 4. **성장 지표 대시보드** — 재작업률·wiki 재사용률(현 41.2%)·소요시간 누적 관찰.
 
 새 세션 시작 시: 최신 `git log`와 `docker compose ps`·`hermes profile list`로 상태 확인 → `docs/10 §4.3`(실행결과·개선점) 읽고 → 위 우선순위 중 Sam이 지정한 것부터 계획 제시.

@@ -25,6 +25,23 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#15 — Pilot 구현(P0–P3): 템플릿 번역기 + 객관 게이트 + 이중 게이트</h2>
+    <div class="meta">2026-08-03 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> docs/11 Pilot 구현(아키타입 A 템플릿화 + 번역기 + 객관 게이트 + 실미션). 최대 범위 승인.</div>
+    <div class="label">수행 단계(P0–P3, 비파괴·검증 완료):</div>
+    <ol class="steps">
+      <li><b>P0</b> <code>templates/trend-report.yaml</code>(11단계 선언) + <code>scripts/instantiate_template.py</code>(--dry-run --render mermaid, pipeline.json, 인라인 불변식). dry-run 그래프가 build_pipeline과 <b>동형</b> 확인.</li>
+      <li><b>게이트 통일 개선</b>: 모든 게이트(Sam+검증자 downstream)를 <b>링크 전 needs_input block</b>으로 통일 → generic initial-blocked의 auto-promote race·Deliver Sam게이트 버그(todo라 block실패) 해소.</li>
+      <li><b>P1</b> <code>scripts/gates/{recency_check,source_balance}.py</code>(harness 이식, source_balance 카테고리 정책화) + <code>sources.yaml</code> 계약·taxonomy(academic/vendor/research_org/standards/news). 픽스처 3종 정확 판정(recency[P,F,P]·balance[P,P,F]).</li>
+      <li><b>P2</b> <code>gate_keeper.py</code> 이중 게이트 통합: 검증자 완료 시 pipeline.json의 객관 게이트 실행, <b>객관 FAIL→VERDICT FAIL</b>(LLM 무관, fail-closed), 재검증 카드는 제목→stage 폴백 매칭. 스크래치 3결합 검증(객관FAIL 덮어씀·객관PASS+LLM PASS 진행).</li>
+      <li><b>P3</b> <code>scout/SOUL.md</code> 개정·배포 — 정규화 source_type로 sources.yaml 방출.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      "템플릿→Kanban 런타임" 경로와 <b>이중 게이트(객관 Python + LLM 검증자)</b>를 스크래치로 완전 검증. build_pipeline.sh는 deprecated. <b>[P4 남음]</b> 실미션 M-2026-003 end-to-end(Sam 주제·승인 필요). 개발 중 보드 오염 없음(스크래치·archive·상태초기화 철저).
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#14 — 설계 보강: Scoping = 파이프라인 협상 (Sam↔Solomon, mermaid DAG)</h2>
     <div class="meta">2026-08-03 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> 미션 시작 시 (1)Solomon에게 "어떤 워크플로우?" 물을 수 있나 (2)DAG로 제시하나 (3)토의 후 "그대로 진행하라" 할 수 있나?</div>
