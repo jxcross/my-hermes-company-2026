@@ -63,6 +63,7 @@ stages:
 - `upstream` → `link`(부모→자식). **verifier 단계의 downstream은 `--initial-status blocked`** (게이트키퍼가 PASS시 unblock — 기존 패턴 재사용).
 - Sam 게이트(scoping/deliver) → `block --kind needs_input`.
 - 병렬 워커 → 한 stage 밑 N개 형제 task + 병합 task.
+- **DAG 미리보기**: `--dry-run --render mermaid` → 실제 카드 생성 없이 템플릿(±미션 파라미터)의 DAG를 mermaid/ASCII로 출력. Solomon이 Scoping 협상 시 Slack에 붙여 제시(§3.F). 비파괴이므로 협상 반복에 안전.
 현 `scripts/build_pipeline.sh`(하드코딩 11단계)를 이 번역기로 대체/위임.
 
 ### C. 미션 → 템플릿 매처 — `scripts/match_template.py` + `templates/manifest.json`
@@ -75,6 +76,18 @@ harness의 manifest + 의사결정트리 패턴(경량). 미션 설명 → 후�
 
 ### E. 불변식 린터 — `scripts/lint_template.py`
 템플릿(및 인스턴스화 직전 미션 그래프)이 Layer0 불변식을 만족하는지 검증. 위반(검증자 누락·게이트 제거·Sam 게이트 빠짐)시 거부 → Solomon 자율분해 사고 원천 차단.
+
+### F. Scoping = 파이프라인 협상 (Sam ↔ Solomon 상호작용)
+미션 시작 시 **Scoping은 곧 "어떤 파이프라인으로 갈지"를 Sam과 Solomon이 협상하는 단계**다. 위 컴포넌트들이 이 대화를 뒷받침한다. 4단계 흐름:
+
+1. **질의** — Sam이 Slack `#ceo-office`에서 미션 제시 + "어떤 파이프라인?" 질의(또는 Solomon이 먼저 제안). Scoping은 Solomon 소유(docs/03 §1.2·§5.1).
+2. **제시(DAG)** — Solomon이 `match_template`(C)로 아키타입 선택 → `instantiate_template --dry-run --render mermaid`(B)로 **템플릿 DAG를 mermaid로 Slack에 미리보기 제시**. 후보가 여럿이면 함께 제시. (인스턴스화 전이라 비파괴.)
+3. **협상(Layer 2, 가드레일 내)** — Sam↔Solomon이 선택 단계 가감·N·병렬성·정책값을 조정. **매 조정마다 `lint_template`(E)가 Layer 0 불변식 검증** → 검증자 제거·Sam 게이트 누락 등 위반은 거부. **합의가 불변식을 못 깬다.**
+4. **승인·실행** — 합의 확정 → Sam이 **Scoping 게이트 승인**(`#approvals`에서 `unblock`) → 번역기(B)가 **합의된 템플릿을 결정적으로 인스턴스화** → daemon dispatch. ⇒ **"승인한 것 = 실제 도는 것"** (Solomon 자율분해 이탈 차단; `hermes kanban decompose` 자율분해가 수동 카드와 충돌하던 docs/10 §4.3 개선점 2를 원천 해소).
+
+> 실행 시작 후 DAG는 Kanban 대시보드(:9129)의 컬럼·레인·**의존선**으로 관찰(docs/09 — 부분 DAG). 완전한 그래프 렌더는 후속 Control Plane(docs/09 §5).
+>
+> **Sam의 세 질문 대응:** (Q1 "어떤 워크플로우?" = 1·2단계) · (Q2 "DAG로 제시?" = 2단계 mermaid 미리보기 + 실행 후 대시보드) · (Q3 "그대로 진행?" = 4단계 승인→결정적 인스턴스화). 셋 다 지금도 부분 가능하나, 이 설계로 **신뢰 가능(승인=실행)**해진다.
 
 ## 4. 재사용 / 비재사용 (경계 명확화)
 - **재사용:** SpecInput 스키마(+4필드) · 객관 게이트 스크립트(recency 등) · manifest/의사결정트리 개념 · 아키타입 콘텐츠(trendforge≈A · specflow≈D · paperforge/reviewforge≈B).

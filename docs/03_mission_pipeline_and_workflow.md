@@ -21,6 +21,7 @@ Stage = { 입력 → 산출물(deliverable, 소유 profile) → 체크리스트 
 
 ### 1.2 역할 배치
 - **Solomon**: Scoping(미션 설계)·Deliver(취합·보고)를 소유 + **모든 단계 게이트 검증·승인**. 산출물 직접 생산 ❌.
+  - **Scoping = 파이프라인 협상**: Sam↔Solomon이 아키타입 템플릿을 골라 **mermaid DAG로 미리보기**하고 협상→승인→그대로 실행("승인=실행"). 상세: [`11 §3.F`](./11_template_driven_missions.md).
 - **전문 profile**: 각 단계 산출물을 소유·생산.
 - **검증자 분리**: 예) Reader가 분석 → Fact-Checker가 검증 / Writer가 초안 → Reviewer가 리뷰.
 

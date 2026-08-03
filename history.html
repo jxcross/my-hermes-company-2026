@@ -25,6 +25,22 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#14 — 설계 보강: Scoping = 파이프라인 협상 (Sam↔Solomon, mermaid DAG)</h2>
+    <div class="meta">2026-08-03 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> 미션 시작 시 (1)Solomon에게 "어떤 워크플로우?" 물을 수 있나 (2)DAG로 제시하나 (3)토의 후 "그대로 진행하라" 할 수 있나?</div>
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li>현 상태 확인: Scoping은 Solomon 소유(docs/03), 가시성은 대시보드 의존선(부분 DAG)+Control Plane 후속(docs/09), <code>hermes kanban decompose</code>는 자율분해(이탈 위험).</li>
+      <li>세 질문 답: <b>셋 다 가능</b> — 지금은 부분·즉흥, docs/11 설계로 신뢰 가능(승인=실행).</li>
+      <li>docs/11 §3.F "Scoping=파이프라인 협상" 4단계 흐름 추가(질의→mermaid DAG 제시→가드레일 내 협상+린터 검증→승인·결정적 인스턴스화).</li>
+      <li>컴포넌트 B에 <code>--dry-run --render mermaid</code>(비파괴 DAG 미리보기) 명시. docs/03·09 상호참조.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      Sam↔Solomon의 파이프라인 협상을 설계에 명문화. Q1(질의)·Q2(mermaid DAG+대시보드)·Q3(승인→그대로 실행)에 1:1 대응. 핵심: 번역기 결정적 인스턴스화 + 린터 불변식 검증 → <b>"승인한 것 = 실제 도는 것"</b>(자율분해 이탈 차단). 코드(<code>--render</code>)는 Pilot phase에서 구현.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#13 — 템플릿 기반 미션 시스템 설계 (harness-templates 분석 → 설계 스펙)</h2>
     <div class="meta">2026-08-03 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> 미션마다 파이프라인이 다른데 현 하드코딩 설계가 옳은지 논의. 형제 repo <code>other_projects/harness-templates</code>를 분석해, 템플릿을 만들어 "미션→템플릿 선택→워크플로우 구성→task 분배"하는 방식이 어떤지 평가.</div>

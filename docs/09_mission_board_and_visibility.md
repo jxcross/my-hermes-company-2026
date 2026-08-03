@@ -98,6 +98,8 @@ Sam의 요구:
 Sam의 "나중에는 워크플로우 각 노드 구성과 현재 실행 상태를 보고 싶다"는 요구 중,
 **전체 DAG 그래프·임계경로·통계**는 Kanban 기본 대시보드가 부분적으로만 제공한다(의존선 수준).
 
+> 인스턴스화 **전** 협상 단계에서는 Solomon이 템플릿 DAG를 **mermaid로 Slack에 미리보기** 제시한다(`instantiate_template --dry-run --render mermaid`, [`11 §3.F`](./11_template_driven_missions.md)). 실행 중 관찰은 아래 대시보드/Control Plane.
+
 → **Stage 4+에서 AI Company Control Plane(웹뷰)**을 별도 SPEC으로 개발한다:
 - 데이터 소스: `~/.hermes/kanban.db`(읽기 전용). 스키마: `tasks · task_links · task_comments · task_events · task_runs`.
 - 기능: 미션별 **워크플로우 DAG 렌더**(노드=단계, 엣지=의존), **노드별 상태·담당·소요시간**, 임계경로, 비용·성장지표 집계.
