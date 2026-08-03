@@ -129,7 +129,7 @@ hermes kanban swarm "핵심 주장 교차검증" \
 2. **토큰·Socket Mode 실측**(네트워크 OK인데도 실패 시): 봇=`auth.test`(Authorization: Bearer $SLACK_BOT_TOKEN), 앱=`POST apps.connections.open`(Bearer $SLACK_APP_TOKEN). `ok:false`면 해당 토큰 재발급/스코프(`connections:write`) 또는 Slack 앱 Socket Mode 토글 확인.
 3. **중복 Socket 연결**: 같은 App-Level Token을 쓰는 인스턴스가 둘 이상이면 disconnect 루프. `docker ps -a`로 확인(현 시점 타 프로젝트 `ainc-hermes`·`hermes`는 Slack 토큰 없어 무관).
 4. **복구는 down→up**: 네트워크 회복 후 게이트웨이가 15초 주기로 자가 재연결하나, 즉시 원하면 `docker compose down && docker compose up -d`(force-recreate 반복 대신 소켓 완전 정리).
-5. 부수: 봇토큰이 `channels:read` 미보유면 `conversations.info`가 `missing_scope`로 실패 — 조회만 막힐 뿐 **전송(`chat:write`)엔 무관**.
+5. 스코프: 봇토큰이 `channels:read` 미보유면 `conversations.info`/`conversations.list`가 `missing_scope`로 실패(조회만 막힘, 전송 `chat:write`엔 무관). **[2026-08-03 해소]** Slack 앱 OAuth 페이지에 스코프를 추가만 하면 기존 토큰엔 반영 안 됨 — **Reinstall to Workspace**를 눌러야 토큰에 반영(이 앱은 재설치 시 토큰 값 불변·스코프만 확장돼 `.env` 교체 불필요했음). 현 봇토큰 스코프에 `channels:read` 등 포함. 봇 소속 채널: `C0BM8FK3RTM`=**#mission-log**(=`SLACK_HOME_CHANNEL`, bare 전송 목적지)·`C0BN935M0MN`=#ceo-office·`C0BN936JUM6`=#approvals.
 
 ## 5. full 11단계 확장 백로그 (슬라이스 완주 후)
 - profile 추가: `fact-checker`(6, ≠reader) · `synthesizer`(7) · `reviewer`(9, ≠writer) · `curator`(4·10).

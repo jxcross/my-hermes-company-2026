@@ -35,12 +35,13 @@
       <li>근본원인 확정: <b>네트워크/와이파이가 slack.com에 도달 못함</b>(DNS는 해석되나 TCP443 타임아웃). "다중 recreate 후"는 그 시점 네트워크 문제와 겹친 오진.</li>
       <li>Sam이 와이파이 변경 → slack.com HTTPS 200 회복. 토큰 재실측: 봇·앱토큰 모두 <code>ok:true</code>, Socket Mode wss 정상.</li>
       <li>게이트웨이 자가 회복(신규 세션 <code>s_1759…</code> 수립, <code>⚡️ Bolt app is running!</code>, 이후 100초+ 루프 무재발) → 재기동 불필요.</li>
-      <li>아웃바운드 검증: 그룹·홈채널(<code>C0BM8FK3RTM</code>=#ceo-office) 모두 <code>success:true</code> 전송. 타 프로젝트 컨테이너(ainc-hermes·hermes)는 Slack 토큰 없어 경합 무관.</li>
+      <li>아웃바운드 검증: 그룹·홈채널(<code>C0BM8FK3RTM</code>=<b>#mission-log</b>, bare 전송 목적지) 모두 <code>success:true</code> 전송. 타 프로젝트 컨테이너(ainc-hermes·hermes)는 Slack 토큰 없어 경합 무관.</li>
+      <li>후속: 봇토큰 <code>channels:read</code> 스코프 추가 요청 → Sam이 <b>Reinstall to Workspace</b> 실행 → 같은 토큰에 스코프 확장(값 불변, <code>.env</code> 교체 불필요). <code>conversations.list</code> 정상화로 봇 소속 채널 확인: #mission-log·#ceo-office(<code>C0BN935M0MN</code>)·#approvals(<code>C0BN936JUM6</code>).</li>
       <li>docs/10 §4.3·CLAUDE.md 갱신(오진 정정 + 네트워크 진단 runbook), 커밋·푸시.</li>
     </ol>
     <div class="result"><span class="label">결과:</span>
-      Slack 인바운드·아웃바운드 <b>복구 완료</b>. 토큰·Socket Mode·홈채널ID(<code>C0BM8FK3RTM</code>)는 모두 정상이었고 유일 원인은 <b>slack.com 네트워크 egress 차단</b>이었음.
-      <b>교훈:</b> Slack 이상 시 진단 1순위는 <code>curl https://slack.com/api/auth.test</code> 도달성. <b>남은 확인:</b> Sam이 #ceo-office에서 멘션해 인바운드 라운드트립 최종 확인. (부수: 봇토큰 <code>channels:read</code> 미보유 → <code>conversations.info</code>만 <code>missing_scope</code>, 전송엔 무관.)
+      Slack 인바운드·아웃바운드 <b>복구 완료</b>. 토큰·Socket Mode·홈채널ID(<code>C0BM8FK3RTM</code>=#mission-log)는 모두 정상이었고 유일 원인은 <b>slack.com 네트워크 egress 차단</b>이었음. 부수로 <code>channels:read</code> 스코프도 추가(재설치로 해소) → 채널 조회 기능 확보.
+      <b>교훈:</b> Slack 이상 시 진단 1순위는 <code>curl https://slack.com/api/auth.test</code> 도달성. Slack 스코프는 앱 설정에 추가만으로 부족하고 <b>Reinstall</b>해야 토큰에 반영. <b>남은 확인:</b> Sam이 #ceo-office에서 멘션해 인바운드 라운드트립 최종 확인.
     </div>
   </div>
 
