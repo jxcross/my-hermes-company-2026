@@ -25,6 +25,22 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#13 — 템플릿 기반 미션 시스템 설계 (harness-templates 분석 → 설계 스펙)</h2>
+    <div class="meta">2026-08-03 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> 미션마다 파이프라인이 다른데 현 하드코딩 설계가 옳은지 논의. 형제 repo <code>other_projects/harness-templates</code>를 분석해, 템플릿을 만들어 "미션→템플릿 선택→워크플로우 구성→task 분배"하는 방식이 어떤지 평가.</div>
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li>브레인스토밍: 현 하드코딩 설계 비판 → <b>계층형 모델</b>(불변식/아키타입/미션별 적응) 방향 합의(Sam: "둘 다 중요").</li>
+      <li>harness-templates 정밀 분석(Explore 6회): 28개 파이프라인 템플릿의 5개념(Pipeline·Sub-agent·Artifact relay·Gate·Reproducibility spec), 게이트 스크립트 실코드, SpecInput 스키마, trendforge vs 우리 아키타입 A 대조.</li>
+      <li>핵심 통찰: 런타임은 대부분 이미 있음(harness 상태머신=우리 Kanban) → <b>없는 층은 둘</b>(선언적 템플릿+매처, 객관 게이트). 게이트는 상보적(객관 Python + LLM 검증자). trendforge≈A·specflow≈D·paperforge≈B로 아키타입 콘텐츠 재활용 가능.</li>
+      <li>설계 스펙 5컴포넌트 정리: 템플릿 스키마(YAML) · 템플릿→Kanban 번역기 · 미션→템플릿 매처 · 이중 게이트 · 불변식 린터. <code>docs/11_template_driven_missions.md</code>로 커밋.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      "미션→템플릿→워크플로우→분배" 방향이 옳음을 확인 — 단, harness를 통째 이식하는 게 아니라 <b>없는 두 층만 Hermes 런타임으로 번역</b>. 설계 승인(구현 전). 구현은 §7 phasing(A 파일럿→일반화→매칭 자동화)에 따라 별도 계획. 비재사용 경계(Kanban 중복 금지)·불변식 린터 강제를 명시.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#12 — 반려 게이트 자동화 (게이트키퍼 사이드카 + 자동 리비전 루프)</h2>
     <div class="meta">2026-08-03 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> 다음 할 일 중 반려 게이트 자동화 — 검증 task(6·9) fail 판정 시 산출물을 자동 재작업으로 되돌리는 루프(수동 revision 카드 우회 제거).</div>
