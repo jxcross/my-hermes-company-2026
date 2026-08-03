@@ -1,0 +1,42 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/weMSdC0WviI1DwoYfAdfSeLL8e0</id>
+  <title>arXiv Query: search_query=&amp;id_list=2402.17753&amp;start=0&amp;max_results=10</title>
+  <updated>2026-08-03T07:41:26Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=&amp;start=0&amp;max_results=10&amp;id_list=2402.17753" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>10</opensearch:itemsPerPage>
+  <opensearch:totalResults>1</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2402.17753v1</id>
+    <title>Evaluating Very Long-Term Conversational Memory of LLM Agents</title>
+    <updated>2024-02-27T18:42:31Z</updated>
+    <link href="https://arxiv.org/abs/2402.17753v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2402.17753v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Existing works on long-term open-domain dialogues focus on evaluating model responses within contexts spanning no more than five chat sessions. Despite advancements in long-context large language models (LLMs) and retrieval augmented generation (RAG) techniques, their efficacy in very long-term dialogues remains unexplored. To address this research gap, we introduce a machine-human pipeline to generate high-quality, very long-term dialogues by leveraging LLM-based agent architectures and grounding their dialogues on personas and temporal event graphs. Moreover, we equip each agent with the capability of sharing and reacting to images. The generated conversations are verified and edited by human annotators for long-range consistency and grounding to the event graphs. Using this pipeline, we collect LoCoMo, a dataset of very long-term conversations, each encompassing 300 turns and 9K tokens on avg., over up to 35 sessions. Based on LoCoMo, we present a comprehensive evaluation benchmark to measure long-term memory in models, encompassing question answering, event summarization, and multi-modal dialogue generation tasks. Our experimental results indicate that LLMs exhibit challenges in understanding lengthy conversations and comprehending long-range temporal and causal dynamics within dialogues. Employing strategies like long-context LLMs or RAG can offer improvements but these models still substantially lag behind human performance.</summary>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2024-02-27T18:42:31Z</published>
+    <arxiv:comment>19 pages; Project page: https://snap-research.github.io/locomo/</arxiv:comment>
+    <arxiv:primary_category term="cs.CL"/>
+    <author>
+      <name>Adyasha Maharana</name>
+    </author>
+    <author>
+      <name>Dong-Ho Lee</name>
+    </author>
+    <author>
+      <name>Sergey Tulyakov</name>
+    </author>
+    <author>
+      <name>Mohit Bansal</name>
+    </author>
+    <author>
+      <name>Francesco Barbieri</name>
+    </author>
+    <author>
+      <name>Yuwei Fang</name>
+    </author>
+  </entry>
+</feed>

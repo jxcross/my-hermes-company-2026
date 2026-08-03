@@ -1,0 +1,40 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/Kalp/dFg12PI5+OQmhbWniiCXOs</id>
+  <title>arXiv Query: search_query=&amp;id_list=2410.10813&amp;start=0&amp;max_results=10</title>
+  <updated>2026-08-03T07:01:17Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=&amp;start=0&amp;max_results=10&amp;id_list=2410.10813" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>10</opensearch:itemsPerPage>
+  <opensearch:totalResults>1</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2410.10813v2</id>
+    <title>LongMemEval: Benchmarking Chat Assistants on Long-Term Interactive Memory</title>
+    <updated>2025-03-04T22:19:41Z</updated>
+    <link href="https://arxiv.org/abs/2410.10813v2" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2410.10813v2" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Recent large language model (LLM)-driven chat assistant systems have integrated memory components to track user-assistant chat histories, enabling more accurate and personalized responses. However, their long-term memory capabilities in sustained interactions remain underexplored. We introduce LongMemEval, a comprehensive benchmark designed to evaluate five core long-term memory abilities of chat assistants: information extraction, multi-session reasoning, temporal reasoning, knowledge updates, and abstention. With 500 meticulously curated questions embedded within freely scalable user-assistant chat histories, LongMemEval presents a significant challenge to existing long-term memory systems, with commercial chat assistants and long-context LLMs showing a 30% accuracy drop on memorizing information across sustained interactions. We then present a unified framework that breaks down the long-term memory design into three stages: indexing, retrieval, and reading. Built upon key experimental insights, we propose several memory design optimizations including session decomposition for value granularity, fact-augmented key expansion for indexing, and time-aware query expansion for refining the search scope. Extensive experiments show that these optimizations greatly improve both memory recall and downstream question answering on LongMemEval. Overall, our study provides valuable resources and guidance for advancing the long-term memory capabilities of LLM-based chat assistants, paving the way toward more personalized and reliable conversational AI. Our benchmark and code are publicly available at https://github.com/xiaowu0162/LongMemEval.</summary>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2024-10-14T17:59:44Z</published>
+    <arxiv:comment>ICLR 2025</arxiv:comment>
+    <arxiv:primary_category term="cs.CL"/>
+    <author>
+      <name>Di Wu</name>
+    </author>
+    <author>
+      <name>Hongwei Wang</name>
+    </author>
+    <author>
+      <name>Wenhao Yu</name>
+    </author>
+    <author>
+      <name>Yuwei Zhang</name>
+    </author>
+    <author>
+      <name>Kai-Wei Chang</name>
+    </author>
+    <author>
+      <name>Dong Yu</name>
+    </author>
+  </entry>
+</feed>

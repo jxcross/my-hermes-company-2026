@@ -1,0 +1,169 @@
+{
+  "mission": "M-2026-003",
+  "template": "trend-report",
+  "topic": "AI 에이전트 메모리·컨텍스트 관리 동향",
+  "policy_file": "reports/M-2026-003/SCOPE.md",
+  "sources_file": "reports/M-2026-003/raw/sources.yaml",
+  "policy": {
+    "recency_policy": {
+      "cutoff_year_offset": -2,
+      "recent_ratio": 0.6,
+      "hard_block_year_offset": -5,
+      "seminal_exceptions": true
+    },
+    "source_balance_policy": {
+      "categories": [
+        "academic",
+        "vendor",
+        "research_org",
+        "standards",
+        "news"
+      ],
+      "min_per_category": {
+        "academic": 2,
+        "vendor": 2,
+        "research_org": 1,
+        "standards": 0,
+        "news": 0
+      },
+      "hard_block_if_missing": false
+    }
+  },
+  "stages": [
+    {
+      "id": 1,
+      "name": "Scoping",
+      "task_id": "t_4c5bd494",
+      "profile": "default",
+      "verifier": false,
+      "sam_gate": true,
+      "upstream_task_ids": []
+    },
+    {
+      "id": 2,
+      "name": "Search Strategy",
+      "task_id": "t_0c47b6d9",
+      "profile": "scout",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_4c5bd494"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Collection",
+      "task_id": "t_0c559f86",
+      "profile": "scout",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_0c47b6d9"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Dedup·Relevance",
+      "task_id": "t_604a4fc5",
+      "profile": "curator",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_0c559f86"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Deep Analysis",
+      "task_id": "t_022fb9c9",
+      "profile": "reader",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_604a4fc5"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Cross-Verify",
+      "task_id": "t_71d48c4c",
+      "profile": "fact-checker",
+      "verifier": true,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_022fb9c9"
+      ],
+      "gate": {
+        "objective": [
+          "recency_check",
+          "source_balance"
+        ],
+        "llm": "fact_checker_verdict",
+        "draft": null
+      }
+    },
+    {
+      "id": 7,
+      "name": "Synthesis",
+      "task_id": "t_6e0b96bd",
+      "profile": "synthesizer",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_71d48c4c"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "Report Draft",
+      "task_id": "t_9e780ba8",
+      "profile": "writer",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_6e0b96bd"
+      ]
+    },
+    {
+      "id": 9,
+      "name": "Independent Review",
+      "task_id": "t_bf4b5eb3",
+      "profile": "reviewer",
+      "verifier": true,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_9e780ba8"
+      ],
+      "gate": {
+        "objective": [
+          "recency_check",
+          "source_balance"
+        ],
+        "llm": "reviewer_verdict",
+        "draft": "reports/M-2026-003/report.md"
+      }
+    },
+    {
+      "id": 10,
+      "name": "Wiki Update",
+      "task_id": "t_cc6f19e9",
+      "profile": "curator",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_bf4b5eb3"
+      ]
+    },
+    {
+      "id": 11,
+      "name": "Deliver",
+      "task_id": "t_a0027fdb",
+      "profile": "default",
+      "verifier": false,
+      "sam_gate": true,
+      "upstream_task_ids": [
+        "t_cc6f19e9"
+      ]
+    }
+  ]
+}

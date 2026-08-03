@@ -1,0 +1,121 @@
+- id: locomo-evaluating-very-long-term-conversational-memory
+  title: "Evaluating Very Long-Term Conversational Memory of LLM Agents"
+  url: "https://arxiv.org/abs/2402.17753"
+  published_year: 2024
+  source_type: academic
+  collected_at: 2026-08-03
+  status: selected
+  relevance_score: 5
+  dedup_status: new
+- id: longmemeval-benchmarking-chat-assistants
+  title: "LongMemEval: Benchmarking Chat Assistants on Long-Term Interactive Memory"
+  url: "https://arxiv.org/abs/2410.10813"
+  published_year: 2024
+  source_type: academic
+  collected_at: 2026-08-03
+  status: selected
+  relevance_score: 5
+  dedup_status: new
+- id: a-mem-agentic-memory-for-llm-agents
+  title: "A-MEM: Agentic Memory for LLM Agents"
+  url: "https://arxiv.org/abs/2502.12110"
+  published_year: 2025
+  source_type: academic
+  collected_at: 2026-08-03
+  status: selected
+  relevance_score: 5
+  dedup_status: new
+- id: memoryagentbench-incremental-multi-turn-interactions
+  title: "Evaluating Memory in LLM Agents via Incremental Multi-Turn Interactions"
+  url: "https://arxiv.org/abs/2507.05257"
+  published_year: 2025
+  source_type: academic
+  collected_at: 2026-08-03
+  status: selected
+  relevance_score: 5
+  dedup_status: new
+- id: anthropic-effective-context-engineering-for-ai-agents
+  title: "Effective context engineering for AI agents"
+  url: "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+  published_year: 2025
+  source_type: vendor
+  collected_at: 2026-08-03
+  status: selected
+  relevance_score: 5
+  dedup_status: new
+- id: anthropic-effective-harnesses-for-long-running-agents
+  title: "Effective harnesses for long-running agents"
+  url: "https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents"
+  published_year: 2025
+  source_type: vendor
+  collected_at: 2026-08-03
+  status: selected
+  relevance_score: 5
+  dedup_status: new
+- id: microsoft-evolib-evolving-knowledge
+  title: "EvoLib: Turning experience into evolving knowledge"
+  url: "https://www.microsoft.com/en-us/research/blog/evolib-turning-experience-into-evolving-knowledge/"
+  published_year: 2026
+  source_type: vendor
+  collected_at: 2026-08-03
+  status: selected
+  relevance_score: 5
+  dedup_status: reuse_existing_wiki
+  canonical_raw: /work/llm-wiki/raw/mission-m-2026-001/microsoft-evolib-evolving-knowledge.md
+- id: langchain-deep-agents-v0-7
+  title: "Deep Agents v0.7"
+  url: "https://www.langchain.com/blog/deep-agents-v0-7"
+  published_year: 2026
+  source_type: vendor
+  collected_at: 2026-08-03
+  status: selected
+  relevance_score: 5
+  dedup_status: reuse_existing_wiki
+  canonical_raw: /work/llm-wiki/raw/mission-m-2026-001/langchain-deep-agents-v0-7.md
+- id: metr-frontier-risk-report
+  title: "Frontier Risk Report (February to March 2026)"
+  url: "https://metr.org/blog/2026-05-19-frontier-risk-report"
+  published_year: 2026
+  source_type: research_org
+  collected_at: 2026-08-03
+  status: selected
+  relevance_score: 3
+  dedup_status: reuse_existing_wiki
+  canonical_raw: /work/llm-wiki/raw/mission-m-2026-002/metr-frontier-risk-report.md
+- id: new-america-ai-agents-and-memory
+  title: "AI Agents and Memory: Privacy and Power in the Model Context Protocol (MCP) Era"
+  url: "https://www.newamerica.org/insights/ai-agents-and-memory"
+  published_year: 2025
+  source_type: research_org
+  collected_at: 2026-08-03
+  status: selected
+  relevance_score: 5
+  dedup_status: new
+- id: nist-ai-600-1-generative-ai-profile
+  title: "Artificial Intelligence Risk Management Framework: Generative Artificial Intelligence Profile"
+  url: "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf"
+  published_year: 2024
+  source_type: standards
+  collected_at: 2026-08-03
+  status: selected
+  relevance_score: 4
+  dedup_status: new
+- id: ietf-agent-security-benchmark-00
+  title: "Security Evaluation Benchmark for AI Agents"
+  url: "https://www.ietf.org/archive/id/draft-han-bmwg-agent-security-benchmark-00.html"
+  published_year: 2026
+  source_type: standards
+  collected_at: 2026-08-03
+  status: selected
+  relevance_score: 5
+  dedup_status: reuse_existing_wiki
+  canonical_raw: /work/llm-wiki/raw/mission-m-2026-002/ietf-agent-security-benchmark.md
+- id: openai-for-developers-2025
+  title: "OpenAI for Developers in 2025"
+  url: "https://developers.openai.com/blog/openai-for-developers-2025"
+  published_year: null
+  source_type: vendor
+  collected_at: 2026-08-03
+  status: excluded
+  relevance_score: 0
+  dedup_status: excluded_missing_published_year
