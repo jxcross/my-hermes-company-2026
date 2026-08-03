@@ -42,7 +42,7 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 **완료(2026-08-03):** ✅ Slack 재연결(`docs/10 §4.3`) · ✅ 반려 게이트 자동화=`hermes-gatekeeper` 사이드카(`docs/10 §4.4`) · ✅ **템플릿 기반 미션 시스템 Pilot(P0–P4)**: 선언적 템플릿→Kanban 번역기 + 이중 게이트(객관 Python + LLM 검증자) + 실미션 **M-2026-003 완주**(11/11, 커밋 b7ec055). 상세 `docs/11 §7`. 신규 미션 실행: `python3 scripts/instantiate_template.py trend-report <MID> --topic "..."`(협상 미리보기 `--dry-run --render mermaid`).
 
 **← 현 최우선: Phase 2** (`docs/11 §7`의 미해결·개선점):
-1. **병렬화** (최대 병목 — 순차 실행이 미션을 느리게 함). trendforge식 팬아웃: 4워커 수집(source_type별)·병렬 분석/집필. 템플릿 `parallel:true`는 선언만 됨 → 번역기·gate_keeper가 실제 병렬 task로 전개하도록 구현. → `docs/11 §5`.
+1. ~~**병렬화**~~ **[코드·dry-run 완료 2026-08-03, 라이브 검증 대기]** subagent 스테이지 내 팬아웃으로 구현(형제 task 아님 — 조사 결과 Hermes는 동일 profile task를 순차 실행). 번역기가 템플릿 `parallel` 블록(`mode: workers|per_item`·`shard`·`merge_to`)을 읽어 stage 3·5·8 task **본문에 delegation 배치 위임 프로토콜 주입**(스테이지 1 task 유지→gate_keeper 무손상). **잔여=라이브 파일럿 M-2026-004**: `python3 scripts/instantiate_template.py trend-report M-2026-004 --topic "..."` → Sam Scoping 승인 → 실행하며 실측 속도이득·shard 병합·gate_keeper 회귀 확인. 상세 `docs/11 §5·§3.B`.
 2. **컨테이너 GITHUB_TOKEN** — Deliver의 `git push`가 컨테이너 자격증명 부재로 실패(현 호스트 폴백). `.env`에 토큰 + git 자격 설정.
 3. **Slack 승인→Kanban unblock 배선** — Sam이 Slack 승인해도 Solomon이 해당 task를 unblock 안 함(대화 응답만). Solomon이 "승인" → `kanban unblock` 표준 처리하도록.
 4. **pre-blocked Sam 게이트 활성 알림** — 게이트키퍼가 상위 done 시 `#approvals`에 승인요청 자동 게시.

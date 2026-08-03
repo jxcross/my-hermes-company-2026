@@ -62,7 +62,7 @@ stages:
 - stage → `hermes kanban create --assignee <profile> --workspace dir:/work/company/reports/<MID>`
 - `upstream` → `link`(부모→자식). **verifier 단계의 downstream은 `--initial-status blocked`** (게이트키퍼가 PASS시 unblock — 기존 패턴 재사용).
 - Sam 게이트(scoping/deliver) → `block --kind needs_input`.
-- 병렬 워커 → 한 stage 밑 N개 형제 task + 병합 task.
+- 병렬 워커 → **스테이지 task 1개 유지 + 본문에 subagent 팬아웃 프로토콜 주입**. (당초 "N개 형제 task"안은 폐기 — 조사 결과 Hermes는 동일 profile의 여러 ready task를 **순차 실행**(워커풀 없음)해 형제 task는 속도 이득이 없다. 정석은 "단계 내 병렬=subagent"(CLAUDE.md)로, 실행 profile이 `delegation` 도구의 배치(parallel) 위임으로 worker를 동시 디스패치→worker별 shard 기록→오케스트레이터가 병합. 스테이지가 1 task라 gate_keeper 검증자 매핑도 무손상. [2026-08-03 Phase 2-① 구현])
 - **DAG 미리보기**: `--dry-run --render mermaid` → 실제 카드 생성 없이 템플릿(±미션 파라미터)의 DAG를 mermaid/ASCII로 출력. Solomon이 Scoping 협상 시 Slack에 붙여 제시(§3.F). 비파괴이므로 협상 반복에 안전.
 현 `scripts/build_pipeline.sh`(하드코딩 11단계)를 이 번역기로 대체/위임.
 
@@ -96,6 +96,8 @@ harness의 manifest + 의사결정트리 패턴(경량). 미션 설명 → 후�
 ## 5. 아키타입 A 개선 (trendforge에서 흡수 — 병행 가능)
 scout를 `academic/industry/patents/news` **4워커로 분화** + `source_type` 필드 + `source_balance` 객관 게이트 + 수집·분석·작성 **병렬화** + `01-scope`에 recency/source_balance **정책 선언**. (지식 복리·검증자 분리는 유지.)
 
+**[2026-08-03 Phase 2-① 병렬화 구현]** 메커니즘 = **subagent 스테이지 내 팬아웃**(형제 task 아님 — §3.B 참조). 범위 = **Stage 3 수집(source_type 5워커 고정분할)·5 분석(자료별 동적분할)·8 집필(섹션별 동적분할)**. 번역기(`instantiate_template.py`)가 템플릿의 `parallel` 블록(`mode: workers|per_item`, `shard`, `merge_to`)을 읽어 각 스테이지 task **본문에 delegation 배치 위임 프로토콜을 주입**한다(스테이지 카드 1개 유지). 경합 회피: worker/항목별 개별 shard 파일 → 오케스트레이터가 스테이지 끝에서 canonical(`raw/sources.yaml`·`analysis/_index.md`·`report.md`)로 병합·dedup. **선행 확인**: `delegation`(👥) 도구셋이 scout 포함 전 profile에 enabled, `delegate` 배치(parallel) 지원(`max_concurrent_children` 기본 3, `MAX_DEPTH=1`). dry-run(불변식·주입본문·pipeline.json 메타·mermaid 표기) 검증 통과. 라이브 파일럿(M-2026-004)은 Sam Scoping 승인 후 실행 예정.
+
 ## 6. 파일 (생성/수정) — 구현 시
 - **신규:** `templates/<archetype>.yaml`(A/B/D), `templates/manifest.json`, `scripts/instantiate_template.py`, `scripts/match_template.py`, `scripts/lint_template.py`, `scripts/gates/recency_check.py`·`source_balance.py`.
 - **수정:** `scripts/build_pipeline.sh`(→번역기로 위임), `scripts/gate_keeper.py`(객관 게이트 신호 통합), `profiles-src/scout/SOUL.md`(4워커·source_type), `docs/04`·`docs/10` 갱신, `CLAUDE.md`.
@@ -116,7 +118,7 @@ scout를 `academic/industry/patents/news` **4워커로 분화** + `source_type` 
    - **컨테이너 GitHub push 자격증명 없음** — Deliver가 로컬 커밋 후 push 실패로 self-block(정직). 현재 호스트 폴백 push. → 컨테이너에 GITHUB_TOKEN 프로비저닝 또는 Deliver=로컬커밋+별도 push 단계.
    - **Slack 승인→Kanban unblock 미배선** — Sam이 Slack 승인해도 Solomon(대화형)이 해당 task를 unblock 안 함(대화 응답만). → Solomon이 승인 메시지→`kanban unblock` 표준 처리, 또는 브리지.
    - **pre-blocked Sam 게이트 무알림** — Deliver가 인스턴스화때부터 blocked라 상위 완료 시 "승인 차례" 알림 없음. → 게이트키퍼가 상위 done 시 #approvals 자동 게시.
-   - **속도** — 순차 실행·병렬화 미구현이 최대 병목. → §5 아키타입 A 개선(4워커 수집·병렬 분석/집필) 우선.
+   - ~~**속도** — 순차 실행·병렬화 미구현이 최대 병목.~~ → **[해소 2026-08-03 Phase 2-①]** subagent 스테이지 내 팬아웃(3·5·8) 구현. 메커니즘·검증은 §5·§3.B. 잔여: 라이브 파일럿 M-2026-004 실행으로 실측 속도 이득·shard 병합 확인, `max_concurrent_children`(기본3)를 수집 5워커에 맞춰 튜닝(선택, hermes-home/config 로컬).
 2. **일반화** — 린터·매처·manifest. B/D 템플릿 추가.
 3. **매칭 자동화** — Solomon이 미션→템플릿 선택.
 

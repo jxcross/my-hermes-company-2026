@@ -13,7 +13,12 @@
 #       objective       : scripts/gates/<name>.py 목록(객관 Python, exit 0/1)
 #       llm             : gate_keeper 가 파싱할 LLM 검증자 신호(VERDICT)
 #       draft           : 객관 게이트 --draft 로 넘길 산출물 경로(선택, <MID> 치환)
-#  - stages[].parallel / workers : 병렬 팬아웃(선택; Pilot 은 선언만, 실제 팬아웃은 후속)
+#  - stages[].parallel : 스테이지 내 subagent 병렬 팬아웃(선택). 번역기가 이 선언을 읽어
+#       task 본문에 팬아웃 프로토콜을 주입한다(스테이지 카드는 여전히 1개; delegation 배치 위임).
+#       mode: workers  → 고정 목록. workers:[…] 마다 subagent 1개. shard=워커별 파일.
+#       mode: per_item → 동적 분할. over: 로 분할 기준 서술, 항목마다 subagent 1개.
+#       shard    : 워커/항목별 산출 파일 패턴(<worker>·<id>·<section> 치환은 실행 profile 담당).
+#       merge_to : 오케스트레이터가 모든 subagent 반환 후 병합·dedup 하는 canonical 파일.
 
 name: trend-report
 category: research
@@ -54,10 +59,13 @@ stages:
   - id: 3
     name: Collection
     profile: scout
-    parallel: true
-    workers: [academic, vendor, research_org, standards, news]
     upstream: [2]
-    body: "raw/ 원자료 + raw/sources.yaml(id·published_year·source_type·url·collected_at·status)."
+    parallel:
+      mode: workers
+      workers: [academic, vendor, research_org, standards, news]
+      shard: "raw/sources.<worker>.yaml"
+      merge_to: "raw/sources.yaml"
+    body: "source_type별 원자료 수집. 각 항목 id·published_year·source_type·url·collected_at·status 기록."
   - id: 4
     name: Dedup·Relevance
     profile: curator
@@ -67,6 +75,11 @@ stages:
     name: Deep Analysis
     profile: reader
     upstream: [4]
+    parallel:
+      mode: per_item
+      over: "raw/sources.yaml 의 status=selected 자료 각각"
+      shard: "analysis/<id>.md"
+      merge_to: "analysis/_index.md"
     body: "자료별 주장/근거 분리 분석."
   - id: 6
     name: Cross-Verify
@@ -87,6 +100,11 @@ stages:
     name: Report Draft
     profile: writer
     upstream: [7]
+    parallel:
+      mode: per_item
+      over: "보고서 섹션(개요·기술분류·성숙도·적용후보·결론 등 7단계 종합 기준)"
+      shard: "report.<section>.md"
+      merge_to: "report.md"
     body: "출처 포함 Markdown 보고서(report.md)."
   - id: 9
     name: Independent Review

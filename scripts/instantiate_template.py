@@ -124,6 +124,64 @@ def is_gated_downstream(stage: dict, stages: list[dict]) -> bool:
     return False
 
 
+# ── 병렬 팬아웃 본문 주입 ──────────────────────────────────────────────────
+def parallel_spec(stage: dict) -> dict | None:
+    """스테이지의 병렬 선언을 dict 로 정규화. 구식 `parallel: true`(+workers) 호환."""
+    p = stage.get("parallel")
+    if not p:
+        return None
+    if p is True:  # 구식 선언 호환
+        p = {"mode": "workers", "workers": stage.get("workers") or []}
+    if not isinstance(p, dict):
+        return None
+    p.setdefault("mode", "workers" if p.get("workers") else "per_item")
+    return p
+
+
+def fanout_label(stage: dict) -> str:
+    """렌더용 팬아웃 요약(예: '⇉5워커' · '⇉동적')."""
+    p = parallel_spec(stage)
+    if not p:
+        return ""
+    if p["mode"] == "workers":
+        return f"⇉{len(p.get('workers') or [])}워커"
+    return "⇉동적"
+
+
+def fanout_body(stage: dict, base_body: str) -> str:
+    """병렬 스테이지의 task 본문 = 기본 목표 + subagent 팬아웃 프로토콜.
+    번역기는 subagent 를 실행하지 않는다 — 실행 profile 이 이 지시를 읽어 delegation
+    도구의 배치(parallel) 위임으로 worker 를 동시 디스패치한다(단계 내 병렬=subagent)."""
+    p = parallel_spec(stage)
+    if not p:
+        return base_body
+    merge_to = p.get("merge_to", "")
+    lines = [
+        base_body,
+        "",
+        "── 병렬 팬아웃 (delegation 배치 위임) ──",
+        "이 단계는 순차 처리하지 마라. 아래 작업들을 delegation 도구의 배치(parallel) "
+        "기능으로 **한 번에** 위임해 subagent 들이 동시에 실행되게 하라(각자 격리 세션).",
+    ]
+    if p["mode"] == "workers":
+        workers = p.get("workers") or []
+        shard = p.get("shard", "raw/<worker>.yaml")
+        lines.append(f"· 워커({len(workers)}개): {', '.join(workers)} — 워커마다 subagent 1개.")
+        lines.append(f"· 각 워커는 자기 몫만 수집하고 source_type=<worker> 로 태깅해 "
+                     f"'{shard}'(<worker> 치환)에 기록. 공유 파일 동시쓰기 금지(경합 방지).")
+    else:  # per_item
+        over = p.get("over", "각 항목")
+        shard = p.get("shard", "shards/<id>.md")
+        lines.append(f"· 분할 기준: {over} — 항목마다 subagent 1개.")
+        lines.append(f"· 각 subagent 는 자기 항목만 처리해 '{shard}'(항목 식별자 치환)에 기록. "
+                     f"공유 파일 동시쓰기 금지(경합 방지).")
+    if merge_to:
+        lines.append(f"· 모든 subagent 반환 후 **오케스트레이터(너)가** 산출 shard 들을 "
+                     f"'{merge_to}'로 병합·dedup(필드 누락·형식 불량 항목 폐기). 이 병합 파일이 "
+                     f"다음 단계·게이트의 입력이다.")
+    return "\n".join(lines)
+
+
 # ── 렌더(협상 미리보기) ────────────────────────────────────────────────────
 def render_mermaid(tpl: dict, mid: str) -> str:
     stages = tpl["stages"]
@@ -135,7 +193,7 @@ def render_mermaid(tpl: dict, mid: str) -> str:
         elif s.get("verifier"):
             mark = " 🔍검증"
         elif s.get("parallel"):
-            mark = " ⇉병렬"
+            mark = f" {fanout_label(s)}"
         out.append(f'  s{s["id"]}["{s["id"]} {s["name"]}{mark}<br/>{s.get("profile","")}"]')
     for s in stages:
         for uid in s.get("upstream") or []:
@@ -150,6 +208,8 @@ def render_ascii(tpl: dict, mid: str) -> str:
     lines = [f"# {mid} — {tpl.get('display_name', tpl['name'])}"]
     for s in tpl["stages"]:
         flag = "🚦Sam" if s.get("sam_gate") else ("🔍검증" if s.get("verifier") else "")
+        if not flag and s.get("parallel"):
+            flag = fanout_label(s)
         ups = ",".join(str(u) for u in (s.get("upstream") or [])) or "-"
         gate = ""
         if s.get("gate"):
@@ -168,11 +228,13 @@ def instantiate(tpl: dict, mid: str, topic: str, dry: bool) -> dict:
     # 1) 생성(모두 일반 생성 — 게이트는 아래서 block)
     for s in stages:
         title = f"{mid} · {s['id']} {s['name']}"
+        body = fanout_body(s, s.get("body", "")) if s.get("parallel") else s.get("body", "")
         if dry:
-            log(f"  [dry] create '{title}' @{s['profile']}")
+            fo = f"  {fanout_label(s)}" if s.get("parallel") else ""
+            log(f"  [dry] create '{title}' @{s['profile']}{fo}")
             ids[s["id"]] = f"<t{s['id']}>"
         else:
-            tid = create_task(title, s["profile"], ws, s.get("body", ""))
+            tid = create_task(title, s["profile"], ws, body)
             ids[s["id"]] = tid
             log(f"  create {tid}  '{title}' @{s['profile']}")
 
@@ -224,6 +286,13 @@ def build_pipeline_json(tpl: dict, mid: str, topic: str, ids: dict[int, str]) ->
         }
         if s.get("gate"):
             entry["gate"] = s["gate"]
+        ps = parallel_spec(s)
+        if ps:
+            entry["parallel"] = {
+                "mode": ps["mode"],
+                **({"workers": ps.get("workers")} if ps["mode"] == "workers" else {"over": ps.get("over")}),
+                "merge_to": ps.get("merge_to"),
+            }
         out_stages.append(entry)
     return {
         "mission": mid, "template": tpl["name"], "topic": topic,
