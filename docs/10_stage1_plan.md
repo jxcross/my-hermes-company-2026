@@ -110,6 +110,19 @@ hermes kanban swarm "핵심 주장 교차검증" \
   | (추후)fact-checker·reviewer | `gpt-5.6-sol` | 최심층 추론=독립검증 |
   - 설정: `hermes-home/config.yaml`(Solomon) + `profiles/<name>/config.yaml`. 버전관리 소스=`profiles-src/`.
 
+## 4.3 full 11단계 실행 결과 (M-2026-002, 2026-08-02~03)
+2호 미션 "AI 에이전트 평가·신뢰성·안전성 동향"으로 full 11단계를 완주하며 두 핵심 원리를 실증.
+- **프로필 8종**: default(Solomon)·scout·reader·writer·synthesizer·curator=terra, fact-checker·reviewer=sol.
+- **작성자≠검증자 (실증)**: Reviewer(≠Writer)가 report를 `수정요청`으로 반려 → 8R Writer 수정 → 9R 반려(검증표 불일치 지적) → **6R Fact-Checker가 verify 표 근본수정**(S11 재인용→미검증, S14 정정) → 9R2 **승인**. 표면이 아닌 ground-truth 정합까지 강제됨.
+- **복리 (실증)**: llm-wiki 재사용 **7/17 = 41.2%**(M-2026-001 대비 0→41%). wiki 자동갱신(concepts +2, reflections/m-2026-002, index 재사용률 추적).
+- **정직성**: 검증 32건 = 확인9·상충1·**미검증22**(주제가 제공자 자기보고 다수 — 숨기지 않음).
+- 산출물: `reports/M-2026-002/`(report + raw/analysis/verify/synthesis/review 감사추적), llm-wiki repo.
+
+### 발견한 개선점 (다음 반영)
+1. **반려 게이트 미강제**: 9→10 링크를 무조건 걸어, Reviewer `수정요청`인데도 stage 10(wiki)이 진행됨. → 검증 task 판정이 fail이면 산출물 task를 자동 `block`으로 되돌리는 게이팅 필요(수동 revision 카드로 우회함).
+2. **Scoping 자율분해 충돌**: `default`(Solomon) Scoping 워커가 스스로 파이프라인을 분해해 수동 11카드와 충돌 → 중복 archive. → Scoping은 Solomon 분해에 맡기거나, Scoping 완료 후 하위 생성.
+3. **Slack 아웃바운드 실패**: 다중 force-recreate 후 `hermes send`가 빈 오류로 실패(status는 configured). 재연결/토큰 점검 필요(별도 이슈).
+
 ## 5. full 11단계 확장 백로그 (슬라이스 완주 후)
 - profile 추가: `fact-checker`(6, ≠reader) · `synthesizer`(7) · `reviewer`(9, ≠writer) · `curator`(4·10).
 - Skill: **PRISMA식 체계적 문헌조사 + 근거등급** · **karpathy-llm-wiki**(ingest/query/lint).

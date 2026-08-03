@@ -25,6 +25,25 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#10 — Stage 1 full 11단계 확장 완주: M-2026-002 (작성자≠검증자 + 복리)</h2>
+    <div class="meta">2026-08-02~03 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> 다음 과정(full 11단계) 진행 — 검증자 분리 완성 + llm-wiki 복리. 새 미션 #2(같은 주제군)로 검증.</div>
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li>Phase A: 전문 프로필 4종 추가(curator·synthesizer=terra, fact-checker·reviewer=sol) → 8종 체제</li>
+      <li>Phase B: WIKI_PATH=/work/llm-wiki 배선 + Curator가 M-2026-001을 llm-wiki에 씨앗 적재(entities5·concepts7·raw13, grounding 준수)</li>
+      <li>Phase C: 11-task Kanban 템플릿(검증자 분리 6·9, Sam 게이트 1·11). Solomon Scoping 자율분해 충돌 → 정리</li>
+      <li>Phase D: 미션 #2 "AI 에이전트 평가·신뢰성·안전성" 11단계 완주</li>
+      <li>수정 루프: Reviewer 반려 → 8R Writer 수정 → 9R 반려(검증표 불일치) → 6R Fact-Checker 검증표 근본수정 → 9R2 <b>승인</b></li>
+      <li>Phase E: 양 repo 커밋·푸시(회사 b7291f9·wiki 4929c5c), docs·history 갱신</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      <b>작성자≠검증자 실증</b>(Reviewer가 실제 결함 적발·반려, ground-truth 정합까지 강제) + <b>복리 실증</b>(wiki 재사용 0%→41.2%).
+      정직한 검증(32건 중 미검증22 — 주제가 제공자 자기보고 다수). <b>개선점:</b> 반려 게이트 자동화(9→8 되돌림), Scoping 자율분해 충돌 방지, Slack 아웃바운드 재연결(다중 recreate 후 실패).
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#9 — 파이프라인 인프라 프로덕션화 (Tavily·복사제거·GPT-5.6 재배치)</h2>
     <div class="meta">2026-08-02 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> ① Tavily API키 적용 ② 워크스페이스 복사 필요성 검토 ③ 새 GPT-5.6 모델(sol/terra/luna 등) 역할별 적용 ④ 보고서/지식 저장 위치·사후처리.</div>
