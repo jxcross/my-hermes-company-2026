@@ -5,7 +5,7 @@
 
 ## 프로젝트
 Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국어) ↔ AI CEO **Solomon**, Slack 소통.
-**Stage 1 full 11단계 파이프라인 실동작 중**(미션 2건 완주: M-2026-001 슬라이스, M-2026-002 full). 사람은 목표·경계조건을 정하고 AI가 계획·조사·검증·정리를 수행(복리 성장 지향).
+**Stage 1 full 11단계 파이프라인 실동작 중 + 템플릿 기반 미션 시스템 Pilot 완료**(미션 3건 완주: M-2026-001 슬라이스, M-2026-002 full, **M-2026-003 템플릿+이중게이트**). 사람은 목표·경계조건을 정하고 AI가 계획·조사·검증·정리를 수행(복리 성장 지향).
 
 ## 작업 규칙 (반드시 준수)
 1. 구현 전 단계별 계획을 `docs/NN_*.md`(번호 접두)로 작성.
@@ -38,11 +38,15 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 ## 새 PC 부트스트랩 (순서)
 `docs/05_stage0_setup_guide.md` 참조. 요약: repo 2개 clone → `docker compose pull` → `cp .env.example .env`(SLACK·`TAVILY_API_KEY` 값 채움) → `hermes setup`(OAuth) → `solomon-profile/`의 SOUL·USER를 `hermes-home/`에 복사 → **전문 프로필 7종 재생성**(`profiles-src/<name>/`의 SOUL·config를 `hermes profile create` 후 `hermes-home/profiles/<name>/`에 복사: scout·reader·writer·synthesizer·curator·fact-checker·reviewer) → `docker compose up -d`(hermes-solomon + **hermes-gatekeeper 사이드카** 동시 기동) → 대시보드/Slack/`hermes profile list`(모델 terra/sol)·`docker compose ps`(게이트키퍼 Up) 확인.
 
-## 다음 할 일 (우선순위 후보)
-1. ✅ ~~**Slack 아웃바운드 재연결**~~ — **[해소 2026-08-03]** 근본원인=네트워크 slack.com 도달불가(와이파이 변경으로 복구, 전송 검증 완료). 진단 runbook `docs/10 §4.3`.
-2. ✅ ~~**반려 게이트 자동화**~~ — **[해소 2026-08-03]** 게이트키퍼 사이드카(`hermes-gatekeeper`)로 구현. E2E 검증 완료. `kanban swarm`(다수 검증자 quorum, P3)은 후속 검토. 상세 `docs/10 §4.4`.
-3. ✅ **템플릿 기반 미션 시스템** — 파이프라인을 하드코딩 대신 선언적 템플릿으로. **Pilot 완료(P0–P4)**: `templates/trend-report.yaml` + `scripts/instantiate_template.py`(--render mermaid, pipeline.json) + `scripts/gates/*` 객관 게이트 + `gate_keeper.py` 이중 게이트(루프상한·race방지) + scout sources.yaml. **실미션 M-2026-003 완주**(11/11, 커밋 b7ec055) — 이중 게이트·반려 루프 라이브 검증. build_pipeline.sh deprecated. 신규 미션: `python3 scripts/instantiate_template.py trend-report <MID> --topic "..."`(미리보기 `--dry-run --render mermaid`). 상세·미해결 `docs/11 §7`.
-   - **Phase 2 개선점(우선순위)**: ① 병렬화(최대 병목 — 4워커 수집·병렬 분석/집필) ② 컨테이너 GITHUB_TOKEN(Deliver push) ③ Slack 승인→Kanban unblock 배선 ④ pre-blocked Sam게이트 활성 알림 ⑤ 매처(C)·전용 린터(E) ⑥ B/D 아키타입.
-4. **성장 지표 대시보드** — 재작업률·wiki 재사용률(현 41.2%)·소요시간 누적 관찰.
+## 다음 할 일
+**완료(2026-08-03):** ✅ Slack 재연결(`docs/10 §4.3`) · ✅ 반려 게이트 자동화=`hermes-gatekeeper` 사이드카(`docs/10 §4.4`) · ✅ **템플릿 기반 미션 시스템 Pilot(P0–P4)**: 선언적 템플릿→Kanban 번역기 + 이중 게이트(객관 Python + LLM 검증자) + 실미션 **M-2026-003 완주**(11/11, 커밋 b7ec055). 상세 `docs/11 §7`. 신규 미션 실행: `python3 scripts/instantiate_template.py trend-report <MID> --topic "..."`(협상 미리보기 `--dry-run --render mermaid`).
 
-새 세션 시작 시: 최신 `git log`와 `docker compose ps`·`hermes profile list`로 상태 확인 → `docs/10 §4.3`(실행결과·개선점) 읽고 → 위 우선순위 중 Sam이 지정한 것부터 계획 제시.
+**← 현 최우선: Phase 2** (`docs/11 §7`의 미해결·개선점):
+1. **병렬화** (최대 병목 — 순차 실행이 미션을 느리게 함). trendforge식 팬아웃: 4워커 수집(source_type별)·병렬 분석/집필. 템플릿 `parallel:true`는 선언만 됨 → 번역기·gate_keeper가 실제 병렬 task로 전개하도록 구현. → `docs/11 §5`.
+2. **컨테이너 GITHUB_TOKEN** — Deliver의 `git push`가 컨테이너 자격증명 부재로 실패(현 호스트 폴백). `.env`에 토큰 + git 자격 설정.
+3. **Slack 승인→Kanban unblock 배선** — Sam이 Slack 승인해도 Solomon이 해당 task를 unblock 안 함(대화 응답만). Solomon이 "승인" → `kanban unblock` 표준 처리하도록.
+4. **pre-blocked Sam 게이트 활성 알림** — 게이트키퍼가 상위 done 시 `#approvals`에 승인요청 자동 게시.
+5. **매처(C)·전용 린터(E)** — 미션→템플릿 자동 선택, 불변식 린터 분리. **B/D 아키타입**(논문·웹개발) 추가.
+6. **성장 지표 대시보드** — 재작업률·wiki 재사용률·소요시간 누적.
+
+새 세션 시작 시: 최신 `git log`(현 HEAD 근처: Slack복구→게이트키퍼→템플릿설계→Pilot P0–P4)와 `docker compose ps`(hermes-solomon + **hermes-gatekeeper** 2개 Up)·`hermes profile list`로 상태 확인 → **`docs/11 §7`(Pilot 결과·미해결)** 읽고 → 위 Phase 2 우선순위 중 Sam이 지정한 것부터 계획 제시.
