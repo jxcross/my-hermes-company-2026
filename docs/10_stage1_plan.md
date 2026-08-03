@@ -121,7 +121,15 @@ hermes kanban swarm "핵심 주장 교차검증" \
 ### 발견한 개선점 (다음 반영)
 1. **반려 게이트 미강제**: 9→10 링크를 무조건 걸어, Reviewer `수정요청`인데도 stage 10(wiki)이 진행됨. → 검증 task 판정이 fail이면 산출물 task를 자동 `block`으로 되돌리는 게이팅 필요(수동 revision 카드로 우회함).
 2. **Scoping 자율분해 충돌**: `default`(Solomon) Scoping 워커가 스스로 파이프라인을 분해해 수동 11카드와 충돌 → 중복 archive. → Scoping은 Solomon 분해에 맡기거나, Scoping 완료 후 하위 생성.
-3. **Slack 아웃바운드 실패**: 다중 force-recreate 후 `hermes send`가 빈 오류로 실패(status는 configured). 재연결/토큰 점검 필요(별도 이슈).
+3. ~~**Slack 아웃바운드 실패**: 다중 force-recreate 후 `hermes send`가 빈 오류로 실패(status는 configured).~~ → **[해소 2026-08-03] 오진 정정**: 실제 근본원인은 force-recreate가 아니라 **호스트 네트워크가 slack.com에 도달 못함**(DNS는 해석되나 TCP443 타임아웃, 컨테이너·호스트 모두 HTTPS 000). 와이파이 변경으로 slack.com 200 회복 → 게이트웨이 Socket Mode 자가 재연결(신규 세션 수립, disconnect 루프 소멸) → 아웃바운드 정상. 토큰(봇 `auth.test` ok·앱 `apps.connections.open` ok)·홈채널ID(`C0BM8FK3RTM`)는 모두 정상이었음.
+
+#### Slack 이상 진단 runbook (재발 시)
+증상: `hermes send` 빈/실패 오류 또는 로그의 `Socket Mode unhealthy (transport disconnected); reconnecting`(빈 세션 `()` 반복). `hermes status`의 `Slack ✓ configured`는 **토큰 존재만** 뜻하므로 정상 판정으로 오해 금지.
+1. **네트워크 도달성부터(1순위)**: `docker exec hermes-solomon curl -sS --max-time 8 https://slack.com/api/auth.test` — 타임아웃/000이면 **네트워크 문제**(와이파이/기관망/방화벽). 호스트에서도 `curl https://slack.com` 확인. 기관망(KISTI 등)이 Slack egress를 막을 수 있음.
+2. **토큰·Socket Mode 실측**(네트워크 OK인데도 실패 시): 봇=`auth.test`(Authorization: Bearer $SLACK_BOT_TOKEN), 앱=`POST apps.connections.open`(Bearer $SLACK_APP_TOKEN). `ok:false`면 해당 토큰 재발급/스코프(`connections:write`) 또는 Slack 앱 Socket Mode 토글 확인.
+3. **중복 Socket 연결**: 같은 App-Level Token을 쓰는 인스턴스가 둘 이상이면 disconnect 루프. `docker ps -a`로 확인(현 시점 타 프로젝트 `ainc-hermes`·`hermes`는 Slack 토큰 없어 무관).
+4. **복구는 down→up**: 네트워크 회복 후 게이트웨이가 15초 주기로 자가 재연결하나, 즉시 원하면 `docker compose down && docker compose up -d`(force-recreate 반복 대신 소켓 완전 정리).
+5. 부수: 봇토큰이 `channels:read` 미보유면 `conversations.info`가 `missing_scope`로 실패 — 조회만 막힐 뿐 **전송(`chat:write`)엔 무관**.
 
 ## 5. full 11단계 확장 백로그 (슬라이스 완주 후)
 - profile 추가: `fact-checker`(6, ≠reader) · `synthesizer`(7) · `reviewer`(9, ≠writer) · `curator`(4·10).

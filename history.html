@@ -25,6 +25,26 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#11 — Slack 아웃바운드 재연결 진단·복구 (근본원인=네트워크 도달불가)</h2>
+    <div class="meta">2026-08-03 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> 다음 할 일 중 최우선인 Slack 아웃바운드 재연결(<code>hermes send</code> 빈 오류, status는 configured) 진단·복구.</div>
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li>진단(read-only): 게이트웨이 로그에서 Socket Mode 15초 주기 disconnect 루프(빈 세션 <code>()</code>) 발견. <code>send --list</code>에 홈채널 부재 단서.</li>
+      <li>Slack Web API 실측: <code>auth.test</code>·<code>apps.connections.open</code> 호출이 <b>slack.com 도달 불가</b>로 타임아웃 → <b>호스트(맥)에서도 slack.com HTTPS 000</b> 확인. iron-proxy egress는 비활성(원인 아님).</li>
+      <li>근본원인 확정: <b>네트워크/와이파이가 slack.com에 도달 못함</b>(DNS는 해석되나 TCP443 타임아웃). "다중 recreate 후"는 그 시점 네트워크 문제와 겹친 오진.</li>
+      <li>Sam이 와이파이 변경 → slack.com HTTPS 200 회복. 토큰 재실측: 봇·앱토큰 모두 <code>ok:true</code>, Socket Mode wss 정상.</li>
+      <li>게이트웨이 자가 회복(신규 세션 <code>s_1759…</code> 수립, <code>⚡️ Bolt app is running!</code>, 이후 100초+ 루프 무재발) → 재기동 불필요.</li>
+      <li>아웃바운드 검증: 그룹·홈채널(<code>C0BM8FK3RTM</code>=#ceo-office) 모두 <code>success:true</code> 전송. 타 프로젝트 컨테이너(ainc-hermes·hermes)는 Slack 토큰 없어 경합 무관.</li>
+      <li>docs/10 §4.3·CLAUDE.md 갱신(오진 정정 + 네트워크 진단 runbook), 커밋·푸시.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      Slack 인바운드·아웃바운드 <b>복구 완료</b>. 토큰·Socket Mode·홈채널ID(<code>C0BM8FK3RTM</code>)는 모두 정상이었고 유일 원인은 <b>slack.com 네트워크 egress 차단</b>이었음.
+      <b>교훈:</b> Slack 이상 시 진단 1순위는 <code>curl https://slack.com/api/auth.test</code> 도달성. <b>남은 확인:</b> Sam이 #ceo-office에서 멘션해 인바운드 라운드트립 최종 확인. (부수: 봇토큰 <code>channels:read</code> 미보유 → <code>conversations.info</code>만 <code>missing_scope</code>, 전송엔 무관.)
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#10 — Stage 1 full 11단계 확장 완주: M-2026-002 (작성자≠검증자 + 복리)</h2>
     <div class="meta">2026-08-02~03 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> 다음 과정(full 11단계) 진행 — 검증자 분리 완성 + llm-wiki 복리. 새 미션 #2(같은 주제군)로 검증.</div>
