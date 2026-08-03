@@ -41,7 +41,8 @@
     </ol>
     <div class="result"><span class="label">결과:</span>
       Slack 인바운드·아웃바운드 <b>복구 완료</b>. 토큰·Socket Mode·홈채널ID(<code>C0BM8FK3RTM</code>=#mission-log)는 모두 정상이었고 유일 원인은 <b>slack.com 네트워크 egress 차단</b>이었음. 부수로 <code>channels:read</code> 스코프도 추가(재설치로 해소) → 채널 조회 기능 확보.
-      <b>교훈:</b> Slack 이상 시 진단 1순위는 <code>curl https://slack.com/api/auth.test</code> 도달성. Slack 스코프는 앱 설정에 추가만으로 부족하고 <b>Reinstall</b>해야 토큰에 반영. <b>남은 확인:</b> Sam이 #ceo-office에서 멘션해 인바운드 라운드트립 최종 확인.
+      <b>인바운드 라운드트립 확인 완료</b>: Sam이 #ceo-office 멘션 → 수신(04:51:45)→Solomon 처리→응답 34자 전송(04:51:59, 14초) 전 과정 로그 확증. 양방향 완전 정상.
+      <b>교훈:</b> Slack 이상 시 진단 1순위는 <code>curl https://slack.com/api/auth.test</code> 도달성. Slack 스코프는 앱 설정에 추가만으로 부족하고 <b>Reinstall</b>해야 토큰에 반영.
     </div>
   </div>
 
