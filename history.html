@@ -37,8 +37,11 @@
       <li><b>경합 회피:</b> worker/항목별 개별 shard(<code>raw/sources.&lt;worker&gt;.yaml</code>·<code>analysis/&lt;id&gt;.md</code>·<code>report.&lt;section&gt;.md</code>) → 오케스트레이터가 스테이지 끝에서 canonical로 병합·dedup.</li>
       <li><b>dry-run 검증:</b> 불변식 통과 · 주입 본문(workers/per_item) 정확 · pipeline.json 메타 정확 · mermaid 표기 정상. docs/11 §5·§3.B·§7 갱신.</li>
     </ol>
+      <li><b>라이브 파일럿 M-2026-004</b>("온디바이스 LLM 추론 최적화 동향") 실행 → <b>병렬 팬아웃 실증</b>: stage3 scout가 <code>delegation</code> 배치로 source_type별 <b>병렬 subagent 디스패치</b>(라이브 transcript 확인)→worker shard 5개→병합, stage5 분석 12 shard, stage8 집필 7 섹션 shard→report.md. 이중 게이트(6·9) 리비전 루프 정상.</li>
+      <li><b>파일럿이 발견한 gate_keeper 결함 → 근본 수정</b>: stage10 정지. 체계적 디버깅으로 <b>fail-open</b> 규명 — <code>poll_once</code>가 자식 상태 transient 조회실패(None)를 종단(done/archived)으로 오인→검증자 영구 processed→blocked downstream 고아화(fail-closed 원칙 위반). <code>classify_children</code> 추출로 None(unknown)을 종단과 분리, unknown시 defer(재시도). 단위테스트 4/4 + 라이브 재기동으로 stage10 정상 unblock 확인.</li>
+    </ol>
     <div class="result"><span class="label">결과:</span>
-      병렬화 <b>코드·dry-run 검증 완료</b>. 각 스테이지가 여전히 1 task라 gate_keeper 검증자 매핑 무손상으로 3·5·8 동시 확장. <b>잔여:</b> 라이브 파일럿 M-2026-004(Sam Scoping 승인 후)로 실측 속도이득·shard 병합 확인, 필요 시 <code>max_concurrent_children</code> 튜닝(로컬 config).
+      <b>병렬화(3·5·8) 라이브 완전 검증</b> — 번역기 주입 프로토콜이 실제 병렬 subagent 실행을 유발, 보고서 품질은 순차본과 동등(확인25·상충0·미검증13 공개). 파일럿 <b>10/11</b>(Deliver=Sam 게이트 대기). 실미션이 아니었으면 못 봤을 <b>gate_keeper fail-open 결함 발견·수정</b>(커밋 3d25a54). 잔여 미소: 리비전 링크 간헐 -7 WARN(루프 정상). 커밋 fc9a6c0(병렬화)·3d25a54(게이트수정).
     </div>
   </div>
 
