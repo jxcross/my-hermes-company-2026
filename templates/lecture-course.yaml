@@ -1,0 +1,173 @@
+# 아키타입 J — 강의 자료(강의계획서·슬라이드·과제·퀴즈) (12단계)
+# 출처: other_projects/harness-templates/domain-harnesses/project_lectureforge
+#       (.claude/skills/lectureforge/SKILL.md 9-stage + agents 15종). 변환 절차: docs/13
+#
+# 이 아키타입의 중심은 **학습목표(LO)** 다. LO 가 주차 구조·평가·4개 산출물을 관통하며,
+# 세 객관 게이트가 그 사슬이 끊기지 않았는지를 각각 다른 지점에서 잡는다.
+#
+# 변환 판단(요약 — 상세·근거는 docs/13 §2·§5):
+#  - 원본 스크립트 4종을 **전부 이식했고 4종 모두에서 결함이 나왔다**(§5):
+#      objective_coverage : 한국어 조사에서 LO 참조 소실 · 스치는 언급도 커버리지로 셈 ·
+#                           역방향(빈 주차) 미검사 · LO 개수 범위 미강제
+#      bloom_check        : WARN 이 곧 exit 1 · 선언한 임계(≥10%)를 0% 일 때만 적용 ·
+#                           국문 Bloom 표기 미인식
+#      format_consistency : **성적 비중 합계 검사의 본문이 문자 그대로 `pass`**(죽은 코드) ·
+#                           국문 `3주차` 를 하나도 못 읽어 주차 커버리지 검사가 공회전
+#      accessibility      : 불릿을 문장 1개로 뭉쳐 슬라이드를 부당하게 위반으로 몲
+#  - **게이트 이름 충돌 주의**: 원본의 `format_consistency_check.py` 는 우리가 이미 가진
+#    `format_consistency`(policy-brief 전용)와 이름만 같고 하는 일이 다르다. `course_consistency`
+#    로 새로 만들었다 — 같은 이름으로 덮어썼다면 아키타입 G 가 조용히 망가졌을 것이다(§5).
+#  - stage 6 의 4 writer(syllabus/slides/assignments/quiz)는 같은 계약이라 `parallel: workers`.
+#  - stage 8 의 4 비평가를 우리 두 검증 지점으로 재배치:
+#      objective-coverage + bloom-distribution → 7 Design Verify(설계 단계에서 잡는다)
+#      format-consistency + accessibility      → 10 Content Review
+#  - **검증 위치가 이 아키타입의 핵심 판단이다.** 원본은 4개 산출물을 다 쓴 **뒤에** LO 커버리지와
+#    Bloom 분포를 본다. 그때 FAIL 이 나면 학습목표부터 다시 세우고 16주치 슬라이드를 다시 써야
+#    한다. 우리는 **집필 전(stage 7)** 에 설계를 검증한다.
+#  - 원본 stage 7(accessibility-pass)은 '보고서만' 내는 단계였다. 우리는 curator 의 **정비**
+#    작업으로 만들었다(대체 텍스트 보강·문장 정리) — 읽기만 하는 단계는 reviewer 와 겹쳐
+#    작성자≠검증자를 흐린다.
+#  - `bundle_export.py`·`runs_state.py` 는 미이식. 신규 profile 0개.
+#
+# 스키마 규약은 templates/trend-report.yaml 머리말 참조.
+
+name: lecture-course
+category: education
+display_name: 강의 자료(계획서·슬라이드·과제·퀴즈)
+maturity: draft
+goal_kr: 주제와 자료에서 출발해 학습목표(Bloom)와 주차 구조·평가 계획을 설계하고, 강의계획서·슬라이드·과제·퀴즈를 산출한다.
+invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop, sources_cited]
+
+policy:
+  source_balance_policy:
+    # 강의 자료의 source_type = 근거의 성격. 교재만 보면 최신 연구가 빠지고,
+    # 논문만 보면 학습 곡선이 무너진다.
+    categories: [textbook, paper, opencourse, practice]
+    min_per_category:
+      textbook: 1       # 표준 교재(학습 순서의 뼈대)
+      paper: 2          # 최신 연구·사례
+      opencourse: 0     # 공개강좌 실러버스(권장)
+      practice: 1       # 실습·데이터셋·도구
+    hard_block_if_missing: true
+  recency_policy:
+    # ⚠️ 교재는 오래된 고전이 여전히 표준이다. 최신성 요구를 낮추고 seminal 예외를 넉넉히.
+    cutoff_year_offset: -8
+    recent_ratio: 0.4
+    hard_block_year_offset: -40
+    seminal_exceptions: true
+
+  objective_policy:
+    min_los: 5
+    max_los: 10
+    require_every_unit_has_lo: true   # 원본에 없던 역방향 검사
+
+  bloom_policy:
+    education_level: undergraduate    # SCOPE.md frontmatter 의 education_level 이 우선
+    require_all_levels_declared: true
+    levels:
+      undergraduate: {lower_max: 0.7, lower_is_fail: false, higher_min: 0.1}
+      graduate:      {lower_max: 0.5, lower_is_fail: false, higher_min: 0.2}
+      adult:         {lower_max: 0.7, lower_is_fail: false, higher_min: 0.0, remember_max: 0.3}
+      mooc:          {lower_max: 0.8, lower_is_fail: false, higher_min: 0.0, remember_max: 0.3}
+
+  course_policy:
+    outputs: [syllabus, slides, assignments, quiz]   # SCOPE.md 의 outputs 가 우선
+    weight_total: 100
+    weight_tolerance: 0.1
+    require_syllabus_covers_all_weeks: true
+
+  a11y_policy:
+    require_alt_text: true
+    readability_is_fail: false        # 문장 길이는 거친 대리지표다 — 기본 WARNING
+    max_violation_ratio: 0.3
+    max_words_per_sentence: {undergraduate: 22, graduate: 26, adult: 18, mooc: 18}
+    require_speaker_notes_in: [slides]
+
+stages:
+  - id: 1
+    name: Scoping
+    profile: default          # Solomon
+    sam_gate: true
+    upstream: []
+    body: "강의 범위를 확정해 reports/<MID>/SCOPE.md 에 작성 — 과목명·대상 학습자·선수 지식 · 운영 기간 · 다루지 않을 것 · 완료조건. ⚠️ **frontmatter 에 다음을 반드시 선언**하라(객관 게이트가 이 값으로 판정 기준을 고른다):\n`education_level: undergraduate|graduate|adult|mooc` · `weeks: 16` · `outputs: [syllabus, slides, assignments, quiz]`. ⚠️ 교육 수준에 따라 Bloom 분포 기준이 달라진다(학부는 평가+창안 ≥10%, 대학원은 ≥20%). ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라. 오직 SCOPE.md 산출과 이 task 완료만."
+  - id: 2
+    name: Source Gather
+    profile: scout
+    upstream: [1]
+    parallel:
+      mode: workers
+      workers: [textbook, paper, opencourse, practice]
+      batch_size: 3          # 4워커 = 3 + 1, 2라운드
+      shard: "raw/sources.<worker>.yaml"
+      merge_to: "raw/sources.yaml"
+    body: "자기 유형의 강의 자료를 수집한다(textbook=표준 교재와 목차 · paper=최신 연구·사례 · opencourse=공개강좌 실러버스와 주차 구성 · practice=실습 과제·데이터셋·도구). 각 항목 id·title·authors·published_year·venue·url·**source_type(=자기 워커명)**·status·summary(강의에서 쓸 지점 1~2문장)·**level_fit**(입문/중급/고급) 기록. ⚠️ **교재는 목차를 함께 남겨라** — 주차 구조 설계의 뼈대가 된다. ⚠️ 고전 교재는 오래돼도 유효하다 — 오래됐다는 이유로 버리지 말고 `seminal: true` 로 표시하라."
+  - id: 3
+    name: Concept Extract
+    profile: reader
+    upstream: [2]
+    body: "선별 자료를 읽고 핵심 개념 **10~30개**를 concepts.md 에 추출한다 — 개념별 id·이름·정의(1~2문장)·**선행 개념**(무엇을 알아야 이해되는가)·난이도·출처 id. ⚠️ **개념 간 선후 관계를 반드시 남겨라** — 이것이 주차 순서의 근거가 된다. ⚠️ 출처에 없는 개념을 지어내지 마라(검증 단계가 원문과 대조한다). 개념마다 어느 출처의 어디에서 왔는지 적어라."
+  - id: 4
+    name: Learning Objectives
+    profile: synthesizer
+    upstream: [3]
+    body: "학습목표 **5~10개**를 objectives.md 에 정의한다. **블록 형식을 정확히 지켜라**(객관 게이트가 파싱한다):\n```objectives\n- id: lo1\n  bloom: apply\n  statement: 문제 유형에 맞는 손실함수를 선택할 수 있다\n  concepts: [c3, c7]\n```\n⚠️ `bloom` 은 remember·understand·apply·analyze·evaluate·create 중 하나(국문 기억·이해·적용·분석·평가·창안도 인정). **전 목표에 표기하라** — 빠지면 분모에서 조용히 빠져 분포가 왜곡되므로 게이트가 반려한다. ⚠️ **측정 가능한 동사**로 쓰라('이해한다'는 측정할 수 없다 — '설명한다·분류한다·설계한다'). ⚠️ 교육 수준별 Bloom 분포 기준이 있다(학부 평가+창안 ≥10% · 대학원 ≥20%) — 하위 단계만 나열하면 반려된다."
+  - id: 5
+    name: Course Structure
+    profile: synthesizer
+    sam_gate: true             # 학습목표가 이후 전부를 결정한다 — 구조 설계 전 Sam 승인
+    approval_artifact: "reports/<MID>/objectives.md"
+    upstream: [4]
+    body: "주차별 구조를 structure.md 에 설계한다. **블록 형식을 정확히 지켜라**:\n```units\n- week: 1\n  title: 과목 개요와 문제 정의\n  concepts: [c1, c2]\n  los: [lo1]\n  activity: 사례 토론\n```\n⚠️ **모든 주차에 `los:` 를 최소 1개 선언**하라 — 학습목표 없는 주차는 게이트가 설계 누락으로 반려한다. ⚠️ 개념의 선후 관계(concepts.md)를 지켜 배치하라. ⚠️ 중간·기말 시험 주차, 복습 주차, 프로젝트 발표 주차도 주차 번호를 갖는다. 주차 표기는 `1주차` 또는 `제1주` 또는 `Week 1` 형식으로 적어라(게이트가 이 셋을 인식한다)."
+  - id: 6
+    name: Assessment Design
+    profile: synthesizer
+    upstream: [5]
+    body: "평가 계획을 assessment.md 에 설계한다. **블록 형식을 정확히 지켜라**:\n```assignments\n- id: a1\n  title: 손실함수 비교 실습\n  los: [lo2, lo3]\n  week: 5\n  weight: 15\n```\n같은 형식으로 ```quizzes``` · ```exams``` 블록도 만든다. ⚠️ **`weight:` 필드의 합이 정확히 100** 이어야 한다(게이트가 합산한다 — 원본은 이 검사를 선언만 하고 실제로는 하지 않았다). ⚠️ **모든 학습목표가 최소 하나의 평가에 연결**돼야 한다 — 측정하지 않는 목표는 목표가 아니다. ⚠️ 고차 목표(평가·창안)를 객관식으로만 재지 마라 — 산출물·프로젝트로 측정하라."
+  - id: 7
+    name: Design Verify
+    profile: fact-checker      # ≠ synthesizer
+    verifier: true
+    upstream: [6]
+    gate:
+      objective: [objective_coverage, bloom_distribution, source_balance]
+      llm: fact_checker_verdict
+      draft: "reports/<MID>/objectives.md"
+    body: "① **개념이 실제 출처에 있는가** — concepts.md 의 정의가 원문을 왜곡하지 않았는가(객관 게이트는 이것을 못 본다). ② **학습목표가 측정 가능한가** — '이해한다'·'알게 된다' 같은 관찰 불가능한 동사가 남아 있지 않은가. ③ **Bloom 단계 표기가 진술과 맞는가** — 'apply' 라고 표기했는데 진술은 '나열한다'(remember)인 경우가 흔하다(게이트는 표기만 세지 진술과 대조하지 못한다). ④ 주차 순서가 개념의 선후 관계를 어기지 않는가. ⑤ 평가 방식이 목표의 인지 수준에 맞는가. 끝에 VERDICT: PASS|FAIL. ⚠️ **여기서 잡지 못하면 4개 산출물을 전부 다시 써야 한다** — 원본은 집필 후에 이 검사를 했다."
+  - id: 8
+    name: Content Write
+    profile: writer
+    upstream: [7]              # 게이트: 7 PASS 시 게이트키퍼가 unblock
+    parallel:
+      mode: workers
+      workers: [syllabus, slides, assignments, quiz]
+      batch_size: 3            # 4워커 = 3 + 1, 2라운드
+      shard: "content/<worker>"
+      merge_to: null           # 산출물은 병합 대상이 아니다 — 각자 독립 자료
+    body: "SCOPE.md 의 `outputs` 에 **선언된 것만** 작성한다. 공통 규칙: 본문 한국어 · **다루는 학습목표 id(lo1 …)를 명시** · 정의되지 않은 LO 를 참조하지 마라(게이트가 반려한다) · 이미지·도표에는 **반드시 대체 텍스트**(`![설명](경로)` 또는 `> 이미지: … (대체 텍스트: …)`). 산출물별: **syllabus**=`content/syllabus.md` 단일 파일(과목 정보·학습목표·**전 주차 일정**·평가 계획과 비중·교재·수업 규정. structure.md 의 모든 주차가 빠짐없이 들어가야 한다) · **slides**=`content/slides/week-NN.md` 주차별(제목·학습목표 복습·개념+예시+활동·요약·참고문헌, **발표자 노트 포함**) · **assignments**=`content/assignments/a-NN.md` 과제별(과제명·대상 LO·산출물·마감·**채점 루브릭**·모범답안 개요) · **quiz**=`content/quiz/q-NN.md` 퀴즈·시험별(문항·모범답안·배점·시간). ⚠️ 문장을 너무 길게 쓰지 마라(학부 기준 22어절 이상은 경고)."
+  - id: 9
+    name: Accessibility Pass
+    profile: curator
+    upstream: [8]
+    body: "산출물의 접근성을 **정비한다**(읽기만 하는 것이 아니라 고친다) — ① 대체 텍스트 누락 보강 ② 지나치게 긴 문장 분할 ③ 용어 표기 통일(같은 개념을 문서마다 다르게 부르지 않는가) ④ 색상·강조에만 의존한 설명을 텍스트로 보완 ⑤ 슬라이드 발표자 노트 보강. 정비 내역을 accessibility.md 에 기록한다. ⚠️ **내용을 바꾸지 마라** — 표현과 접근성만 손본다. 내용 오류를 발견하면 고치지 말고 기록해 다음 단계 검증자에게 넘겨라."
+  - id: 10
+    name: Content Review
+    profile: reviewer          # ≠ writer
+    verifier: true
+    upstream: [9]
+    gate:
+      objective: [course_consistency, content_accessibility]
+      llm: reviewer_verdict
+      draft: "reports/<MID>/content"
+    body: "독립 검토: ① **산출물 간 실질 정합**(객관 게이트는 id·주차·비중 숫자만 본다 — **슬라이드가 실제로 그 주차의 학습목표를 다루는지**는 네가 읽는다. lo3 을 적어 놓고 내용은 다른 주제인 경우가 흔하다). ② **평가가 목표를 실제로 측정하는가** — 루브릭이 해당 LO 의 인지 수준을 재는가, 퀴즈 문항이 암기만 묻지 않는가. ③ **학습 분량의 현실성** — 한 주차에 개념 8개를 넣지 않았는가, 과제 마감이 몰려 있지 않은가. ④ **선수 지식 가정** — SCOPE.md 의 대상 학습자가 모르는 것을 전제하지 않는가. ⑤ 접근성(게이트는 대체 텍스트 유무만 본다 — **그 설명이 실제로 그림을 설명하는지**는 네가 본다). 끝에 VERDICT: PASS|FAIL."
+  - id: 11
+    name: Wiki Update
+    profile: curator
+    upstream: [10]            # 게이트: 10 PASS 시 unblock
+    body: "교과 지형(개념 지도와 선후 관계·학습목표 진술 사례·주차 구성 패턴·평가 설계 사례)을 llm-wiki 에 반영(entities/concepts) + reflection + 재사용률 갱신. 같은 과목의 다음 학기 개편이나 인접 과목 설계에서 재사용할 수 있게 정리한다."
+  - id: 12
+    name: Deliver
+    profile: default          # Solomon
+    sam_gate: true
+    approval_artifact: "reports/<MID>/content/syllabus.md"
+    upstream: [11]
+    body: "① 번들 조립 `reports/<MID>/course-bundle/`: content/ 전부 · objectives.md · structure.md · assessment.md · rubric.md(과제별 채점 루브릭 모음) · accessibility.md · delivery-guide.md(**운영 안내** — 주차별 준비물·LMS 업로드 순서·과제 공지 시점). ② 커밋 + git push(컨테이너 GITHUB_TOKEN 자격) + Slack 요약. ⚠️ Slack 요약에 **학습목표 수·Bloom 분포·주차 수·평가 비중 합계**를 포함하라. ⚠️ Slack 게시는 반드시 `hermes send --to slack:#mission-log \"<요약+커밋링크>\"`(Web API)로 하라 — 에이전트 slack 도구는 인바운드 Socket Mode 어댑터에 의존해 실패할 수 있다(현재 flapping)."

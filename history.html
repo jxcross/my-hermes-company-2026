@@ -25,6 +25,26 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#32 — lectureforge → 아키타입 J(강의 자료) · 원본 4종 <b>전부</b> 결함 + 게이트 이름 충돌 회피 <span>[변환 절반 10/20]</span></h2>
+    <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "다음 진행"(docs/13 진행 대장 #10, lectureforge).</div>
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li><b>⚠️ 게이트 이름 충돌 회피</b>(가장 위험했던 지점): lectureforge에도 <code>format_consistency_check.py</code>가 있는데, 우리는 이미 <code>gates/format_consistency.py</code>를 갖고 있다(아키타입 G — 정책 브리프). <b>이름만 같고 하는 일이 전혀 다르다.</b> 관성으로 같은 파일명에 이식했다면 <b>policy-brief가 다른 도메인의 검사를 받으며 조용히 FAIL</b>하게 됐을 것이고, 그 사실은 G의 실미션을 돌릴 때에야 드러난다. → <code>course_consistency.py</code>로 신설.</li>
+      <li><b>⚠️ 이식 결함 ① 죽은 코드가 게이트 행세</b>: 같은 파일의 docstring은 "Total grade weights sum to 100% (±0.1)"를 검증한다고 선언하는데 해당 분기 <b>본문이 문자 그대로 <code>pass</code></b>다(주석까지 달려 있다). 성적 비중이 60%든 140%든 아무 일도 없다. → 실제 합산·판정.</li>
+      <li><b>⚠️ 이식 결함 ② 국문 주차를 하나도 못 읽었다</b>: <code>\b(?:week|주차)\s*(\d+)\b</code>는 숫자가 <b>뒤</b>에 오는 영어식만 잡는다. 국문은 <code>3주차</code>(숫자가 앞) — 실측 <code>[]</code>. canonical_weeks가 빈 집합이 되어 <b>"강의계획서가 전 주차를 담는가" 검사가 공회전</b>했다. → <code>3주차</code>·<code>제3주</code>·<code>Week 3</code>·필드형 <code>week: 3</code> 모두 인식.</li>
+      <li><b>⚠️ 이식 결함 ③ WARN이 곧 exit 1</b>(<code>bloom_check.py</code>): docstring은 "warn else"인데 코드는 WARN도 exit 1. 하위 인지단계 비중이 조금 높은 입문 강의가 <b>하드 반려</b>된다. 게다가 "Evaluate+Create ≥ 10%" 임계를 선언해 놓고 코드는 <b>정확히 0%일 때만</b> FAIL — 5%도 통과. 국문 <code>bloom: 평가</code>도 미인식(분모에서 조용히 누락). → 셋 다 수정.</li>
+      <li><b>⚠️ 이식 결함 ④ 스치는 언급을 커버리지로 셈</b>(<code>objective_coverage.py</code>): 블록 안 어디든 <code>loN</code> 토큰이면 배치된 것으로 봤다(주석의 <code># lo5는 다음 학기</code>도 커버). 한국어 조사(<code>lo3을</code>)에서는 반대로 <b>하나도 못 읽었다</b>. → <code>los:</code> 필드 선언만 인정 + lookaround. <b>역방향 검사 신설</b>(모든 주차가 최소 1개 LO를 가져야 — 원본은 LO가 1주차에 몰려도 통과) + <b>LO 개수 범위 강제</b>(적게 정의하면 커버리지가 저절로 쉬워지는 '분모 축소' 방지).</li>
+      <li><b>⚠️ 이식 결함 ⑤ 불릿을 문장 1개로 뭉침</b>(<code>accessibility_check.py</code>): 마침표 없는 슬라이드 불릿 블록이 통째로 문장 1개가 되어 어절 수가 부풀고 <b>슬라이드가 부당하게 위반으로</b> 몰린다. → 불릿·표 줄을 각각 하나의 단위로. 가독성은 <b>거친 대리지표</b>임을 명시하고 기본 WARNING으로 두었다(과대 주장 금지).</li>
+      <li><b>검증 위치를 앞으로 당겼다</b>: 원본은 4개 산출물(<b>16주치 슬라이드 포함</b>)을 다 쓴 <b>뒤에</b> LO 커버리지·Bloom 분포를 본다. FAIL이면 학습목표부터 다시 세우고 전부 다시 써야 한다. → 설계 검증(stage 7)을 <b>집필 전</b>으로. 이 판단은 patent/policy/legal/code-docs에 이어 <b>다섯 번째</b>라 §5에 기본값으로 승격.</li>
+      <li><b>깨뜨린 픽스처 18케이스</b>: 정상 4 PASS + 결함 11건 <code>exit=1</code> + 원본 회귀방어 3건. <b>픽스처가 내 자체 결함 1건도 잡았다</b> — <code>units</code> 블록의 필드형 <code>week: 1</code>을 인식 못해 정상 입력이 FAIL(§2⑧ "정상 픽스처로 PASS 확인"이 실제로 작동). 단위 테스트 14종 추가.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      <b>아키타입 J 확보 — 10/20(절반)</b>. 린터 10/10. 테스트 <b>29+21+87 = 137종 통과</b>. 객관 게이트 <b>23종</b>. <b>변환 10건 연속 결함 발견</b>(이번엔 원본 스크립트 4종 <b>전부</b>). 새 교훈 3건을 docs/13 §5에 기록: <b>게이트 이름 충돌은 먼저 있던 아키타입을 조용히 망가뜨린다</b> · <b>선언된 검사마다 실행되는 판정문을 눈으로 짚어라</b>(분기 본문이 <code>pass</code>였다) · <b>원본이 검증을 너무 늦게 하면 재작업 비용이 갈라지는 지점 앞으로 당겨라</b>. 다음 변환 = migrateforge(신규 profile 예상).
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#31 — docforge → 아키타입 I(코드베이스 문서화) · 커버리지 게이트의 <b>분모 자기결정</b> 문제 + AST 대조 게이트 신설</h2>
     <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "순서대로 진행해"(docs/13 진행 대장 #9, docforge).</div>

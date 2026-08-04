@@ -41,6 +41,10 @@ legal_safety = _load("legal_safety")
 symbol_truth = _load("symbol_truth")
 api_coverage = _load("api_coverage")
 doc_links = _load("doc_links")
+objective_coverage = _load("objective_coverage")
+bloom_distribution = _load("bloom_distribution")
+course_consistency = _load("course_consistency")
+content_accessibility = _load("content_accessibility")
 
 
 # ── prisma_counts ────────────────────────────────────────────────────────
@@ -593,6 +597,98 @@ def test_link_regex_ignores_images():
     """`![alt](x.png)` 는 문서 간 링크가 아니다 — 원본은 이것도 깨진 링크로 셌다."""
     found = [m.group(2) for m in doc_links.LINK_RE.finditer("![그림](a.png) 와 [문서](b.md)")]
     assert found == ["b.md"]
+
+
+
+# ── objective_coverage (아키타입 J · 원본 GATE 1) ──────────────────────────
+def test_lo_ref_survives_korean_particles():
+    """원본 `\\blo\\d+\\b` 는 `lo3을`·`lo4에서` 에서 무너진다(실측 `[]`)."""
+    assert objective_coverage.LO_RE.findall("lo3을 다룬다. lo4에서 확장") == ["lo3", "lo4"]
+
+
+def test_only_declared_los_field_counts():
+    """스치는 언급은 배치가 아니다 — 원본은 블록 안 아무 곳의 loN 이든 커버리지로 셌다."""
+    blk = "- week: 1\n  title: 개요\n  # lo5 는 다음 학기\n  los: [lo1]\n"
+    entries = objective_coverage.entries_with_los(blk)
+    assert entries[0][1] == {"lo1"}          # 주석의 lo5 는 제외
+
+
+def test_entries_split_per_item():
+    blk = "- week: 1\n  los: [lo1]\n- week: 2\n  los: [lo2, lo3]\n"
+    got = objective_coverage.entries_with_los(blk)
+    assert [s for _l, s in got] == [{"lo1"}, {"lo2", "lo3"}]
+
+
+def test_defined_los_from_objectives_block():
+    text = "```objectives\n- id: lo1\n  bloom: apply\n- id: lo2\n  bloom: create\n```\n"
+    assert objective_coverage.defined_los(text) == ["lo1", "lo2"]
+
+
+# ── bloom_distribution (아키타입 J · 원본 GATE 2) ──────────────────────────
+def test_bloom_korean_aliases():
+    """`bloom: 평가` 를 못 읽으면 그 LO 가 분모에서 조용히 빠져 분포가 왜곡된다."""
+    assert bloom_distribution.normalize("평가") == "evaluate"
+    assert bloom_distribution.normalize("창안") == "create"
+    assert bloom_distribution.normalize("Apply") == "apply"
+    assert bloom_distribution.normalize("없는단계") is None
+
+
+def test_bloom_parse_marks_undeclared():
+    text = "```objectives\n- id: lo1\n  bloom: apply\n- id: lo2\n  statement: x\n```\n"
+    got = bloom_distribution.parse_objectives(text)
+    assert got == [("lo1", "apply"), ("lo2", None)]
+
+
+def test_bloom_default_policy_separates_warn_and_fail():
+    """원본은 WARN 도 exit 1 이었다 — 하위단계 초과는 WARN, 고차단계 부족은 FAIL 이다."""
+    ug = bloom_distribution.DEFAULT_LEVEL_POLICY["undergraduate"]
+    assert ug["lower_is_fail"] is False and ug["higher_min"] == 0.1
+    assert bloom_distribution.DEFAULT_LEVEL_POLICY["graduate"]["higher_min"] == 0.2
+
+
+# ── course_consistency (아키타입 J) ────────────────────────────────────────
+def test_week_regex_reads_korean_and_field_forms():
+    """원본은 영문 산문형만 잡아 국문 `3주차` 와 필드형 `week: 3` 을 통째로 놓쳤다
+    (실측 `[]` → canonical_weeks 가 비어 주차 커버리지 검사가 공회전)."""
+    assert course_consistency.weeks("3주차 개요") == {3}
+    assert course_consistency.weeks("제5주 실습") == {5}
+    assert course_consistency.weeks("- week: 7") == {7}
+    assert course_consistency.weeks("Week 2 overview") == {2}
+
+
+def test_weight_field_parsed_for_sum():
+    """원본은 이 합계 검사의 본문이 문자 그대로 `pass` 였다(죽은 코드)."""
+    blk = "- id: a1\n  weight: 30\n- id: a2\n  weight: 70\n"
+    assert sum(float(x) for x in course_consistency.WEIGHT_FIELD_RE.findall(blk)) == 100.0
+
+
+def test_course_lo_regex_korean_safe():
+    assert course_consistency.los("lo2를 다룬다") == {"lo2"}
+
+
+# ── content_accessibility (아키타입 J · 원본 GATE 3) ───────────────────────
+def test_bullets_are_separate_sentences():
+    """원본은 마침표 없는 불릿 블록을 문장 1개로 뭉쳐 슬라이드를 부당하게 위반으로 몰았다."""
+    md = "# 제목\n\n- 손실함수의 정의\n- 오차의 종류\n- 회귀와 분류의 차이\n"
+    sents = content_accessibility.sentences(md)
+    assert len(sents) == 3 and max(len(s.split()) for s in sents) <= 4
+
+
+def test_image_without_alt_is_flagged():
+    got = content_accessibility.images("![](a.png)")
+    assert got and got[0][1] is False
+    got2 = content_accessibility.images("![학습 곡선 그래프](a.png)")
+    assert got2 and got2[0][1] is True
+
+
+def test_korean_image_hint_alt_recognized():
+    text = "> 이미지: 학습 곡선 (대체 텍스트: 에폭별 손실 변화)"
+    got = content_accessibility.images(text)
+    assert got and got[0][1] is True
+
+
+def test_headings_are_not_counted_as_sentences():
+    assert content_accessibility.sentences("## 학습목표 복습\n") == []
 
 
 
