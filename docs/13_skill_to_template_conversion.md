@@ -267,6 +267,21 @@ trend-report는 **산출 taxonomy**(source_type)로 나눴고(§5 위), systemat
 
 ## 8. 다음 세션 재개 방법
 
+### 8.0 현재 상태 스냅샷 (2026-08-04 세션 종료 시점)
+
+| 항목 | 값 |
+|---|---|
+| HEAD | `562f1c0` (patentforge → F) · 그 앞: litmonitor→E · reviewforge→B' · profile 3종 · specflow→D · paperforge→B |
+| 변환 | **6/20** · 다음 = **policyforge**(§6 대장 #7) |
+| 미커밋 | 없음 (push 완료) |
+| 컨테이너 | `hermes-solomon` · `hermes-gatekeeper` 2개 Up |
+| Slack | **정상**(오전 도달 불가 → 오후 복구. 호스트 200 · 컨테이너 `ok=true` · 게이트키퍼 WARN 3시간38분째 없음) |
+| Kanban | 전부 `done` · 활성 게이트 없음 · 잔여 테스트 카드 없음 |
+| 테스트 | 83종 통과(27 템플릿 + 21 게이트키퍼 + 35 게이트) · 린터 6/6 |
+| 라이브 미션 | **A(trend-report)만 실증**(M-2026-003·004). 나머지 5종은 `draft` — Sam 지시로 **전체 변환 후** 하나씩 실행 |
+
+### 8.1 절차
+
 1. **읽는다**: 이 문서 §6(다음 대상) → §2(레시피) → §5(함정) → 대상 스킬의 `SKILL.md`
 2. **변환한다**: `templates/<name>.yaml` 작성. `templates/academic-paper.yaml`을 참고본으로 삼는다(주석에 변환 판단 근거가 남아 있다)
 3. **검증한다**:
