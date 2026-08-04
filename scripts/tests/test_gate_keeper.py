@@ -42,6 +42,61 @@ def test_mixed_children():
     assert unknown == ["c"]
 
 
+# ── Sam 승인 게이트 파싱/매칭 ───────────────────────────────────────────────
+def test_parse_approval_bare():
+    ok, tid = gk.parse_approval("승인")
+    assert ok is True and tid is None
+
+
+def test_parse_approval_with_explicit_id():
+    ok, tid = gk.parse_approval("승인 t_2daad491")
+    assert ok is True and tid == "t_2daad491"
+
+
+def test_parse_approval_english():
+    ok, tid = gk.parse_approval("approve t_abc123")
+    assert ok is True and tid == "t_abc123"
+
+
+def test_parse_approval_deny_word_is_not_approval():
+    # ★ 오탐 방지: 반려/보류가 있으면 승인 아님
+    assert gk.parse_approval("반려한다")[0] is False
+    assert gk.parse_approval("이건 보류")[0] is False
+    assert gk.parse_approval("아직 승인 못함, 보류")[0] is False
+
+
+def test_parse_approval_non_approval_text():
+    assert gk.parse_approval("보고서 잘 봤어요")[0] is False
+    assert gk.parse_approval("")[0] is False
+
+
+def test_resolve_target_explicit_match():
+    gates = [{"task_id": "t_1"}, {"task_id": "t_2"}]
+    target, _ = gk.resolve_approval_target("t_2", gates)
+    assert target == "t_2"
+
+
+def test_resolve_target_explicit_not_a_gate():
+    gates = [{"task_id": "t_1"}]
+    target, why = gk.resolve_approval_target("t_9", gates)
+    assert target is None and "아님" in why
+
+
+def test_resolve_target_single_bare():
+    target, _ = gk.resolve_approval_target(None, [{"task_id": "t_only"}])
+    assert target == "t_only"
+
+
+def test_resolve_target_ambiguous_bare():
+    target, why = gk.resolve_approval_target(None, [{"task_id": "t_1"}, {"task_id": "t_2"}])
+    assert target is None and "모호" in why
+
+
+def test_resolve_target_none_pending():
+    target, why = gk.resolve_approval_target(None, [])
+    assert target is None and "없음" in why
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

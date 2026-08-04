@@ -36,6 +36,8 @@ import re
 import subprocess
 import sys
 import time
+import urllib.parse
+import urllib.request
 
 # ── 설정 ────────────────────────────────────────────────────────────────
 VERIFIERS = {"fact-checker", "reviewer"}         # 검증자 profile
@@ -52,6 +54,19 @@ VERDICT_RE = re.compile(r"VERDICT:\s*(PASS|FAIL)", re.IGNORECASE)
 # fail-closed 폴백 키워드(표준 토큰이 없는 구 미션·누락 대비)
 FAIL_WORDS = ("수정요청", "changes-requested", "보완요청", "반려")
 PASS_WORDS = ("승인", "approve", "합격")
+
+# ── Sam 승인 게이트(Slack Web API) 설정 ─────────────────────────────────────
+# Socket Mode(인바운드)가 network 성으로 flapping 하므로, 승인 흐름은 Web API 폴링으로
+# 처리해 의존을 끊는다(gate_keeper 와 동일한 결정적 오케스트레이션 레이어).
+APPROVALS_CHANNEL = os.environ.get("GATE_KEEPER_APPROVALS_CHANNEL", "C0BN936JUM6")  # #approvals
+SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN", "")
+# 승인 권한자(Sam) member id 목록. 이 사용자들의 메시지만 승인으로 인정(보안 앵커).
+SLACK_ALLOWED_USERS = {u.strip() for u in os.environ.get("SLACK_ALLOWED_USERS", "").split(",") if u.strip()}
+APPROVAL_ENABLED = os.environ.get("GATE_KEEPER_APPROVALS", "1") != "0"
+APPROVAL_WORDS = ("승인", "approve", "approved", "go ahead")
+DENY_WORDS = ("반려", "거부", "보류", "reject", "hold")   # 승인 오탐 방지(부정형 스킵)
+TASK_ID_RE = re.compile(r"\b(t_[0-9a-f]{6,})\b")          # 명시 task id 토큰
+HISTORY_LIMIT = int(os.environ.get("GATE_KEEPER_APPROVALS_LIMIT", "25"))
 
 
 def log(msg: str) -> None:
@@ -92,19 +107,29 @@ def notify(text: str, dry: bool) -> None:
         log(f"WARN notify failed: {e}")
 
 
-# ── 상태(처리셋) 영속화 ──────────────────────────────────────────────────
-def load_state() -> set:
+# ── 상태 영속화 ────────────────────────────────────────────────────────────
+# 단일 JSON 파일에 세 처리셋을 보관(멱등·재시작 안전):
+#   processed        : 검증자 게이트 처리 키(vid:completed_at)
+#   approval_posted  : #approvals 에 승인요청을 이미 게시한 Sam-게이트 task id
+#   approval_seen    : 이미 처리한 승인 메시지 ts(중복 unblock 방지)
+def load_state() -> dict:
     try:
         with open(STATE_PATH, encoding="utf-8") as f:
-            return set(json.load(f).get("processed", []))
+            d = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
-        return set()
+        d = {}
+    return {
+        "processed": set(d.get("processed", [])),
+        "approval_posted": set(d.get("approval_posted", [])),
+        "approval_seen": set(d.get("approval_seen", [])),
+    }
 
 
-def save_state(processed: set) -> None:
+def save_state(state: dict) -> None:
     try:
         with open(STATE_PATH, "w", encoding="utf-8") as f:
-            json.dump({"processed": sorted(processed)}, f)
+            json.dump({k: sorted(state.get(k, set())) for k in
+                       ("processed", "approval_posted", "approval_seen")}, f)
     except OSError as e:
         log(f"WARN state save failed: {e}")
 
@@ -413,8 +438,160 @@ def poll_once(processed: set, dry: bool) -> None:
             handle_fail(vid, title, assignee, parents, actionable, instr, dry)
         if not dry:
             processed.add(key)
-    if not dry:
-        save_state(processed)
+
+
+# ── Sam 승인 게이트: Slack Web API 폴링(#4 요청 게시 + #3 승인→unblock) ─────────
+def slack_api(method: str, params: dict, post: bool = False) -> dict | None:
+    """Slack Web API 호출(stdlib urllib). 실패 시 None(루프는 죽지 않음)."""
+    if not SLACK_BOT_TOKEN:
+        return None
+    try:
+        headers = {"Authorization": f"Bearer {SLACK_BOT_TOKEN}"}
+        if post:
+            data = urllib.parse.urlencode(params).encode()
+            req = urllib.request.Request(f"https://slack.com/api/{method}", data=data, headers=headers)
+        else:
+            url = f"https://slack.com/api/{method}?" + urllib.parse.urlencode(params)
+            req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return json.load(r)
+    except Exception as e:  # noqa: BLE001 — 승인 폴링은 게이트 로직을 막지 않는다
+        log(f"WARN slack_api {method} 실패: {e}")
+        return None
+
+
+def parse_approval(text: str) -> tuple[bool, str | None]:
+    """메시지 텍스트 → (승인 여부, 명시 task_id|None).
+    부정형(반려/거부/보류)이 있으면 승인 아님(오탐 방지). 승인 키워드가 있어야 True."""
+    if not text:
+        return False, None
+    low = text.lower()
+    if any(w in text or w in low for w in DENY_WORDS):
+        return False, None
+    if not any(w in text or w in low for w in APPROVAL_WORDS):
+        return False, None
+    m = TASK_ID_RE.search(text)
+    return True, (m.group(1) if m else None)
+
+
+def pending_sam_gates(pipelines: list[dict]) -> list[dict]:
+    """현재 blocked 인 Sam-게이트 stage 목록(task_id·mission·name). pipeline.json 기반."""
+    out = []
+    for pl in pipelines:
+        for s in pl.get("stages", []):
+            if not s.get("sam_gate"):
+                continue
+            tid = s.get("task_id")
+            if tid and task_status(tid) == "blocked":
+                out.append({"task_id": tid, "mission": pl.get("mission"), "name": s.get("name"),
+                            "upstream": s.get("upstream_task_ids") or []})
+    return out
+
+
+def all_upstream_done(upstream: list[str]) -> bool:
+    """상위(upstream) task 가 모두 done/archived 여야 이 게이트가 '활성'(승인 차례)."""
+    return all(task_status(u) in ("done", "archived") for u in upstream) if upstream else True
+
+
+def load_all_pipelines() -> list[dict]:
+    """reports/*/pipeline.json 전부 로드(활성 미션 게이트 조회용)."""
+    base = os.path.join(COMPANY_ROOT, "reports")
+    out = []
+    try:
+        for mid in os.listdir(base):
+            pl = load_pipeline(mid)
+            if pl:
+                out.append(pl)
+    except OSError:
+        pass
+    return out
+
+
+def resolve_approval_target(explicit_id: str | None, gates: list[dict]) -> tuple[str | None, str]:
+    """승인 메시지 → unblock 대상 task. (target|None, 사유).
+    - 명시 id: 그 id 가 현재 대기 Sam-게이트면 채택.
+    - 바레('승인'만): 대기 게이트가 정확히 1개면 그것. 0개=대상없음. 2+개=모호(특정 요구)."""
+    ids = {g["task_id"] for g in gates}
+    if explicit_id:
+        return (explicit_id, "명시 id") if explicit_id in ids else (None, f"명시 id {explicit_id} 는 현재 대기 게이트 아님")
+    if len(gates) == 1:
+        return gates[0]["task_id"], "단일 대기 게이트"
+    if not gates:
+        return None, "대기 게이트 없음"
+    return None, f"대기 게이트 {len(gates)}개 — 모호(‘승인 <task_id>’ 로 특정 필요)"
+
+
+def seed_approval_baseline(state: dict) -> None:
+    """최초 기동 시(approval_seen 비어있음) 현재 #approvals 이력 ts 를 모두 seen 처리.
+    → '지금부터' 도착하는 승인만 반영(과거 승인 메시지를 새 게이트에 소급 적용 방지)."""
+    if not (APPROVAL_ENABLED and SLACK_BOT_TOKEN) or state["approval_seen"]:
+        return
+    hist = slack_api("conversations.history", {"channel": APPROVALS_CHANNEL, "limit": 100})
+    if hist and hist.get("ok"):
+        for msg in hist.get("messages", []):
+            if msg.get("ts"):
+                state["approval_seen"].add(msg["ts"])
+        log(f"승인 baseline 설정: 기존 {len(state['approval_seen'])}개 메시지 seen 처리(지금부터 감시)")
+
+
+def approval_poll(state: dict, dry: bool) -> None:
+    """Sam 승인 게이트 자동화. #4 활성 게이트 요청 게시 + #3 승인 감지→unblock."""
+    if not (APPROVAL_ENABLED and SLACK_BOT_TOKEN):
+        return
+    pipelines = load_all_pipelines()
+    gates = [g for g in pending_sam_gates(pipelines) if all_upstream_done(g["upstream"])]
+
+    # ── #4: 활성(상위 done) 대기 Sam-게이트를 #approvals 에 1회 게시 ──
+    posted = state["approval_posted"]
+    for g in gates:
+        if g["task_id"] in posted:
+            continue
+        text = (f":large_yellow_circle: [승인 요청] {g['mission']} · {g['name']} (`{g['task_id']}`)\n"
+                f"승인하려면 이 채널에 `승인` (또는 `승인 {g['task_id']}`). 권한: Sam.")
+        if dry:
+            log(f"[dry] 승인요청 게시: {g['task_id']} {g['mission']}·{g['name']}")
+            posted.add(g["task_id"])
+            continue
+        r = slack_api("chat.postMessage", {"channel": APPROVALS_CHANNEL, "text": text}, post=True)
+        if r and r.get("ok"):
+            posted.add(g["task_id"])
+            log(f"승인요청 게시: {g['task_id']} {g['mission']}·{g['name']} → #approvals")
+        else:
+            log(f"WARN 승인요청 게시 실패: {g['task_id']} ({(r or {}).get('error')})")
+
+    # ── #3: #approvals 최근 메시지에서 Sam 승인 감지 → 해당 게이트 unblock ──
+    hist = slack_api("conversations.history", {"channel": APPROVALS_CHANNEL, "limit": HISTORY_LIMIT})
+    if not hist or not hist.get("ok"):
+        return
+    seen = state["approval_seen"]
+    # 오래된→최신 순으로 처리(여러 승인 누적 대비)
+    for msg in reversed(hist.get("messages", [])):
+        ts = msg.get("ts")
+        if not ts or ts in seen:
+            continue
+        if msg.get("user") not in SLACK_ALLOWED_USERS:   # 보안: Sam 만
+            continue
+        ok, explicit = parse_approval(msg.get("text", ""))
+        if not ok:
+            continue
+        # 현재 대기 게이트를 재조회(같은 폴에서 앞선 승인이 이미 unblock 했을 수 있음).
+        cur = [g for g in pending_sam_gates(load_all_pipelines()) if all_upstream_done(g["upstream"])]
+        target, why = resolve_approval_target(explicit, cur)
+        if not target:
+            # 모호(2+개)만 재시도 여지 남김(Sam 이 곧 id 특정) — seen 미기록.
+            # 그 외(대상 없음·명시 id 불일치)는 재시도 무의미 → 소비.
+            if "모호" not in why and not dry:
+                seen.add(ts)
+            log(f"승인 메시지(ts={ts}) 보류: {why}")
+            continue
+        if dry:
+            log(f"[dry] Sam 승인(ts={ts}) → unblock {target} ({why})")
+            seen.add(ts)
+            continue
+        run(["unblock", target, "--reason", f"Sam Slack 승인(ts={ts}, {why})"])
+        log(f"Sam 승인 감지(ts={ts}) → unblock {target} ({why})")
+        notify(f"✅ Sam 승인 반영 — {target} unblock ({why}).", dry)
+        seen.add(ts)
 
 
 def main() -> int:
@@ -424,14 +601,24 @@ def main() -> int:
     ap.add_argument("--interval", type=float, default=10.0, help="폴 간격(초, 기본 10)")
     args = ap.parse_args()
 
-    log(f"start (once={args.once} dry_run={args.dry_run} interval={args.interval}s state={STATE_PATH})")
-    processed = load_state()
+    log(f"start (once={args.once} dry_run={args.dry_run} interval={args.interval}s state={STATE_PATH} "
+        f"approvals={'on' if (APPROVAL_ENABLED and SLACK_BOT_TOKEN) else 'off'})")
+    state = load_state()
+    if not args.dry_run:
+        seed_approval_baseline(state)   # 과거 승인 소급 방지(지금부터 감시)
+
+    def tick() -> None:
+        poll_once(state["processed"], args.dry_run)      # 검증자 게이트
+        approval_poll(state, args.dry_run)               # Sam 승인 게이트
+        if not args.dry_run:
+            save_state(state)
+
     if args.once:
-        poll_once(processed, args.dry_run)
+        tick()
         return 0
     while True:
         try:
-            poll_once(processed, args.dry_run)
+            tick()
         except Exception as e:  # noqa: BLE001 — 루프는 죽지 않는다
             log(f"ERROR poll: {e}")
         time.sleep(args.interval)

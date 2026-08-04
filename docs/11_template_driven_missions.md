@@ -119,9 +119,8 @@ scout를 `academic/industry/patents/news` **4워커로 분화** + `source_type` 
    **미해결(Phase 2 개선점)**:
    - ~~**컨테이너 GitHub push 자격증명 없음**~~ → **[해소 2026-08-04]** `.env`에 `GITHUB_TOKEN`(Fine-grained PAT, Contents:write) + docker-compose가 `GIT_CONFIG_*`로 github.com HTTPS credential helper 주입(토큰 파일 저장 없이 env 런타임 조회, `.git/config` 신원은 보존). 검증: 컨테이너 `git push` 인증 성공(API push=True). `.env.example`에 슬롯.
    - ~~**Deliver Slack 게시 실패**~~ → **[해소 2026-08-04]** 원인은 자격 아님 — Slack **Socket Mode(인바운드) 만성 flapping**에 에이전트 slack 도구가 의존. Deliver 게시를 **`hermes send`(Web API)** 경로로 고정(템플릿 stage11 body). Web API 아웃바운드는 정상.
-   - **[신규] Slack Socket Mode 인바운드 flapping** — 2026-08-02부터 15초마다 "transport disconnected"(2085+회). 아웃바운드(Web API)는 정상이나 인바운드(Sam Slack 승인 수신)·채널 디렉토리 저하. → 중복연결·app_token·네트워크 조사(Phase 2 #3 Slack승인→unblock 배선과 연결).
-   - **Slack 승인→Kanban unblock 미배선** — Sam이 Slack 승인해도 Solomon(대화형)이 해당 task를 unblock 안 함(대화 응답만). → Solomon이 승인 메시지→`kanban unblock` 표준 처리, 또는 브리지. (현재 수동 unblock 중.)
-   - **pre-blocked Sam 게이트 무알림** — Deliver가 인스턴스화때부터 blocked라 상위 완료 시 "승인 차례" 알림 없음. → 게이트키퍼가 상위 done 시 #approvals 자동 게시.
+   - ~~**Slack 승인→Kanban unblock 미배선**~~ · ~~**pre-blocked Sam 게이트 무알림**~~ → **[해소 2026-08-04, 커밋 예정]** gate_keeper에 **Sam 승인 게이트 자동화**(Web API 폴링, Socket Mode 비의존) 추가: **#4** 활성 Sam-게이트(상위 done·blocked)를 `#approvals`에 `task_id` 포함 **자동 승인요청 게시**(1회, 멱등) · **#3** `SLACK_ALLOWED_USERS`(Sam)의 승인 메시지 감지→해당 게이트 `kanban unblock`(바레 `승인`=단일 대기 게이트, `승인 <task_id>`=명시; 부정형/타인 스킵; 기동 시 과거 메시지 baseline seen 처리로 소급 방지). 단위테스트 10종 + 라이브 E2E(요청 게시→Sam `승인`→unblock) 검증. `scripts/gate_keeper.py` `approval_poll`.
+   - **[잔여] Slack Socket Mode 인바운드 flapping** — 2026-08-02부터 15초마다 "transport disconnected"(2085+회, WebSocket 전송 타임아웃=네트워크성; app/bot 토큰은 유효). **force-recreate 후 재연결·현재 안정**이나 재발 가능. 승인 흐름은 Web API 폴링이라 이에 **비의존**. 대화형 인바운드(Solomon chat)만 영향 → 네트워크·중복연결 모니터.
    - ~~**속도** — 순차 실행·병렬화 미구현이 최대 병목.~~ → **[해소 2026-08-03 Phase 2-①]** subagent 스테이지 내 팬아웃(3·5·8) 구현. 메커니즘·검증은 §5·§3.B. 잔여: 라이브 파일럿 M-2026-004 실행으로 실측 속도 이득·shard 병합 확인, `max_concurrent_children`(기본3)를 수집 5워커에 맞춰 튜닝(선택, hermes-home/config 로컬).
 2. **일반화** — 린터·매처·manifest. B/D 템플릿 추가.
 3. **매칭 자동화** — Solomon이 미션→템플릿 선택.
