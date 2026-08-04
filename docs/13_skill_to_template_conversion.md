@@ -1,6 +1,6 @@
 # 13. harness 스킬 → 템플릿 YAML 변환 — 작업 절차서
 
-> 작성일: 2026-08-04 · 상태: **작업 중(5/20 — A·B·B'·D·E 전부 실행가능, 라이브 미션은 A만)** · 성격: working doc(재개 가능)
+> 작성일: 2026-08-04 · 상태: **작업 중(6/20 — A·B·B'·D·E·F 전부 실행가능, 라이브 미션은 A만)** · 성격: working doc(재개 가능)
 > 관련: [`12_pipeline_negotiation.md`](./12_pipeline_negotiation.md)(§8 phasing 2b) · [`11_template_driven_missions.md`](./11_template_driven_missions.md)(템플릿 스키마 §3.A·§3.B) · 소스: 형제 repo `other_projects/harness-templates`
 >
 > **⚠️ 이 문서는 여러 세션에 걸쳐 이어서 작업하기 위한 것이다.** 새 세션은 **§6 진행 대장**에서 다음 대상을 고르고 → **§2 레시피**대로 변환하고 → **§6 갱신 + 커밋**하면 된다. 재개 방법은 §8.
@@ -45,8 +45,9 @@ agents는 템플릿으로 옮기는 것이 아니다. harness의 agent는 **하�
 (gate_keeper가 항상 이 셋을 넘긴다. 안 쓰는 인자도 받아만 두면 된다). 판정 대상 파일은 템플릿의
 `gate.draft`로 지정한다. **이식한 게이트는 반드시 일부러 깨뜨린 픽스처로 검증하라**(§5).
 
-현재 보유 게이트(8종): `recency_check` · `source_balance` · `doc_consistency` · `test_run` ·
-`prisma_counts` · `prisma_checklist` · `seen_dedup` · `digest_shape`.
+현재 보유 게이트(10종): `recency_check` · `source_balance` · `doc_consistency` · `test_run` ·
+`prisma_counts` · `prisma_checklist` · `seen_dedup` · `digest_shape` · `claim_consistency` ·
+`patent_format`.
 산출 도구는 `scripts/tools/`: `bib_export` · `monitor_state` · `relevance_score`.
 회귀 테스트는 `scripts/tests/test_gates.py`.
 
@@ -73,14 +74,14 @@ docker exec hermes-solomon sh -c 'cd /work/company && \
 
 | 우리 profile | 동사 신호 | tools 신호 | 확인된 별칭 |
 |---|---|---|---|
-| `default` (Solomon) | clarify · scope-interview · finalize · deliver · orchestrate | `AskUserQuestion` | `paperforge-clarify-topic` · `paperforge-finalize` · `trendforge-clarify-scope` · `trendforge-finalize` · `reviewforge-{clarify-question,finalize}` · `litmonitor-seed-config` |
-| `scout` | gather · ingest · collect · scan · search · survey | `WebSearch` `WebFetch` | `paperforge-scope-survey` · `paperforge-gather-{arxiv,web,recent}` · `trendforge-landscape-survey` · `trendforge-gather-{academic,industry,patents,news}` · `reviewforge-{search-protocol,search-database}` · `litmonitor-scan-{arxiv,scholar,openreview}` |
-| `reader` | read-extract · analyze · classify · appraise | — | `paperforge-read-extract` · `trendforge-read-extract` · `reviewforge-{data-extract,quality-appraise}` |
+| `default` (Solomon) | clarify · scope-interview · finalize · deliver · orchestrate | `AskUserQuestion` | `paperforge-clarify-topic` · `paperforge-finalize` · `trendforge-clarify-scope` · `trendforge-finalize` · `reviewforge-{clarify-question,finalize}` · `litmonitor-seed-config` · `patentforge-{clarify-application,finalize}` |
+| `scout` | gather · ingest · collect · scan · search · survey | `WebSearch` `WebFetch` | `paperforge-scope-survey` · `paperforge-gather-{arxiv,web,recent}` · `trendforge-landscape-survey` · `trendforge-gather-{academic,industry,patents,news}` · `reviewforge-{search-protocol,search-database}` · `litmonitor-scan-{arxiv,scholar,openreview}` · `patentforge-prior-art-{academic,patent}-scan` |
+| `reader` | read-extract · analyze · classify · appraise · ingest | — | `paperforge-read-extract` · `trendforge-read-extract` · `reviewforge-{data-extract,quality-appraise}` · `patentforge-ingest-invention` |
 | `curator` | dedup · filter · screen · normalize · cite-pack · cross-link | — | `reviewforge-prisma-screening` · `litmonitor-relevance-filter` · *(다른 스킬엔 대개 없어 우리가 보강)* |
-| `synthesizer` | synthesize · outline · structure · summarize | — | `paperforge-synthesize-outline` · `trendforge-synthesize-trends` · `reviewforge-synthesize` · `litmonitor-action-suggest` |
-| `writer` | draft · write · compose · section | — | `paperforge-draft-section` · `trendforge-draft-section` · `litmonitor-summarize` |
-| `fact-checker` | fact-check · verify · evidence · recency · citation | `Bash`(게이트 스크립트 실행) | `paperforge-fact-check` · `trendforge-{evidence-critic,recency-check}` · `reviewforge-evidence-coverage-check` |
-| `reviewer` | review · critic · clarity · logic · style · bias | — | `paperforge-{logic-critic,style-edit}` · `trendforge-{clarity-check,bias-check}` · `reviewforge-{prisma-compliance-check,bias-balance-check,clarity-check}` · `specflow` **Design Review(신설)** |
+| `synthesizer` | synthesize · outline · structure · summarize · gap-analysis | — | `paperforge-synthesize-outline` · `trendforge-synthesize-trends` · `reviewforge-synthesize` · `litmonitor-action-suggest` · `patentforge-gap-analyzer` |
+| `writer` | draft · write · compose · section · adapt | — | `paperforge-draft-section` · `trendforge-draft-section` · `litmonitor-summarize` · `patentforge-{specification-writer,jurisdiction-adapter}` |
+| `fact-checker` | fact-check · verify · evidence · recency · citation | `Bash`(게이트 스크립트 실행) | `paperforge-fact-check` · `trendforge-{evidence-critic,recency-check}` · `reviewforge-evidence-coverage-check` · `patentforge-{claim-consistency-check,novelty-comparison-check}` |
+| `reviewer` | review · critic · clarity · logic · style · bias | — | `paperforge-{logic-critic,style-edit}` · `trendforge-{clarity-check,bias-check}` · `reviewforge-{prisma-compliance-check,bias-balance-check,clarity-check}` · `patentforge-format-compliance-check` · `specflow` **Design Review(신설)** |
 | `architect` ⚠신규 | architect · erd · diagram · wireframe · style-design | `Read,Write,Grep,Glob`(쓰기만·실행 없음) | `specflow-{architect,erd-designer,diagrammer,wireframer,style-designer}` |
 | `developer` ⚠신규 | backend-dev · frontend-dev · implement · build | **`Edit`** + `Bash` | `specflow-{backend-dev,frontend-dev}` |
 | `tester` ⚠신규 | e2e-test · run · regression · verify-by-execution | **`mcp__playwright__*`** + `Bash` | `specflow-e2e-tester` |
@@ -146,6 +147,19 @@ specflow는 task별(`/backend-task <N>`)로 구현한다. 이를 `per_item`으�
 ### ⚠️ 도메인이 다르면 policy 블록도 갈아끼운다
 `recency_policy`·`source_balance_policy`는 조사·집필 아키타입(A·B)의 정책이다. 웹개발에는 의미가 없어 `completion_policy`(체크박스 강제·E2E green·시나리오 커버리지)로 대체했다. **정책은 템플릿 소유**이므로 도메인마다 새로 정의하면 된다.
 
+### ⚠️ 이식한 게이트가 "동작하는 척"할 수 있다 — 깨뜨린 픽스처로만 드러난다
+**[발견: patent-spec 변환, 2026-08-04]** patentforge의 `claim_consistency.py`를 이식했더니 **두 겹의 결함**이 나왔다.
+
+1. **절 파싱이 즉시 잘렸다** — 종료 조건 `(?=^##|\Z)`가 하위 제목 `### 청구항 1`에도 걸려 `【청구범위】` 절이 빈 문자열이 됐다. 청구항을 **하나도 못 읽는다**. → `(?=^##[^#]|\Z)`로 수정.
+2. **요소 추출이 한국어에서 무력했다** — `\S+\s*(?:모듈|부|…)\b` 패턴은 조사가 붙은 `모듈과`·`부를`에서 `\b`가 성립하지 않아 **놓치고**, 대신 동사구 `포함하는 시스템`을 요소로 잡았다. 그래서 본문에서 '캐시 부'를 통째로 지웠는데도 **커버리지 2/2 PASS**가 나왔다.
+
+→ (수식어, 핵심명사)를 분리해 잡고 조사를 lookahead로 허용하며, 동사 어미로 끝나는 수식어를 배제하도록 재작성. 같은 픽스처가 이제 `커버리지 2/3 · exit=1`로 잡힌다.
+
+**교훈**: 게이트가 PASS를 낸다고 동작하는 것이 아니다. **일부러 깨뜨린 입력에 FAIL을 내는지**까지 확인해야 비로소 게이트다. 특히 원문 언어가 한국어인 도메인에서는 영어 기준 정규식(`\b`, 공백 토큰화)이 조용히 무너진다.
+
+### ⚠️ 안전·법적 고지는 지시가 아니라 게이트로 강제한다
+patentforge는 finalize 단계에서 `usage-disclaimer.md`를 첨부하라고 **지시만** 한다. 특허 초안이 고지 없이 유통되면 변리사 자문으로 오인될 수 있으므로, 우리는 `patent_format` 게이트에 **고지 문구 존재 검사**를 넣어 자동 반려하게 했다. 원본에 없던 검사를 추가한 사례다 — 도메인에 법적·안전 요구가 있으면 게이트로 승격하라.
+
 ### ⚠️ 주기 실행 스킬은 "미션 간 지속 상태"를 요구한다
 **[발견: lit-monitor 변환, 2026-08-04]** litmonitor는 다른 하네스와 달리 **주기 실행**용이다(`/loop weekly`). 우리 모델은 **미션 1건 = 파이프라인 1회 실행**이라 매 회차가 새 미션이 되는데, "이미 본 논문" 기억은 미션을 가로질러 살아야 한다. 미션 디렉터리(`reports/<MID>/`)에 두면 다음 회차가 못 읽는다.
 
@@ -177,8 +191,8 @@ trend-report는 **산출 taxonomy**(source_type)로 나눴고(§5 위), systemat
 | 3 | specflow | domain | 12-step · agents 12 | ✅ **draft (D) · 실행가능** | `webapp-build.yaml` | **3 생성완료**(architect·developer·tester) |
 | 4 | reviewforge | research | 9-stage · agents 12 | ✅ **draft (B')** | `systematic-review.yaml` | 0 |
 | 5 | litmonitor | research | 5-stage · agents 7 | ✅ **draft (E)** | `lit-monitor.yaml` | 0 |
-| 6 | patentforge | domain | 8-stage · agents 11 | ⬜ **다음** | — | ? |
-| 7 | policyforge | domain | 9-stage · agents 14 | ⬜ | — | 0 예상 |
+| 6 | patentforge | domain | 8-stage · agents 11 | ✅ **draft (F)** | `patent-spec.yaml` | 0 |
+| 7 | policyforge | domain | 9-stage · agents 14 | ⬜ **다음** | — | 0 예상 |
 | 8 | legalforge | domain | 8-stage · agents 13 | ⬜ | — | ? |
 | 9 | docforge | domain | 8-stage · agents 13 | ⬜ | — | 예상 있음(코드 읽기) |
 | 10 | lectureforge | domain | 9-stage · agents 15 | ⬜ | — | ? |
@@ -237,6 +251,15 @@ trend-report는 **산출 taxonomy**(source_type)로 나눴고(§5 위), systemat
   한 줄 요약도 근거를 길게 쓰면 하한을 통과했다 → 행동 줄을 **줄 단위로 제거**하도록 수정
   (테스트가 먼저 잡았다)
 - **미이식**: `history_archive.py`(Deliver 단계의 파일 이동으로 흡수 — 별도 스크립트 불요)
+
+**patent-spec 변환에서 나온 것 (2026-08-04)**
+- ✅ `gates/claim_consistency.py`(청구항 구성요소의 본문 뒷받침 + 종속항 참조 실재성·방향) ·
+  `gates/patent_format.py`(관할별 필수 절 + **고지 문구 강제**)
+- **이식 결함 2건 수정**(§5) — 절 파싱 조기 종료 · 한국어 요소 추출 무력화
+- **미이식**: `bundle_export.py`(번들 조립 = Deliver 의 파일 작업) · `runs_state.py`(Kanban 이 대체) ·
+  `prior_art_search_lib.py`(scout 의 검색 도구 — 우리는 Tavily 사용)
+- **검증 순서 판단**: 청구항 정합성은 **관할 변환 전**에 잡는다. canonical 명세서가 틀린 채로
+  4개 관할에 복제되면 재작업이 4배가 된다
 
 **새 후속 과제** (다음 세션 이후)
 - `test_run.py`는 테스트를 **실행하지 않는다** — Tester가 남긴 `results.json`을 검사할 뿐이다. 게이트키퍼가 미션 코드를 임의 실행하면 임의 코드 실행 통로가 되기 때문. 자기보고 신뢰 구간이 남아 있으므로, CI 연동 등 **독립 실행 경로**가 생기면 교체 검토

@@ -30,6 +30,8 @@ doc_consistency = _load("doc_consistency")
 test_run = _load("test_run")
 digest_shape = _load("digest_shape")
 seen_dedup = _load("seen_dedup")
+claim_consistency = _load("claim_consistency")
+patent_format = _load("patent_format")
 
 
 # ── prisma_counts ────────────────────────────────────────────────────────
@@ -216,6 +218,81 @@ def test_monitor_state_root_is_overridable():
         assert ms.seen_path("w").startswith("/tmp/does-not-exist-xyz")
     finally:
         os.environ.pop("HERMES_MONITORS_ROOT", None)
+
+
+# ── claim_consistency (아키타입 F) ────────────────────────────────────────
+SPEC = """# 명세서
+## 【청구범위】
+### 청구항 1
+입력을 분석하는 프로파일링 모듈과, 결과를 저장하는 캐시 부를 포함하는 시스템.
+### 청구항 2
+제1항에 있어서, 상기 프로파일링 모듈은 실시간인 것을 특징으로 하는 시스템.
+## 【과제의 해결 수단】
+프로파일링 모듈이 분석하고 캐시 부에 저장한다.
+## 【발명을 실시하기 위한 구체적인 내용】
+캐시 부는 LRU 를 쓴다.
+"""
+
+
+def test_claims_section_not_truncated_by_h3():
+    """이식 결함 회귀: 원본의 `(?=^##|\\Z)` 는 `### 청구항 1` 에도 걸려 청구범위 절이
+    즉시 잘렸다(청구항을 하나도 못 읽었다)."""
+    cs = claim_consistency.claims_section(SPEC)
+    assert "청구항 1" in cs and "청구항 2" in cs, cs
+
+
+def test_claim_blocks_numbered():
+    blocks = claim_consistency.claim_blocks(claim_consistency.claims_section(SPEC))
+    assert [n for n, _ in blocks] == [1, 2]
+
+
+def test_elements_extract_korean_with_josa():
+    """이식 결함 회귀: 조사가 붙은 '모듈과'·'부를' 을 원본은 놓치고 대신 동사구
+    '포함하는 시스템' 을 요소로 잡아, 게이트가 아무것도 측정하지 못했다."""
+    _, b1 = claim_consistency.claim_blocks(claim_consistency.claims_section(SPEC))[0]
+    els = claim_consistency.elements_of(b1)
+    assert ("프로파일링", "모듈") in els, els
+    assert ("캐시", "부") in els, els
+
+
+def test_elements_reject_verbal_phrases():
+    els = claim_consistency.elements_of("데이터를 포함하는 시스템과 처리하는 장치")
+    mods = [m for m, _ in els]
+    assert "포함하는" not in mods and "처리하는" not in mods, els
+
+
+def test_spec_body_joins_two_sections():
+    body = claim_consistency.spec_body(SPEC)
+    assert "프로파일링 모듈이 분석" in body and "LRU" in body
+
+
+def test_dependent_ref_regex():
+    assert claim_consistency.DEPENDENT_REF_RE.findall("제1항에 있어서, 제 12 항") == ["1", "12"]
+
+
+# ── patent_format (아키타입 F) ────────────────────────────────────────────
+def test_required_sections_cover_four_jurisdictions():
+    assert set(patent_format.REQUIRED_SECTIONS) == {"kipo", "uspto", "pct", "epo"}
+
+
+def test_jurisdiction_inferred_from_filename():
+    known = list(patent_format.REQUIRED_SECTIONS)
+    assert patent_format.jurisdiction_of("/x/applications/uspto.md", known) == "uspto"
+    assert patent_format.jurisdiction_of("/x/applications/06-kipo.md", known) == "kipo"
+    assert patent_format.jurisdiction_of("/x/applications/notes.md", known) is None
+
+
+def test_disclaimer_terms_include_korean_default():
+    """고지는 원본에 없던 것을 우리가 게이트로 승격한 항목 — 기본값이 비면 무의미해진다."""
+    assert any("변리사" in t for t in patent_format.DEFAULT_DISCLAIMER_TERMS)
+
+
+def test_scope_jurisdictions_from_frontmatter():
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    with open(_os.path.join(d, "SCOPE.md"), "w", encoding="utf-8") as f:
+        f.write("---\njurisdictions: [kipo, USPTO]\n---\n")
+    assert patent_format.scope_jurisdictions(d) == ["kipo", "uspto"]
 
 
 if __name__ == "__main__":

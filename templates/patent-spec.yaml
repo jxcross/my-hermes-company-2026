@@ -1,0 +1,138 @@
+# 아키타입 F — 특허 명세서 초안 (11단계)
+# 출처: other_projects/harness-templates/domain-harnesses/project_patentforge
+#       (.claude/skills/patentforge/SKILL.md 8-stage + agents 11종). 변환 절차: docs/13
+#
+# ⚠️ **이 파이프라인의 산출물은 변리사 자문이 아니다.** 모든 관할 문서에 고지를 붙여야 하며,
+#    `patent_format` 객관 게이트가 고지 부재를 **자동 반려**한다(원본은 지시만 했던 것을
+#    우리는 기계 검사로 승격했다 — docs/13 §5).
+#
+# 변환 판단(요약 — 상세·근거는 docs/13 §2·§5):
+#  - 원본도 객관 게이트 2종을 갖고 있었다(claim_consistency.py 하드게이트 · format_compliance.py).
+#    둘 다 이식: gates/claim_consistency.py · gates/patent_format.py(+고지 검사).
+#  - stage 7 의 3비평가를 우리 두 검증 지점으로 재배치:
+#      claim-consistency(객관) + novelty-comparison → 7 Claim Verify(fact-checker)
+#      format-compliance(객관) + 전체 품질           → 9 Independent Review(reviewer)
+#  - `jurisdiction-adapter` 는 관할마다 같은 계약(canonical 명세서를 관할 서식으로 변환)이라
+#    profile 이 아니라 `parallel: workers` 로 흡수 → writer 1개. 신규 profile 0개.
+#  - `gap-analyzer`(선행기술 매핑 + 신규성·진보성 평가 + 청구항 전략)는 집필이 아니라
+#    **종합·전략 판단**이라 `synthesizer`.
+#  - 검증 순서가 다른 아키타입과 다르다 — 청구항 정합성은 **관할 변환 전에** 잡아야 한다
+#    (canonical 명세서가 틀린 채로 4개 관할에 복제되면 재작업이 4배가 된다).
+#  - `bundle_export.py`·`runs_state.py`·`prior_art_search_lib.py` 는 미이식
+#    (번들 조립은 Deliver 의 파일 작업 · 상태머신은 Kanban 이 대체 · 검색 라이브러리는 scout 도구).
+#
+# 스키마 규약은 templates/trend-report.yaml 머리말 참조.
+
+name: patent-spec
+category: legal
+display_name: 특허 명세서 초안
+maturity: draft
+goal_kr: 발명 설명에서 출발해 선행기술 조사·신규성 분석을 거쳐 관할별 특허 명세서 초안을 산출한다(변리사 검토 전제).
+invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop, sources_cited]
+
+policy:
+  patent_policy:
+    jurisdictions: [kipo]            # SCOPE.md frontmatter 의 jurisdictions 가 우선
+    min_element_coverage: 1.0        # 청구항 구성요소는 전부 본문에 설명돼야 한다(기재불비 방지)
+    require_disclaimer: true         # 고지 없는 산출물 금지
+    disclaimer_terms: ["변리사 자문이 아닙니다", "변리사 검토 권장"]
+  recency_policy:
+    # 선행기술은 오래된 것이 오히려 핵심이다(신규성 판단의 기준). 최신성 요구를 낮춘다.
+    cutoff_year_offset: -10
+    recent_ratio: 0.2
+    hard_block_year_offset: -60
+    seminal_exceptions: true
+  source_balance_policy:
+    # 특허의 source_type = 선행기술 종류. 특허문헌과 비특허문헌(논문) 양쪽을 봐야 한다.
+    categories: [patent_kr, patent_us, patent_intl, academic, product]
+    min_per_category:
+      patent_kr: 1
+      patent_us: 1
+      patent_intl: 0
+      academic: 1     # 비특허문헌 누락은 진보성 판단의 대표적 구멍이다
+      product: 0
+    hard_block_if_missing: false
+
+stages:
+  - id: 1
+    name: Scoping
+    profile: default          # Solomon
+    sam_gate: true
+    upstream: []
+    body: "출원 범위를 확정해 reports/<MID>/SCOPE.md 에 작성 — 기술분야·발명자·출원 관할·마감·완료조건. ⚠️ **frontmatter 에 `jurisdictions: [kipo, uspto, ...]` 를 반드시 선언**하라(객관 게이트가 이 목록으로 관할별 문서 존재를 검사한다). ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라. 오직 SCOPE.md 산출과 이 task 완료만."
+  - id: 2
+    name: Invention Intake
+    profile: reader
+    upstream: [1]
+    body: "발명 설명·실험 결과를 구조화해 invention.md 에 정리 — 해결하려는 과제 · **핵심 구성요소 목록**(청구항의 재료가 된다) · 동작 원리 · 실시예 · 효과(정량 데이터 있으면 반드시 포함). 발명자가 말하지 않은 것을 지어내지 마라 — 불명확하면 `[확인 필요]` 로 표시한다."
+  - id: 3
+    name: Prior-Art Search
+    profile: scout
+    upstream: [2]
+    parallel:
+      mode: workers
+      # 특허문헌은 관할별 DB 가 달라 소스별 분할이 곧 산출 taxonomy 다.
+      workers: [patent_kr, patent_us, patent_intl, academic, product]
+      batch_size: 3          # 5워커 = 3 + 2, 2라운드
+      shard: "raw/prior_art.<worker>.yaml"
+      merge_to: "raw/sources.yaml"
+    body: "자기 소스의 선행기술을 수집한다(patent_kr=KIPRIS · patent_us=USPTO/Google Patents · patent_intl=EPO/WIPO · academic=논문 · product=상용 제품·공개 기술). 각 항목 id·title·출원인/저자·published_year(공개일)·번호(출원·등록)·url·source_type·claims_summary(핵심 청구 내용 1~2문장)·status 기록. ⚠️ **공개일이 출원 예정일보다 앞선 것만** 선행기술이다 — 날짜를 반드시 남겨라."
+  - id: 4
+    name: Dedup·Relevance
+    profile: curator
+    upstream: [3]
+    body: "패밀리 특허(같은 발명의 관할별 출원) 병합·중복 제거 후 발명과의 관련성으로 선별. status=selected/rejected 와 사유 기록. **가장 가까운 선행기술(closest prior art)** 을 표시한다."
+  - id: 5
+    name: Gap Analysis
+    profile: synthesizer
+    upstream: [4]
+    body: "선행기술 대비 **차이점 매핑** → 신규성(선행기술에 없는가)·진보성(통상의 기술자에게 자명하지 않은가) 평가 → **청구항 전략**(독립항 범위·종속항 계층·회피 설계)을 gap.md 에 작성. ⚠️ 가장 가까운 선행기술과의 차이를 **구성요소 단위로** 대조표로 만들어라 — 이것이 청구항의 근거가 된다."
+  - id: 6
+    name: Specification Draft
+    profile: writer
+    upstream: [5]
+    body: "한국어 canonical 명세서를 spec.md 에 작성. ⚠️ **다음 구조를 정확히 지켜라**(객관 게이트가 검사한다): `## 【청구범위】` 아래 `### 청구항 N` · `## 【과제의 해결 수단】` · `## 【발명을 실시하기 위한 구체적인 내용】`. **청구항에 쓴 구성요소는 전부 본문에 설명해야 한다**(기재불비 방지). 종속항은 반드시 앞 번호를 참조한다(`제1항에 있어서`). 발명의 명칭·기술분야·배경기술·발명의 효과·요약서·도면의 간단한 설명도 포함한다."
+  - id: 7
+    name: Claim Verify
+    profile: fact-checker      # ≠ writer
+    verifier: true
+    upstream: [6]
+    gate:
+      objective: [claim_consistency]
+      llm: fact_checker_verdict
+      draft: "reports/<MID>/spec.md"
+    body: "① 청구항 정합성(객관 게이트가 기계 검사하지만 **표현이 달라 기계가 못 잡는 대응 관계**를 네가 본다). ② **신규성 대비 검증** — 각 독립항이 gap.md 가 지목한 선행기술과 실제로 구별되는가, 선행기술 요약이 원문과 맞는가(잘못 읽은 선행기술은 청구항 전체를 무너뜨린다). ③ 실시예가 청구항 범위를 뒷받침하는가. 끝에 VERDICT: PASS|FAIL. ⚠️ 여기서 잡지 못하면 틀린 명세서가 관할 수만큼 복제된다."
+  - id: 8
+    name: Jurisdiction Adapt
+    profile: writer
+    upstream: [7]              # 게이트: 7 PASS 시 게이트키퍼가 unblock
+    parallel:
+      mode: workers
+      # 관할마다 같은 계약(canonical → 관할 서식 변환) = profile 아님, 워커다.
+      workers: [kipo, uspto, pct, epo]
+      batch_size: 3
+      shard: "applications/<worker>.md"
+      merge_to: null           # 관할 문서는 병합 대상이 아니다 — 각자 독립 제출물
+    body: "SCOPE.md 의 `jurisdictions` 에 **선언된 관할만** 작성한다(선언 안 된 워커는 건너뛴다). canonical spec.md 를 자기 관할 서식으로 변환 — kipo=국문 서식(발명의 명칭/기술분야/배경기술/과제의 해결 수단/발명의 효과/청구범위/요약서) · uspto=영문(TITLE/FIELD/BACKGROUND/SUMMARY/DETAILED DESCRIPTION/CLAIMS/ABSTRACT) · pct·epo=각 서식. ⚠️ **모든 문서 말미에 고지를 넣어라** — '본 문서는 변리사 자문이 아닙니다. 출원 전 변리사 검토 권장.' 고지가 없으면 객관 게이트가 자동 반려한다."
+  - id: 9
+    name: Independent Review
+    profile: reviewer          # ≠ writer
+    verifier: true
+    upstream: [8]
+    gate:
+      objective: [patent_format, source_balance]
+      llm: reviewer_verdict
+      draft: "reports/<MID>/applications"
+    body: "독립 검토: ① 관할 서식 준수 충분성(객관 게이트는 절 존재만 보므로 **내용이 그 절에 맞는지**는 네가 본다). ② 관할 간 청구항 범위 불일치 — 번역·변환 과정에서 권리범위가 넓어지거나 좁아지지 않았는가. ③ 선행기술 대비 주장이 과장되지 않았는가. ④ **고지 문구 존재**. 끝에 VERDICT: PASS|FAIL."
+  - id: 10
+    name: Wiki Update
+    profile: curator
+    upstream: [9]             # 게이트: 9 PASS 시 unblock
+    body: "기술분야·선행기술 지형·청구항 작성 패턴을 llm-wiki 에 반영(entities/concepts) + reflection + 재사용률 갱신. 같은 기술분야의 다음 출원에서 선행기술 조사를 재사용할 수 있게 정리한다."
+  - id: 11
+    name: Deliver
+    profile: default          # Solomon
+    sam_gate: true
+    approval_artifact: "reports/<MID>/spec.md"
+    upstream: [10]
+    body: "① 번들 조립: spec.md · applications/*.md · 청구항 대조표(claim-chart.md) · 선행기술 비교표(prior-art-comparison.md) · 도면 목록 · 출원 체크리스트 · **usage-disclaimer.md(필수)**. ② 커밋 + git push(컨테이너 GITHUB_TOKEN 자격) + Slack 요약. ⚠️ Slack 요약에도 '변리사 검토 권장'을 명시하라. ⚠️ Slack 게시는 반드시 `hermes send --to slack:#mission-log \"<요약+커밋링크>\"`(Web API)로 하라 — 에이전트 slack 도구는 인바운드 Socket Mode 어댑터에 의존해 실패할 수 있다(현재 flapping)."
