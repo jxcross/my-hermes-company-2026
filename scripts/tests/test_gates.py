@@ -48,6 +48,10 @@ content_accessibility = _load("content_accessibility")
 atomic_commit = _load("atomic_commit")
 test_pass_rate = _load("test_pass_rate")
 behavior_diff = _load("behavior_diff")
+owasp_coverage = _load("owasp_coverage")
+cve_remediation = _load("cve_remediation")
+finding_completeness = _load("finding_completeness")
+secret_redaction = _load("secret_redaction")
 
 
 # ── prisma_counts ────────────────────────────────────────────────────────
@@ -755,6 +759,103 @@ def test_parse_items_binds_fields_to_entry():
 def test_fingerprint_block_parsed_from_baseline():
     text = "```fingerprint\n- case: f1\n  input: x\n- case: f2\n  input: y\n```\n"
     assert [c["case"] for c in behavior_diff.parse_items(text, "fingerprint", "case")] == ["f1", "f2"]
+
+
+
+# ── owasp_coverage (아키타입 L · 원본 GATE 2) ──────────────────────────────
+def test_owasp_requires_structured_entry_not_bare_mention():
+    """원본은 `re.search(r"\\bA01_?")` — 문서 어딘가에 글자만 있으면 covered 로 셌다.
+    실측: 'A01 … A10 은 앞으로 점검할 예정이다' 한 줄에 **커버리지 10/10 PASS**."""
+    text = "A01 A02 A03 A04 A05 A06 A07 A08 A09 A10 은 앞으로 점검할 예정이다.\n"
+    assert owasp_coverage.parse_entries(text) == {}      # 구조화 항목이 없으면 0건
+
+
+def test_owasp_entry_fields_bound():
+    text = ("```owasp\n- id: A01\n  status: audited\n  findings: 2\n  evidence: 근거\n"
+            "- id: A02\n  status: not_applicable\n  evidence: 해당 없음 사유\n```\n")
+    got = owasp_coverage.parse_entries(text)
+    assert got["A01"]["findings"] == "2" and got["A02"]["status"] == "not_applicable"
+
+
+def test_owasp_ids_normalized_uppercase():
+    got = owasp_coverage.parse_entries("```owasp\n- id: a03\n  status: audited\n```\n")
+    assert "A03" in got
+
+
+# ── cve_remediation (아키타입 L · 원본 GATE 3) ─────────────────────────────
+def test_cve_scan_evidence_fields():
+    """원본은 스캔을 몇 개 대조했는지 묻지 않아 'CVE 0건'을 그대로 받았다."""
+    text = "scanned_manifests: 2\nscanned_packages: 137\n"
+    assert cve_remediation.int_field(text, "scanned_manifests") == 2
+    assert cve_remediation.int_field(text, "scanned_packages") == 137
+    assert cve_remediation.int_field(text, "scanned_images") is None
+
+
+def test_cve_items_keep_severity_and_remediation():
+    blk = ("- cve_id: CVE-1\n  severity: high\n  remediation: 올린다\n"
+           "- cve_id: CVE-2\n  severity: low\n")
+    got = cve_remediation.parse_cves(blk)
+    assert got[0]["severity"] == "high" and got[0]["remediation"] == "올린다"
+    assert "remediation" not in got[1]
+
+
+# ── finding_completeness (아키타입 L · 원본 GATE 1을 뒤집은 것) ─────────────
+def test_findings_parsed_with_all_fields():
+    blk = ("- id: f1\n  severity: high\n  location: a.py:1\n  evidence: 근거\n"
+           "  impact: 영향\n  remediation: 조치\n")
+    got = finding_completeness.parse_findings(blk)
+    assert got[0]["location"] == "a.py:1" and got[0]["remediation"] == "조치"
+
+
+def test_declared_count_field_is_none_when_absent():
+    """원본 `parse_int` 는 없으면 0 을 줘서 **보고서가 깨져도 PASS**(fail-open)였다."""
+    assert finding_completeness.int_field("n_high: 2\n", "n_high") == 2
+    assert finding_completeness.int_field("n_high: 2\n", "n_critical") is None
+
+
+def test_default_caps_are_unlimited():
+    """감사 게이트가 '취약점 0건'을 요구하면 **발견할수록 보고서가 막힌다**(§5).
+    기본값은 무제한이어야 한다 — 건수 판단은 사람의 몫."""
+    import json as _json, tempfile, os as _os
+    d = tempfile.mkdtemp()
+    p2 = _os.path.join(d, "pipeline.json")
+    with open(p2, "w", encoding="utf-8") as f:
+        _json.dump({"policy": {"finding_policy": {}}}, f)
+    pol = finding_completeness.load_policy(p2)
+    assert pol.get("max_critical") is None and pol.get("max_high") is None
+
+
+# ── secret_redaction (아키타입 L · 신설) ────────────────────────────────────
+def test_masked_secret_is_allowed():
+    """마스킹 표기를 막으면 발견을 보고할 수 없다 — 값만 막아야 한다."""
+    assert secret_redaction.is_redacted("AKIA****")
+    assert secret_redaction.is_redacted("<redacted>")
+    assert not secret_redaction.is_redacted("AKIAIOSFODNN7EXAMPLE")
+
+
+def test_real_aws_key_is_blocked():
+    hits = secret_redaction.scan("키 AKIAIOSFODNN7EXAMPLE 노출", ["AWS 액세스키"])
+    assert [k for k, _ in hits] == ["AWS 액세스키"]
+
+
+def test_private_key_block_is_blocked():
+    hits = secret_redaction.scan("-----BEGIN RSA PRIVATE KEY-----", ["개인키"])
+    assert hits
+
+
+def test_private_dir_excluded_from_scan():
+    """`_private/` 는 gitignore 대상이라 커밋되지 않는다 — 검사 대상이 아니다."""
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    _os.makedirs(_os.path.join(d, "_private"))
+    open(_os.path.join(d, "a.md"), "w").write("x")
+    open(_os.path.join(d, "_private", "b.md"), "w").write("y")
+    got = [_os.path.basename(f) for f in secret_redaction.files_of(d)]
+    assert got == ["a.md"]
+
+
+def test_disclaimer_terms_mention_not_formal_audit():
+    assert any("정식 보안 감사" in t for t in secret_redaction.DEFAULT_DISCLAIMER_TERMS)
 
 
 

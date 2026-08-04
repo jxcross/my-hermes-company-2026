@@ -14,3 +14,8 @@ __pycache__/
 # 초안 자체는 플레이스홀더로 쓰며 `scripts/gates/legal_safety.py` 가 평문 개인정보를 반려한다.
 _personal/
 reports/**/_personal/
+
+# 보안 감사 상세(아키타입 L) — 취약점 위치·재현·원문 증거는 공개 저장소에 남기지 않는다.
+# 공유용 요약만 reports/<MID>/report/ 로 커밋한다. `secret_redaction` 게이트가 커밋 대상만 검사한다.
+_private/
+reports/**/_private/

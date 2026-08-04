@@ -25,6 +25,24 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#34 — secforge → 아키타입 L(보안 감사) · 게이트 3종 <b>전부 fail-open</b> + "취약점 0건" 게이트를 뒤집다</h2>
+    <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "다음 진행"(docs/13 진행 대장 #12, secforge).</div>
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li><b>⚠️ 원본 게이트 3종이 전부 fail-open</b>(실측): <code>severity_check</code>에 <b>빈 보고서</b>를 주면 <code>PASS exit=0</code>(<code>parse_int</code>가 키 없으면 0) · <code>owasp_coverage</code>에 "<b>A01 … A10 은 앞으로 점검할 예정이다</b>" 한 줄을 주면 <b>covered 10/10 PASS</b>(글자의 존재를 감사의 증거로 셌다) · <code>cve_check</code>는 <b>스캔을 아예 안 돌려도</b> PASS(블록 없으면 <code>""</code>). 보안 도메인에서 "데이터가 없다"는 "문제가 없다"가 아니다 — 셋 다 fail-closed로 뒤집었다.</li>
+      <li><b>🔄 GATE 1은 판정 방향을 뒤집어 이식</b>(가장 중요한 판단): 원본 하드게이트는 "Critical/High = 0건"인데, secforge는 스스로 <b>report-only</b>(자동 수정 없음)라고 선언한다. 즉 <b>취약점을 찾을수록 게이트가 FAIL이 되어 보고서가 finalize되지 않는다.</b> 심각한 발견이 나왔을 때야말로 보고가 빨리 사람에게 가야 하는데 바로 그때 막힌다 — <b>게이트가 발견을 벌한다.</b> → <code>finding_completeness</code>로 바꿔 "몇 건이냐"가 아니라 <b>"보고가 조치 가능한가"</b>(위치·근거·영향·조치)를 본다. 건수 상한은 정책으로 남겼으나 <b>기본 무제한</b>.</li>
+      <li><b>⚠️ 자기 신고 숫자만 보던 구멍</b>: 원본은 <code>n_critical:</code>/<code>n_high:</code> 줄만 읽어, 목록에 Critical 5건을 적고 <code>n_critical: 0</code>이라 써도 통과했다. → 선언 수치와 실제 목록을 대조.</li>
+      <li><b>🔒 공개 범위를 파이프라인이 나눈다</b>(legal-draft 교훈의 더 날카로운 적용): 이 저장소는 PUBLIC이고 Deliver가 <code>reports/</code>를 push하는데, 보안 감사의 산출물은 <b>취약점의 위치와 재현 방법</b>이고 secrets-scanner는 <b>실제 키 값</b>을 찾아낸다. 그대로 push하면 <b>감사가 곧 공격 안내서이자 유출 사고</b>가 된다. → <code>_private/</code>(상세·<b>gitignore</b>) ↔ <code>report/</code>(공유용 요약·커밋)로 분리. <code>secret_redaction</code> 게이트 신설(커밋 대상만 검사, <code>_private/</code>는 제외 — 거기엔 값이 있어야 한다). 마스킹 표기(<code>AKIA****</code>)는 허용 — 막으면 발견을 보고할 방법이 없다.</li>
+      <li><b>신규 profile 0개 — 대장의 "예상 있음(스캐너)"은 빗나갔다</b>: 이 하네스의 스캐너는 <code>Grep</code>/<code>Glob</code>로 소스를 읽어 패턴을 분류한다 = <code>reader</code>(docforge와 같은 판정). 실제 스캐닝 도구(semgrep·trivy)를 붙이면 그때는 <b>실행 결과로 판정하는</b> <code>tester</code> 계열이 될 것이라고 §7에 남겼다.</li>
+      <li><b>깨뜨린 픽스처 22케이스</b>: 정상 4 + fail-open 3 + 결함 12 + <b>설계 회귀방어 2</b>(Critical 2건이어도 통과하는지 · <code>_private/</code>의 진짜 비밀은 검사 제외인지) + 원본 회귀방어 1. <b>픽스처가 자체 결함 2건도 잡았다</b> — 블록 부재 시 exit 1을 내 문서화한 계약(exit 2)과 어긋났다. 단위 테스트 13종 추가.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      <b>아키타입 L 확보 — 12/20</b>. 린터 12/12. 테스트 <b>29+21+109 = 159종 통과</b>. 객관 게이트 <b>30종</b>. <b>변환 12건 연속 결함 발견</b>. 새 교훈 3건을 docs/13 §5에 기록: <b>게이트가 FAIL을 낼 때 파이프라인이 하려던 일이 무엇인지 물어라</b>(발견이 목적인데 발견을 막는 게이트) · <b>보안 게이트가 fail-open이면 장식이다</b>(<code>if not m: block = ""</code>를 보면 그 자리가 구멍) · <b>산출물이 민감하면 "무엇이 커밋되는가"를 템플릿이 정해야 한다</b>. 다음 변환 = agentforge.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#33 — migrateforge → 아키타입 K(코드 마이그레이션) · <b>회귀를 못 잡는 회귀 게이트</b> + git 병렬 제거</h2>
     <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "다음 진행"(docs/13 진행 대장 #11, migrateforge).</div>
