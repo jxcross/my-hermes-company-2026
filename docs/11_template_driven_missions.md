@@ -127,6 +127,8 @@ scout를 `academic/industry/patents/news` **4워커로 분화** + `source_type` 
 2. **일반화** — 린터·매처·manifest. B/D 템플릿 추가.
 3. **매칭 자동화** — Solomon이 미션→템플릿 선택.
 
+> **[2026-08-04] 위 2·3과 §3.C·§3.E·§3.F의 협상 설계는 [`12_pipeline_negotiation.md`](./12_pipeline_negotiation.md)로 확장·구체화됐다.** 핵심 발견: **현행 구조에는 협상이 들어갈 자리가 없다**(인스턴스화가 협상보다 먼저 일어나 stage 1 본문에 "카드를 새로 만들지 마라" 방어 문구가 박힘). docs/12는 협상을 **Phase 0(카드 생성 전, 비파괴)**으로 앞당기고, 논의 단위를 **단계→의도**로 바꾸며, 3층 구조(`_base.yaml`/아키타입/미션 오버레이)·매칭 3-way 판정·maturity 등급·축적 루프를 제안한다.
+
 ## 8. 검증 (설계 타당성 판정)
 - Pilot에서 `instantiate_template.py trend-report M-2026-003`가 현 11단계와 **동등한 Kanban 그래프** 생성(수동 대비 diff 0).
 - 객관 게이트가 스크래치 미션에서 recency 비율·source_type 균형을 정확히 FAIL/PASS 판정, gate_keeper와 합쳐 반려 루프 발동.

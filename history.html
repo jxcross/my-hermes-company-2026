@@ -25,6 +25,23 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#21 — 미션 파이프라인 협상 설계 (docs/12) — 구상 검토·지적·대안</h2>
+    <div class="meta">2026-08-04 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "미션은 던지는 게 아니라 Sam↔Solomon이 목적·범위·워크플로우를 논의해 확정한 뒤 전권을 넘기는 방식이다. 대화 중 적당한 템플릿 yaml을 찾고 단계를 가감할 수 있나? 더 나은 업무 프로세스는?" → <b>구상을 검토하고 잘못된 부분을 지적하고 더 좋은 방향을 제시하라</b> → 정리해 md로 저장.</div>
+    <div class="label">검토·지적:</div>
+    <ol class="steps">
+      <li><b>구조적 모순 발견</b>: 협상은 카드 생성 <b>전</b>에 끝나야 하는데 현행 Scoping은 카드가 다 만들어진 <b>후</b>의 stage 1. 그 증거가 템플릿 stage1 본문의 방어 문구(<code>⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들지 마라</code>) — docs/10 §4.3 자율분해 사고의 <b>대증요법</b>이며 근본은 순서 오류. 즉 <b>현재 Scoping은 협상이 아니라 SCOPE.md 작성 + 개시 승인</b>. 또한 불변식 검사가 번역기에 인라인이라 협상 루프(조정→검사→재제시)에 못 붙음.</li>
+      <li><b>구상의 문제점 6가지 지적</b>: ①<b>논의 단위가 "단계"인 것이 잘못</b>(Sam이 가진 건 <b>의도</b> — 단계 가감은 Solomon의 번역 결과여야) ②<b>매칭 실패 모드 부재</b>(어중간한 매칭이 안 맞는 것보다 위험 — 11단계 다 돌고 드러남) ③"처음부터 구성"=빈 종이 문제 ④<b>검증 등급 없이 라이브러리를 키우면 품질 저하</b>(harness는 Claude Code 런타임 실증일 뿐) ⑤<b>임포트의 진짜 작업은 agent→profile 매핑</b>(paperforge agent 12개 vs 우리 profile 8종 고정) ⑥조정이 자산으로 축적 안 됨.</li>
+      <li><b>대안 제시</b>: <b>3층 구조</b>(<code>_base.yaml</code> 불변 골격 / 아키타입+maturity / 미션 오버레이+승인 시 <code>pipeline.resolved.yaml</code> 동결) · <b>의도 기반 협상 프로토콜</b>(Sam은 의도만 말하고 mermaid+변경 3줄만 봄, <b>승인 전까지 카드 0개</b>) · <b>매칭 3-way 판정</b>(높음/어중간=경고+신규구성 병행/낮음=골격에서 신규) · <b>축적 루프</b>(draft→tested→proven, 조정 3회 반복 시 승격 제안).</li>
+      <li><b>사실 확인</b>: harness 28종 중 미션 아키타입 후보는 <b>20종</b>(domain 9 + research 11; cli 8 제외) · <code>match_template.py</code>·<code>lint_template.py</code>·<code>manifest.json</code> <b>전부 미구현</b> · 실증된 템플릿은 <code>trend-report</code> 하나뿐.</li>
+      <li><code>docs/12_pipeline_negotiation.md</code> 작성(11개 절: 진단·문제점6·제안4·컴포넌트·phasing·미결·검증·리스크) + docs/11 §7에 포인터.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      Sam의 구상은 방향이 옳으나 <b>협상이 들어갈 자리가 없다</b>는 것이 핵심 결론. 설계 문서로 고정하고 <b>구현은 Sam 확정 후 별도 계획</b>. <b>미결(Sam 결정)</b>: 협상 장소(Claude Code / Slack·Solomon / 양쪽) · 첫 구현 범위 · 단계 가감 자유도.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#20 — 개념 점검 문답 + <code>parallel.batch_size</code> (delegation 배치 상한 명시)</h2>
     <div class="meta">2026-08-04 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> 이전 세션 이어서 상태 파악 → "지금까지 내가 생각한 개념대로 개발됐는지" 점검 문답(무엇을 만든 것인가·템플릿은 누가 만드나·harness 스킬 재활용·Kanban 매핑·새 웹UI 통신·subagent 병렬 방식) → 마지막에 <b><code>parallel.batch_size</code> 추가 지시</b>.</div>
