@@ -25,6 +25,16 @@ LLM 없이 검사한다.
 정책 필드(redaction_policy)
   require_disclaimer (기본 true) · disclaimer_terms
   block_secrets (기본 true) · secret_kinds (기본 전체) · min_entropy_len (기본 20)
+  scan_extensions (기본 [".md"]) — 검사할 확장자
+  disclaimer_files (기본 없음) — 고지를 반드시 담아야 하는 파일 basename 목록
+
+⚠️ **확장자를 정책으로 뺀 이유**(아키타입 M 도입, 2026-08-05). 보안 감사(L)의 산출물은
+   문서뿐이라 `.md` 만 훑으면 충분했다. 그런데 AI 시스템 평가(M)는 **코드와 설정을
+   커밋한다** — `src/<system>/config.yaml` 이나 `runs/<id>/config.json` 에 API 키가
+   남으면 문서를 아무리 검사해도 잡히지 않는다. 기본값은 `[".md"]` 이므로 L 의 동작은
+   그대로다.
+   `disclaimer_files` 도 같은 이유다 — 코드 파일마다 고지 문구를 요구할 수는 없으므로,
+   확장자를 넓힐 때는 고지 대상을 명시적으로 좁힌다(선언한 파일이 **없으면 FAIL**).
 
 exit: 0 PASS · 1 FAIL · 2 usage/입력없음(fail-closed)
 """
@@ -95,13 +105,15 @@ def scan(text: str, kinds: list[str]) -> list[tuple[str, str]]:
     return hits
 
 
-def files_of(draft: str) -> list[str]:
+def files_of(draft: str, exts: list[str] | None = None) -> list[str]:
+    exts = tuple(exts or [".md"])
     if os.path.isdir(draft):
         out = []
         for dirpath, dirs, names in os.walk(draft):
-            # _private/ 는 커밋 대상이 아니다(gitignore) — 검사에서 제외한다
-            dirs[:] = [d for d in dirs if d != "_private"]
-            out += [os.path.join(dirpath, n) for n in sorted(names) if n.endswith(".md")]
+            # _private/ 는 커밋 대상이 아니다(gitignore) — 검사에서 제외한다.
+            # __pycache__ 도 커밋 대상이 아니다(.gitignore).
+            dirs[:] = [d for d in dirs if d not in ("_private", "__pycache__")]
+            out += [os.path.join(dirpath, n) for n in sorted(names) if n.endswith(exts)]
         return sorted(out)
     return [draft] if os.path.isfile(draft) else []
 
@@ -120,20 +132,33 @@ def main() -> int:
     except (OSError, ValueError, yaml.YAMLError) as e:
         print(f"FAIL(usage): {e} — fail-closed", file=sys.stderr); return 2
 
-    files = files_of(args.draft)
+    exts = policy.get("scan_extensions") or [".md"]
+    files = files_of(args.draft, exts)
     if not files:
-        print(f"FAIL(usage): 검사할 문서를 찾지 못했다({args.draft}) — fail-closed", file=sys.stderr)
+        print(f"FAIL(usage): 검사할 문서를 찾지 못했다({args.draft}, 확장자 {exts}) — fail-closed",
+              file=sys.stderr)
         return 2
 
     require_disc = bool(policy.get("require_disclaimer", True))
     terms = policy.get("disclaimer_terms") or DEFAULT_DISCLAIMER_TERMS
     block = bool(policy.get("block_secrets", True))
     kinds = policy.get("secret_kinds") or list(SECRET_PATTERNS)
+    disc_files = policy.get("disclaimer_files") or None
 
-    print(f"커밋 대상 문서 {len(files)}건 · 고지 필수={require_disc} · 비밀값 차단={block} "
-          f"(`_private/` 는 검사 제외 — gitignore 대상)")
+    print(f"커밋 대상 파일 {len(files)}건(확장자 {exts}) · 고지 필수={require_disc} · "
+          f"비밀값 차단={block} (`_private/` 는 검사 제외 — gitignore 대상)")
 
     fail = False
+    # 고지 대상을 명시했다면 그 파일들이 **실재하는지**부터 본다 — 없으면 검사할 것이 없어
+    # 통과하는 구멍이 된다(§5 '선언 목록 대비 존재').
+    if require_disc and disc_files:
+        have = {os.path.basename(p) for p in files}
+        gone = [n for n in disc_files if n not in have]
+        if gone:
+            print(f"FAIL: 고지를 담아야 할 파일 {gone} 이 커밋 대상에 없다 — 파일이 없으면 "
+                  f"고지 검사가 통째로 건너뛰어진다")
+            fail = True
+
     for path in files:
         name = os.path.relpath(path, args.draft if os.path.isdir(args.draft) else os.path.dirname(path))
         try:
@@ -142,7 +167,9 @@ def main() -> int:
             print(f"FAIL: {name} 읽기 실패 ({e})"); fail = True; continue
 
         bad = False
-        if require_disc and not any(t.lower() in text.lower() for t in terms):
+        # 고지 대상: 선언이 있으면 그 파일만, 없으면 기존 동작(검사 대상 .md 전부)
+        needs_disc = (os.path.basename(path) in disc_files) if disc_files else path.endswith(".md")
+        if require_disc and needs_disc and not any(t.lower() in text.lower() for t in terms):
             print(f"FAIL: {name} 에 고지 문구가 없다 — 보조 감사 결과가 정식 보안 감사로 "
                   f"오인될 수 있다(인정 문구: {terms[:2]}…)")
             bad = True

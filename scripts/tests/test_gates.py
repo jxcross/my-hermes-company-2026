@@ -52,6 +52,10 @@ owasp_coverage = _load("owasp_coverage")
 cve_remediation = _load("cve_remediation")
 finding_completeness = _load("finding_completeness")
 secret_redaction = _load("secret_redaction")
+eval_set_quality = _load("eval_set_quality")
+stat_significance = _load("stat_significance")
+repro_determinism = _load("repro_determinism")
+run_completeness = _load("run_completeness")
 
 
 # ── prisma_counts ────────────────────────────────────────────────────────
@@ -856,6 +860,98 @@ def test_private_dir_excluded_from_scan():
 
 def test_disclaimer_terms_mention_not_formal_audit():
     assert any("정식 보안 감사" in t for t in secret_redaction.DEFAULT_DISCLAIMER_TERMS)
+
+
+def test_scan_extensions_default_stays_md_only():
+    """아키타입 M 이 확장자를 정책으로 뺐다 — **기본값은 L 의 동작 그대로**여야 한다."""
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    open(_os.path.join(d, "a.md"), "w").write("x")
+    open(_os.path.join(d, "b.py"), "w").write("y")
+    assert [_os.path.basename(f) for f in secret_redaction.files_of(d)] == ["a.md"]
+    got = sorted(_os.path.basename(f) for f in secret_redaction.files_of(d, [".md", ".py"]))
+    assert got == ["a.md", "b.py"]
+
+
+# ── eval_set_quality (아키타입 M · 신설 — 원본엔 스크립트가 없다) ──────────
+def test_difficulty_aliases_accept_korean():
+    """라벨이 한국어라고 분포 검사가 무력해지면 안 된다(§5 한국어 함정)."""
+    assert eval_set_quality.norm_difficulty("쉬움") == "easy"
+    assert eval_set_quality.norm_difficulty("어려움") == "hard"
+    assert eval_set_quality.norm_difficulty("MEDIUM") == "medium"
+    assert eval_set_quality.norm_difficulty("몰라") is None
+
+
+def test_question_normalization_catches_reworded_duplicate():
+    a = eval_set_quality.norm_question("설치는 어떻게 하나요?")
+    b = eval_set_quality.norm_question("설치는  어떻게 하나요 ?")
+    assert a == b
+
+
+def test_gold_context_accepts_str_and_list():
+    assert eval_set_quality.gold_contexts({"gold_context": "c1"}) == ["c1"]
+    assert eval_set_quality.gold_contexts({"gold_context": ["c1", "c2"]}) == ["c1", "c2"]
+    assert eval_set_quality.gold_contexts({}) == []
+
+
+# ── stat_significance (원본 결함 3건) ───────────────────────────────────────
+def test_zero_variance_effect_size_is_not_infinite():
+    """원본은 표준편차 0 일 때 float('inf') 를 돌려줘 **균일한 +0.001 을 '무한대 효과'**
+    로 통과시켰다. None 이어야 하고, 판정은 실질 유의성이 맡는다(§5)."""
+    assert stat_significance.cohens_d_paired([0.001] * 20) is None
+    d = stat_significance.cohens_d_paired([0.1, 0.2, 0.3])
+    assert d is not None and d > 0
+
+
+def test_metric_alias_and_at_k_extraction():
+    m = {"per_item": [{"id": "q1", "answer_correctness_score": 0.5},
+                      {"id": "q2", "answer_correctness": 0.7}]}
+    assert stat_significance.per_item_values(m, "answer_correctness") == {"q1": 0.5, "q2": 0.7}
+    m2 = {"per_item": [{"id": "q1", "recall_at_k": {"5": 1.0}}]}
+    assert stat_significance.per_item_values(m2, "recall@5") == {"q1": 1.0}
+
+
+def test_roles_parsed_from_systems_block():
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    open(_os.path.join(d, "design.md"), "w", encoding="utf-8").write(
+        "```systems\n- id: a\n  role: baseline\n- id: b\n  role: proposed\n```\n")
+    assert stat_significance.parse_systems(d) == {"a": "baseline", "b": "proposed"}
+
+
+# ── repro_determinism (원본 결함: 자기 기본값을 반려) ──────────────────────
+def test_documented_default_embedding_is_not_rejected():
+    """원본의 '숫자 2개 이상' 휴리스틱은 agentforge 자신의 기본값
+    `text-embedding-3-small` 을 FAIL 시켰다(실측 exit=1) — 반대 방향의 고장(§5)."""
+    assert repro_determinism.check_model_pin(
+        "text-embedding-3-small", "embedding", "r1", repro_determinism.DEFAULT_VAGUE) == []
+
+
+def test_unpinned_alias_is_rejected():
+    assert repro_determinism.check_model_pin("gpt-4o", "llm", "r1",
+                                             repro_determinism.DEFAULT_VAGUE)
+    assert repro_determinism.check_model_pin("claude-sonnet-latest", "llm", "r1",
+                                             repro_determinism.DEFAULT_VAGUE)
+    assert repro_determinism.check_model_pin("gpt-4o-2024-08-06", "llm", "r1",
+                                             repro_determinism.DEFAULT_VAGUE) == []
+
+
+def test_scalars_flattens_nested_metrics():
+    got = repro_determinism.scalars({"a": 1, "b": {"c": 2.5}, "d": "x", "e": True})
+    assert got == {"a": 1.0, "b.c": 2.5}
+
+
+# ── run_completeness (신설) ────────────────────────────────────────────────
+def test_run_name_regex_splits_system_and_seed():
+    m = run_completeness.RUN_NAME_RE.match("abl-no-rerank__seed22")
+    assert m and m.group("sys") == "abl-no-rerank" and m.group("seed") == "22"
+    assert run_completeness.RUN_NAME_RE.match("run-01") is None
+
+
+def test_systems_block_parses_change_field():
+    got = run_completeness.parse_systems(
+        "- id: a\n  role: ablation\n  change: 리랭커 제거\n- id: b\n  role: baseline\n")
+    assert got[0]["change"] == "리랭커 제거" and got[1]["role"] == "baseline"
 
 
 

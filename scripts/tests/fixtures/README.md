@@ -18,7 +18,9 @@
 원본 결함의 회귀 방어**를 함께 돌린다.
 
 실제로 이 하네스가 **내 게이트의 자체 결함도 여러 번 잡았다**:
-`week: 1` 필드형 주차 미인식(J) · 블록 부재 시 exit 1/2 불일치(L).
+`week: 1` 필드형 주차 미인식(J) · 블록 부재 시 exit 1/2 불일치(L) ·
+픽스처 자신의 truncate-before-read 로 48행 대신 0행을 검사하던 것(M —
+게이트는 옳았지만 **테스트가 주장한 것을 테스트하지 않고 있었다**).
 
 ## 실행
 
@@ -43,6 +45,7 @@ docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/fixt
 | `lecture.py` | J 강의 자료 | objective_coverage · bloom_distribution · course_consistency · content_accessibility | 18 |
 | `migrate.py` | K 마이그레이션 | atomic_commit · test_pass_rate · behavior_diff | 19 |
 | `sec.py` | L 보안 감사 | finding_completeness · owasp_coverage · cve_remediation · secret_redaction | 22 |
+| `agent.py` | M AI 시스템 평가 | eval_set_quality · stat_significance · repro_determinism · run_completeness · source_balance · secret_redaction | 43 |
 
 **게이트를 고칠 때는 해당 하네스를 반드시 다시 돌려라.** 단위 테스트만 통과하는 수정은
 판정 경로 전체를 검증하지 않는다.

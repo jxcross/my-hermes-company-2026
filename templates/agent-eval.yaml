@@ -1,0 +1,226 @@
+# 아키타입 M — AI 시스템 구축·평가(RAG/Agentic) (13단계)
+# 출처: other_projects/harness-templates/research-harnesses/project_agentforge
+#       (.claude/skills/agentforge/SKILL.md 9-stage + agents 12종). 변환 절차: docs/13
+#
+# 이 아키타입이 만드는 것: **논문에 실을 수 있는 평가 결과**다. 코퍼스를 준비하고 인덱스를
+# 설계하고 baseline·proposed·ablation 시스템을 구현해 seed 를 바꿔 가며 돌린 뒤,
+# "제안 시스템이 기준보다 유의하게 낫다"를 통계로 뒷받침한다. 산출물(`report/paper-artifacts/`)은
+# 아키타입 B(academic-paper)의 입력으로 그대로 넘어간다.
+#
+# ⚠️ **이 파이프라인은 코드를 만들고 실행하며 외부 API 를 호출한다 — 비용과 부작용이 있다.**
+#    아키타입 K(code-migration)가 '미션 밖 저장소를 고친다'면 이쪽은 '미션 안에서 코드를
+#    만들어 돌린다'. 대상이 미션 디렉터리 안이라 K 보다 안전하지만, **stage 8 은 LLM API 를
+#    수십~수백 회 호출**하므로 그 직전에 Sam 승인 게이트를 뒀다(되돌리기 어려운 행위 앞에는
+#    사람을 둔다).
+#
+# ⚠️ **공개 범위 — 이 저장소는 PUBLIC 이고 Deliver 가 `reports/` 를 push 한다.**
+#    아키타입 L 에서 세운 규율을 이 도메인의 형태로 적용한다:
+#      · `reports/<MID>/_private/` (gitignore) — **코퍼스 원문·청크**(제3자 문서라 저작권·
+#        라이선스 문제가 있다)와 **run 의 예측 원본**(`raw.jsonl` — 코퍼스 발췌를 담는다).
+#      · 커밋 대상 — 코드(`src/`)·run 설정과 지표(`config.json`·`metrics.json`)·평가셋·
+#        보고서·paper-artifacts.
+#    그리고 이 도메인만의 위험이 하나 더 있다: **커밋되는 것이 문서만이 아니라 코드와 설정**
+#    이라 API 키가 `config.json`·`agent.py` 에 남을 수 있다. 그래서 `secret_redaction` 을
+#    `scan_extensions` 로 확장했다(기본은 `.md` 뿐이라 아키타입 L 동작은 그대로).
+#
+# 변환 판단(요약 — 상세·근거는 docs/13 §2·§5):
+#  - **원본 게이트 2종에서 결함 5건을 실측**했다. 가장 큰 것: 통계 유의성 게이트가 **방향을
+#    보지 않아** 제안 시스템이 30%p 퇴보해도 PASS 였다. `stat_significance` 로 뒤집었다.
+#  - **GATE 1(평가셋 품질)은 스크립트가 아예 없었다** — LLM 크리틱 하나뿐이다. 모든 수치의
+#    분모가 되는 평가셋이라 객관 게이트를 신설했다(`eval_set_quality`).
+#  - **검증을 앞으로 당겼다.** 원본은 평가셋 품질을 stage 8(전부 돌린 뒤)에서야 검사한다.
+#    거기서 FAIL 이면 시스템 구현과 전 run 을 다시 해야 한다 — **API 비용이 그대로 두 배**다.
+#    우리는 평가셋 검증(6)을 구현·실행 **전에** 뒀다(lecture-course·code-docs 와 같은 판단).
+#  - **신규 profile 0개 — 대장의 "예상 있음(평가 실행)"은 빗나갔다.** system-builder 는
+#    tools 가 `developer`(specflow backend-dev)와 같고, run-evaluator 는 **실행 결과로
+#    판정·산출**하므로 `tester` 다(migrateforge 의 baseline-snapshot 과 같은 판정).
+#  - stage 7(시스템 구현)의 병렬은 안전하다 — 시스템마다 `src/<id>/` 로 트리가 겹치지 않고
+#    **git 커밋을 하지 않는다**(커밋은 Deliver 에서 한 번). 아키타입 K 의 `.git/index.lock`
+#    경합 문제가 여기서는 없다.
+#  - `eval_metrics.py`·`latex_export.py` 는 **판정하지 않는다 = 게이트가 아니라 산출 도구**다
+#    (Tester·Writer 가 미션 안에서 만들어 쓴다). `runs_state.py` 는 Kanban 이 대체한다.
+#
+# 스키마 규약은 templates/trend-report.yaml 머리말 참조.
+
+name: agent-eval
+category: research
+display_name: AI 시스템 구축·평가(RAG/Agentic, 논문용)
+maturity: draft
+goal_kr: 도메인 코퍼스로 RAG/Agentic 시스템의 baseline·proposed·ablation 을 구현·평가하고, 통계적으로 뒷받침된 논문용 평가 산출물을 낸다.
+requires_profiles: [architect, developer, tester]
+invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop, sources_cited]
+
+policy:
+  # 코퍼스 출처 균형 — 한 종류의 문서만으로 만든 RAG 는 그 종류만 잘한다.
+  # ⚠️ `recency_check` 는 쓰지 않는다. 원본 기본값("dynamic domain 은 최근 24개월")을 하드
+  #    게이트로 올리면 **매뉴얼·표준처럼 정적인 코퍼스가 통째로 반려**된다. 최신성이 중요한
+  #    미션이면 Scoping 이 `recency_policy` 를 켜서 쓴다(정책은 템플릿 소유 — docs/13 §5).
+  source_balance_policy:
+    categories: [primary_doc, reference, faq, code, external]
+    min_per_category:
+      primary_doc: 2      # 대상 도메인의 1차 문서(매뉴얼·규격·논문 본문)
+      reference: 1        # 참조 자료(API 레퍼런스·용어집)
+      faq: 0
+      code: 0
+      external: 0
+    hard_block_if_missing: false
+
+  eval_policy:
+    min_items: 50                 # 원본 기본값. Scoping 에서 올릴 수 있다
+    difficulty_targets: {easy: 0.30, medium: 0.40, hard: 0.30}
+    difficulty_tolerance: 0.10
+    min_categories: 3
+    min_items_per_category: 3
+    min_question_chars: 6         # ⚠️ 어절이 아니라 **글자** — 국문 문항이 어절 하한에 걸리면 안 된다
+    min_answer_chars: 4
+    require_grounding: true       # gold_context ↔ 실제 chunk 대조(환각 금지)
+    chunks_file: _private/corpus/chunks.jsonl
+
+  stat_policy:
+    primary_metric: answer_correctness
+    higher_is_better: true        # ⚠️ 원본에 없던 축. 이것이 없어서 퇴보가 PASS 였다
+    alpha: 0.05
+    bootstrap_samples: 10000
+    bootstrap_seed: 42            # 게이트 판정이 실행마다 흔들리면 안 된다
+    min_effect_size: 0.2          # Cohen's d
+    min_mean_diff: 0.02           # 실질 유의성 — 축퇴(표준편차 0) 케이스 방어
+    min_paired_items: 30
+    min_paired_coverage: 0.9      # 평가셋 대비 짝지어진 항목 비율(분모 자기결정 방지)
+
+  repro_policy:
+    require_fields: [seed, llm, embedding, temperature]
+    # 버전이 핀 되지 않은 **별칭**만 막는다. 원본의 '숫자 2개 이상' 휴리스틱은
+    # agentforge 자신의 기본값 `text-embedding-3-small` 을 반려했다(docs/13 §5).
+    vague_models: [gpt-4, gpt-4o, gpt-4-turbo, gpt-3.5-turbo, claude-sonnet, claude-opus, claude-haiku, gemini-pro]
+    determinism_required: true
+    max_temperature: 0.0
+    require_replay: true
+    min_replays: 1
+    replay_tolerance: 0.01
+
+  run_policy:
+    seeds: [11, 22, 33]           # design.md 의 `seeds:` 선언이 우선
+    min_seeds: 3
+    min_ablations: 1
+    max_failed_ratio: 0.0         # baseline·proposed 는 전건 성공(원본은 실패 run 을 조용히 뺐다)
+    strict_roles: [baseline, proposed]
+    require_src: true
+    allow_undeclared_runs: false
+
+  redaction_policy:
+    require_disclaimer: true
+    disclaimer_terms: ["재현을 보장하지 않습니다", "동료 심사를 거치지 않았", "단일 환경에서 수행"]
+    disclaimer_files: [usage-disclaimer.md, report.md]
+    block_secrets: true
+    # ⚠️ 이 아키타입은 **코드와 설정을 커밋한다** — 문서만 훑으면 키를 놓친다
+    scan_extensions: [".md", ".py", ".json", ".jsonl", ".yaml", ".yml", ".sh", ".txt", ".env", ".cfg", ".toml"]
+
+stages:
+  - id: 1
+    name: Scoping
+    profile: default          # Solomon
+    sam_gate: true
+    upstream: []
+    body: "미션 스펙을 reports/<MID>/SCOPE.md 에 작성 — 평가 대상 과제(무엇을 하는 AI 시스템인가) · **1차 지표와 보조 지표** · 유의수준·효과크기 하한 · **seed 목록** · 코퍼스 출처와 라이선스 · 목표 발표처 · 완료조건. ⚠️ **안전·비용 규약**: ① 이 파이프라인은 코드를 만들고 **실행**하며 LLM API 를 **수십~수백 회** 호출한다. 예상 호출 수(= 시스템 수 × seed 수 × 평가셋 문항 수)와 대략의 비용을 SCOPE.md 에 적어라 — stage 9 승인 때 Sam 이 이 숫자를 본다. ② **산출물을 둘로 나눈다**: 코퍼스 원문·청크와 run 의 예측 원본(`raw.jsonl`)은 `reports/<MID>/_private/`(gitignore), 코드·설정·지표·보고서는 커밋 대상이다. 이 저장소는 PUBLIC 이다. ③ **코퍼스의 라이선스를 먼저 확인하라** — 재배포가 허용되지 않는 문서는 `_private/` 에 두고 원문을 커밋하지 않는다. ④ **API 키를 코드·설정에 적지 마라**(환경변수로 읽는다). 게이트가 커밋 대상의 평문 키를 반려한다. ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라."
+  - id: 2
+    name: Corpus Collect
+    profile: scout
+    upstream: [1]
+    parallel:
+      mode: per_item
+      over: "SCOPE.md 가 선언한 코퍼스 출처군(문서 묶음). 묶음마다 subagent 1개."
+      shard: "_private/corpus/raw/<id>/"
+      merge_to: "_private/corpus/collect.md"
+      batch_size: 3
+    body: "코퍼스 원문을 수집해 `reports/<MID>/_private/corpus/raw/` 에 모으고, **출처 대장을 `reports/<MID>/raw/sources.yaml` 에 작성**한다(모든 문서에 `id`·`title`·`url` 또는 경로·`published_year`·`source_type`·`license`·`status`). `source_type` 은 정책 taxonomy 를 쓴다 — **primary_doc**(1차 문서: 매뉴얼·규격·논문 본문) · **reference**(API 레퍼런스·용어집) · **faq** · **code** · **external**. ⚠️ **원문은 `_private/` 에만 둔다** — 제3자 문서를 PUBLIC 저장소에 커밋하면 저작권 문제가 된다. ⚠️ **라이선스를 확인하고 `license:` 에 적어라.** 불명확하면 수집하지 말고 대체 출처를 찾아라. ⚠️ 코퍼스가 한쪽 종류로 쏠리면 그 종류만 잘하는 시스템이 나오고 평가가 그것을 못 본다."
+  - id: 3
+    name: Corpus Prep
+    profile: curator
+    upstream: [2]
+    body: "수집물을 정규화·중복제거·청킹해 `_private/corpus/chunks.jsonl` 로 만들고, 전략과 통계를 `reports/<MID>/corpus.md` 에 쓴다. **`chunks.jsonl` 형식을 정확히 지켜라**(게이트가 gold_context 를 이 파일과 대조한다): 한 줄에 한 청크, `{\"id\": \"chunk-0007\", \"source\": \"<sources.yaml 의 id>\", \"text\": \"…\", \"tokens\": 412}`. **id 는 유일하고 안정적**이어야 한다 — 평가셋이 이 id 를 가리키므로 나중에 다시 청킹하면 평가셋이 통째로 깨진다. corpus.md 에는 문서 수·청크 수·평균 길이·중복 제거 건수·청킹 전략(크기·겹침·경계 규칙)과 그 선택 이유를 적는다. ⚠️ 중복 제거를 하되 **무엇을 지웠는지 세어서 남겨라**(조용한 소실은 나중에 검색 실패로 나타나고 원인을 못 찾는다)."
+  - id: 4
+    name: Index & System Design
+    profile: architect
+    upstream: [3]
+    body: "검색 기반(인덱스)과 **비교 대상 시스템 집합**을 `reports/<MID>/design.md` 에 확정한다. ① **인덱스**: 임베딩 모델과 벡터 스토어를 **버전까지 못박고**(`text-embedding-3-small`·`bge-m3-v1.5` 처럼 그 API 의 정식 모델명), ANN 파라미터·하이브리드 검색 구성·top-k 를 적는다. 왜 그 선택인지 한 줄씩. ② **시스템 선언** — 다음 형식을 정확히 지켜라(게이트가 파싱한다):\n`seeds: [11, 22, 33]` 줄을 먼저 적고,\n```systems\n- id: baseline\n  role: baseline\n  description: 단순 top-k 검색 + 생성\n- id: proposed\n  role: proposed\n  description: 하이브리드 검색 + 리랭커\n- id: abl-no-rerank\n  role: ablation\n  change: 리랭커 제거\n```\n⚠️ **baseline 정확히 1개 · proposed 정확히 1개 · ablation 1개 이상**이다. ⚠️ **ablation 은 proposed 에서 딱 하나만 바꾼다** — 둘을 동시에 바꾸면 무엇이 효과를 냈는지 말할 수 없고, `change:` 에 그 하나를 적어야 한다. ⚠️ **baseline 을 일부러 약하게 만들지 마라.** 약한 baseline 을 이기는 것은 아무것도 증명하지 않으며, stage 10 의 검증자가 이 점을 본다. ⚠️ `<system_id>` 는 디렉터리·run 이름이 되므로 공백 없이."
+  - id: 5
+    name: Eval Set Build
+    profile: reader
+    upstream: [4]
+    body: "코퍼스에서 gold Q-A 를 뽑아 `reports/<MID>/eval-set.jsonl` 과 개요 `eval-set.md` 를 만든다. **한 줄에 한 문항**: `{\"id\": \"q001\", \"question\": \"…\", \"gold_answer\": \"…\", \"gold_context\": [\"chunk-0007\"], \"difficulty\": \"medium\", \"category\": \"설치\"}`. ⚠️ **gold_context 는 반드시 `chunks.jsonl` 에 실재하는 id 여야 한다 — 지어내지 마라.** 게이트가 대조한다(원본은 이것을 지시로만 금지하고 검사하지 않았다). ⚠️ **근거 청크에서 답이 실제로 도출되는 문항만** 넣어라. 도출되지 않으면 문항을 약화시키거나 버려라 — 코퍼스에 없는 것을 묻는 문항은 검색 성능이 아니라 모델의 사전지식을 잰다. ⚠️ 난이도 분포 easy 30% · medium 40% · hard 30%(±10%p), 카테고리 3종 이상·각 3문항 이상. ⚠️ **같은 질문을 표현만 바꿔 채우지 마라**(게이트가 정규화해 중복을 잡는다). ⚠️ 정답은 **채점 가능한 형태**로 — 근거 문장을 통째로 붙이지 말고 답만 간결히. eval-set.md 에는 문항 수·분포·카테고리별 건수·샘플 3문항을 싣는다."
+  - id: 6
+    name: Eval Set Verify
+    profile: fact-checker      # ≠ reader
+    verifier: true
+    upstream: [5]
+    gate:
+      objective: [eval_set_quality, source_balance]
+      llm: fact_checker_verdict
+      draft: "reports/<MID>/eval-set.jsonl"
+    body: "평가셋이 **측정 도구로 쓸 만한지** 검증한다(객관 게이트는 규모·분포·커버리지·근거 실재만 본다). ⚠️ **이 검증이 여기 있는 이유**: 원본은 이 검사를 전 시스템을 구현하고 전 run 을 돌린 뒤(stage 8)에야 한다. 거기서 FAIL 이면 **API 비용이 그대로 두 배**가 된다. 사람이 읽어야 할 것: ① **정답 도출 가능성** — 표본 문항의 `gold_context` 를 실제로 열어 그 청크만으로 `gold_answer` 가 나오는지 확인하라(게이트는 id 의 실재만 본다, 내용은 못 본다). ② **난이도 라벨의 타당성** — 'hard' 가 실제로 어려운가, 아니면 길기만 한가. 다중 근거·추론·부정 질의가 hard 에 있어야 한다. ③ **질문의 자연스러움** — 실제 사용자가 그렇게 묻는가, 아니면 청크 문장을 뒤집어 놓은 것인가(후자는 어떤 검색기든 잘한다). ④ **코퍼스 편향** — 특정 문서에서만 문항을 뽑지 않았는가. ⑤ 출처 대장(`raw/sources.yaml`)의 라이선스가 채워졌는가. 끝에 VERDICT: PASS|FAIL."
+  - id: 7
+    name: System Implement
+    profile: developer         # ≠ 검증자
+    upstream: [6]              # 게이트: 6 PASS 시 게이트키퍼가 unblock
+    parallel:
+      mode: per_item
+      over: "design.md 의 ```systems``` 블록에 선언된 시스템(baseline·proposed·ablation). 시스템마다 subagent 1개."
+      shard: "src/<id>/"
+      merge_to: "systems.md"
+      batch_size: 3
+    body: "선언된 시스템마다 `reports/<MID>/src/<system_id>/` 에 실행 가능한 구현을 만든다 — `agent.py`(평가셋을 읽어 문항마다 예측을 내고 `raw.jsonl` 로 쓴다) · `prompt.txt` · `config.yaml` · `requirements.txt` · `run.sh`. 오케스트레이터는 끝에 `systems.md` 매니페스트로 병합한다. ⚠️ **병렬이 안전한 이유**: 시스템마다 트리가 겹치지 않고 **여기서 git 커밋을 하지 않는다**(커밋은 Deliver 한 번 — 아키타입 K 의 `.git/index.lock` 경합 문제가 여기엔 없다). 그래도 **자기 `src/<id>/` 밖을 쓰지 마라.** ⚠️ **API 키를 파일에 적지 마라** — 환경변수로 읽어라(`os.environ[\"…\"]`). `config.yaml`·`run.sh` 는 커밋된다. ⚠️ **temperature 는 0**, seed 는 인자로 받는다(재현성 게이트가 검사한다). ⚠️ **모델명을 버전까지** 적어라(`gpt-4o-2024-08-06`·`claude-sonnet-4-6`) — `latest` 는 반려된다. ⚠️ **ablation 은 proposed 코드에서 선언된 `change` 하나만** 다르게 하라(복사해 놓고 이것저것 손대면 ablation 이 아니다). ⚠️ 실행하지는 마라 — 실행은 stage 9 다(승인 게이트가 그 앞에 있다)."
+  - id: 8
+    name: Run Plan
+    profile: architect
+    upstream: [7]
+    body: "실행 계획을 `reports/<MID>/run-plan.md` 에 확정한다 — **시스템 × seed 매트릭스**(run id 는 `<system_id>__seed<seed>` 규약) · run 마다 쓸 모델·임베딩 버전·temperature · **예상 API 호출 수와 비용**(시스템 수 × seed 수 × 평가셋 문항 수를 실제로 곱해서 적어라) · 소요 예상 · 실패 시 재시도 정책 · **재실행(replay) 대상으로 삼을 run 1건**(재현성 게이트가 요구한다). ⚠️ 이 문서가 Sam 승인의 대상이다 — **무엇을 얼마나 돌리는지, 얼마가 드는지**가 한눈에 보여야 한다. ⚠️ 매트릭스는 design.md 의 선언과 정확히 일치해야 한다(게이트가 선언 대비 실재를 대조한다 — 하나라도 빠지면 반려)."
+  - id: 9
+    name: Run Evaluate
+    profile: tester            # 실행 결과로 산출·판정
+    sam_gate: true
+    approval_artifact: "reports/<MID>/run-plan.md"
+    upstream: [8]
+    parallel:
+      mode: per_item
+      over: "run-plan.md 의 시스템 × seed 매트릭스. run 마다 subagent 1개."
+      shard: "runs/<id>/"
+      merge_to: "runs-summary.md"
+      batch_size: 3
+    body: "⚠️ **여기서 실제 비용이 발생한다 — Sam 승인 뒤에만 실행한다.** run 마다 ① `config.json` 을 쓰고(`run_id`·`system`·`seed`·`llm`·`embedding`·`temperature`·`status`) ② `src/<system>/run.sh` 를 그 seed 로 실행해 예측을 `_private/runs/<run_id>/raw.jsonl` 에 남기고 ③ 평가셋과 대조해 지표를 계산해 `runs/<run_id>/metrics.json` 에 쓴다: `{\"run_id\": …, \"system\": …, \"seed\": …, \"n_items\": 50, \"per_item\": [{\"id\": \"q001\", \"answer_correctness\": 0.8, \"recall_at_k\": {\"5\": 1.0}}], \"aggregate\": {\"answer_correctness\": 0.79}}`. ④ run-plan 이 지정한 **재실행 대상 1건은 한 번 더 돌려 `runs/<id>/replay.json`** 에 지표를 남긴다(게이트가 표류를 본다 — **게이트는 코드를 직접 실행하지 않는다**. 재실행은 네 일이다). ⑤ 끝에 `runs-summary.md` 로 병합한다.\n⚠️ **`raw.jsonl` 은 평가셋 전건**이어야 한다 — 실패한 문항을 조용히 빼면 분모가 줄어 모든 지표가 부풀려진다(게이트가 gold set 수와 대조한다). ⚠️ **run 이 실패하면 `status: failed` 로 정직하게 남겨라.** 지우지 마라 — baseline·proposed 는 전건 성공해야 통과한다. ⚠️ **디렉터리 이름과 `config.json` 의 `system`·`seed` 가 일치**해야 한다. ⚠️ **지표를 손으로 고치지 마라.** 채점 코드가 틀렸으면 코드를 고치고 다시 돌려라."
+  - id: 10
+    name: Result Verify
+    profile: fact-checker      # ≠ tester
+    verifier: true
+    upstream: [9]
+    gate:
+      objective: [run_completeness, repro_determinism, stat_significance]
+      llm: fact_checker_verdict
+      draft: "reports/<MID>"
+    body: "결과가 **주장을 뒷받침하는지** 검증한다(객관 게이트는 매트릭스 완결성·재현성 기록·통계만 본다). 사람이 읽어야 할 것: ① **과잉 주장** — 요약이 수치보다 앞서가지 않는가('크게 개선' 이라 썼는데 CI 하한이 +0.01 인 경우). ② **baseline 이 정당하게 튜닝됐는가** — 약한 baseline 을 이긴 것은 증명이 아니다(원본 evidence-critic 의 축). ③ **ablation 의 해석** — 뺀 것 하나로 성능이 얼마나 떨어졌는가, 그 설명이 제안의 논리와 맞는가. 아무 ablation 도 성능을 떨어뜨리지 않는다면 제안의 어느 부분도 효과가 없다는 뜻이다. ④ **지표가 과제에 맞는가** — recall 만 오르고 answer_correctness 가 그대로면 검색은 나아졌지만 답은 그대로다. ⑤ **seed 간 분산** — 개선폭이 seed 간 분산보다 작지 않은가. ⑥ **실패 run 의 사유**가 시스템의 결함을 감추고 있지 않은가. 끝에 VERDICT: PASS|FAIL."
+  - id: 11
+    name: Artifacts & Report
+    profile: writer
+    upstream: [10]             # 게이트: 10 PASS 시 unblock
+    body: "**커밋 대상** 보고서 번들을 `reports/<MID>/report/` 에 쓴다. ① `report.md` — 과제·코퍼스·인덱스 구성 · 시스템 3종 이상의 설계 · 평가셋 구성 · **주요 결과표(평균 ± 95% CI)** · ablation 해석 · 한계와 잔여 위험 · 재현 방법. ② `report/paper-artifacts/` — `main_results.tex`(LaTeX 표) · `main_results.csv` · `ablation.tex` · `run_summary.md`. **아키타입 B(academic-paper)가 그대로 받아 쓸 형태**로 만들어라. ③ `experiment-summary.md` — seed·모델 버전·비용·소요를 포함한 실행 이력. ④ `usage-disclaimer.md` — **필수 고지**('본 결과는 단일 환경에서 수행된 평가이며 재현을 보장하지 않습니다. 동료 심사를 거치지 않았습니다.'). ⚠️ **점 추정만 싣지 마라** — 모든 수치에 95% CI 를 붙인다(원본 규약이자 논문 요건). ⚠️ **API 키·개인정보·코퍼스 원문을 싣지 마라** — 게이트가 커밋 대상의 코드·설정까지 훑는다. ⚠️ 수치는 `metrics.json` 에서 가져오고 **손으로 옮겨 적으며 바꾸지 마라**."
+  - id: 12
+    name: Report Review
+    profile: reviewer          # ≠ writer
+    verifier: true
+    upstream: [11]
+    gate:
+      objective: [secret_redaction]
+      llm: reviewer_verdict
+      draft: "reports/<MID>"
+    body: "공개 안전성과 논문 적합성을 독립 검토한다: ① **공개 안전성** — 커밋될 코드·설정·보고서에 키·토큰·개인정보가 없는가(게이트는 알려진 패턴만 잡는다 — 네가 읽어라), 코퍼스 원문이 `_private/` 밖으로 새지 않았는가, 라이선스상 실을 수 없는 발췌가 보고서에 있지 않은가. ② **논문 적합성** — 표가 LaTeX 로 바로 들어가는가, 모든 수치에 CI 가 있는가, 실험 설정이 남이 재현할 만큼 적혔는가(모델 버전·seed·하이퍼파라미터). ③ **본문 ↔ 수치 일치** — 보고서의 모든 수치가 `metrics.json` 과 맞는가. ④ **한계 서술의 정직성** — 단일 환경·단일 코퍼스·평가셋 규모의 한계가 적혔는가. ⑤ **고지 문구**의 존재. 끝에 VERDICT: PASS|FAIL."
+  - id: 13
+    name: Wiki Update
+    profile: curator
+    upstream: [12]             # 게이트: 12 PASS 시 unblock
+    body: "이 실험에서 얻은 것을 llm-wiki 에 반영(entities/concepts) + reflection + 재사용률 갱신 — 이 도메인 코퍼스의 성질(청킹이 잘 듣는 경계·검색이 실패하는 질의 유형) · 어떤 구성 요소가 실제로 효과를 냈는가(ablation 결과) · 평가셋 설계에서 배운 것 · 쓰지 말아야 할 조합. ⚠️ **wiki 는 별도 저장소이고 공개될 수 있다** — 코퍼스 원문이나 키가 아니라 **일반화된 교훈**만 남겨라. 같은 도메인의 다음 실험이 baseline 부터 다시 세우지 않아도 되게 하는 것이 목적이다."
+  - id: 14
+    name: Deliver
+    profile: default          # Solomon
+    sam_gate: true
+    approval_artifact: "reports/<MID>/report/report.md"
+    upstream: [13]
+    body: "① 번들 조립 `reports/<MID>/report/`(커밋 대상): report.md · paper-artifacts/ · experiment-summary.md · **usage-disclaimer.md(필수)**. 함께 커밋되는 것: `src/`(구현) · `runs/*/config.json`·`metrics.json`·`replay.json` · `eval-set.jsonl` · `design.md`·`corpus.md`·`runs-summary.md` · `raw/sources.yaml`. **`_private/` 는 커밋되지 않는다**(코퍼스 원문·`raw.jsonl`). ② **⚠️ 공개 범위를 Sam 에게 명시적으로 확인하라** — 승인 요청에 **'무엇이 커밋되는가'와 '무엇이 `_private/` 에 남는가'**, 그리고 **코퍼스 라이선스상 문제가 없는지**를 분명히 적어라. ③ 승인 후 커밋 + git push(컨테이너 GITHUB_TOKEN 자격) + Slack 요약. ④ **아키타입 B(academic-paper)로 넘길 준비** — `report/paper-artifacts/` 가 논문 미션의 입력이 된다는 것을 요약에 적어라. ⚠️ Slack 게시는 반드시 `hermes send --to slack:#mission-log \"<요약+커밋링크>\"`(Web API)로 하라."

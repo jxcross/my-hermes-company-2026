@@ -22,6 +22,7 @@ HARNESSES = [
     ("lecture", "J 강의 자료"),
     ("migrate", "K 마이그레이션"),
     ("sec", "L 보안 감사"),
+    ("agent", "M AI 시스템 평가"),
 ]
 
 

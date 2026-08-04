@@ -57,23 +57,25 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 
 | | 상태 |
 |---|---|
-| 변환 | **12/20** — A `trend-report`(**proven**) · B `academic-paper` · B' `systematic-review`(PRISMA) · D `webapp-build` · E `lit-monitor`(주기 실행 — 미션 간 지속 상태 `monitors/`) · F `patent-spec`(고지 강제) · G `policy-brief`(4포맷 동시 산출 + 3게이트) · H `legal-draft`(계약서·의견서·자문서·약관 + **개인정보 차단**) · I `code-docs`(코드베이스 문서화 — **AST 대조 검증**) · J `lecture-course`(강의 자료 — LO·Bloom 사슬) · K `code-migration`(마이그레이션 — **실제 코드 변경·git 대조**) · L `security-audit`(보안 감사 — **공개 범위 분리**). **A 외 전부 `draft`** |
-| **다음 변환 대상** | **agentforge**(9-stage · agents 12 · 신규 profile 예상 있음 — 평가 실행) |
+| 변환 | **13/20** — A `trend-report`(**proven**) · B `academic-paper` · B' `systematic-review`(PRISMA) · D `webapp-build` · E `lit-monitor`(주기 실행 — 미션 간 지속 상태 `monitors/`) · F `patent-spec`(고지 강제) · G `policy-brief`(4포맷 동시 산출 + 3게이트) · H `legal-draft`(계약서·의견서·자문서·약관 + **개인정보 차단**) · I `code-docs`(코드베이스 문서화 — **AST 대조 검증**) · J `lecture-course`(강의 자료 — LO·Bloom 사슬) · K `code-migration`(마이그레이션 — **실제 코드 변경·git 대조**) · L `security-audit`(보안 감사 — **공개 범위 분리**) · M `agent-eval`(RAG/Agentic 시스템 구축·평가 — **평가셋·통계·재현성 3중 검증**, 산출물이 아키타입 B 의 입력). **A 외 전부 `draft`** |
+| **다음 변환 대상** | **datasetforge**(9-stage · agents 14 · 신규 profile 예상 있음 — 변환·빌드) |
 | profile | **11종** — 기존 8 + `architect`·`developer`·`tester`(아키타입 D 도입 시 신설) |
-| 객관 게이트 | **30종** `scripts/gates/` — recency·source_balance·doc_consistency·test_run·prisma_counts·prisma_checklist·seen_dedup·digest_shape·claim_consistency·patent_format·evidence_grade·stakeholder_coverage·format_consistency·clause_completeness·law_citation·legal_safety·symbol_truth·api_coverage·doc_links·objective_coverage·bloom_distribution·course_consistency·content_accessibility·atomic_commit·test_pass_rate·behavior_diff·owasp_coverage·cve_remediation·finding_completeness·secret_redaction |
+| 객관 게이트 | **34종** `scripts/gates/` — recency·source_balance·doc_consistency·test_run·prisma_counts·prisma_checklist·seen_dedup·digest_shape·claim_consistency·patent_format·evidence_grade·stakeholder_coverage·format_consistency·clause_completeness·law_citation·legal_safety·symbol_truth·api_coverage·doc_links·objective_coverage·bloom_distribution·course_consistency·content_accessibility·atomic_commit·test_pass_rate·behavior_diff·owasp_coverage·cve_remediation·finding_completeness·secret_redaction·eval_set_quality·stat_significance·repro_determinism·run_completeness |
 | 산출 도구 | 3종 `scripts/tools/` — bib_export·monitor_state·relevance_score |
-| 검증 | `python3 scripts/lint_template.py --all` · 테스트 **159종**(29 템플릿 + 21 게이트키퍼 + 109 게이트) · **E2E 하네스 `scripts/tests/fixtures/run_all.py`(6종 103케이스)** |
+| 검증 | `python3 scripts/lint_template.py --all` · 테스트 **171종**(29 템플릿 + 21 게이트키퍼 + 121 게이트) · **E2E 하네스 `scripts/tests/fixtures/run_all.py`(7종 146케이스)** |
 
 **Sam 지시:** 실미션은 **전체 변환을 마친 뒤 하나씩** 돌린다(변환 중에는 dry-run만).
 
 **게이트를 고쳤으면 E2E 하네스를 다시 돌려라** — `docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/fixtures/run_all.py'`. 단위 테스트만 통과하는 수정은 판정 경로 전체를 검증하지 않는다(`scripts/tests/fixtures/README.md`).
 
-**변환의 교훈(§5 요약):** 이식은 복사가 아니다. **12건 변환에서 12건 모두 결함이 나왔다** — 게이트 겹침(불변식 우회)·검증자 부재·느슨한 체크리스트·"동작하는 척"하는 게이트(한국어 정규식 붕괴)·**docstring은 검사한다는데 코드는 안 하는 게이트**·병렬 산출물 부재 미검출 등. **이식한 게이트는 반드시 일부러 깨뜨린 픽스처로 FAIL을 확인하라.** PASS만 보면 아무것도 측정하지 않는 게이트를 발견할 수 없다. **반대 방향도 확인하라** — legalforge 게이트 2종은 **어떤 입력에도 FAIL**하는 상태였다(정상 픽스처로 PASS 확인 필수). 또한 **이식 전에 우리가 이미 가진 게이트와 겹치는지 보라** — policyforge 하드게이트 3종 중 1종은 `source_balance`+`recency_check`와 같은 일이라 policy 블록으로 흡수했다.
+**변환의 교훈(§5 요약):** 이식은 복사가 아니다. **13건 변환에서 13건 모두 결함이 나왔다** — 게이트 겹침(불변식 우회)·검증자 부재·느슨한 체크리스트·"동작하는 척"하는 게이트(한국어 정규식 붕괴)·**docstring은 검사한다는데 코드는 안 하는 게이트**·병렬 산출물 부재 미검출 등. **이식한 게이트는 반드시 일부러 깨뜨린 픽스처로 FAIL을 확인하라.** PASS만 보면 아무것도 측정하지 않는 게이트를 발견할 수 없다. **반대 방향도 확인하라** — legalforge 게이트 2종은 **어떤 입력에도 FAIL**하는 상태였다(정상 픽스처로 PASS 확인 필수). 또한 **이식 전에 우리가 이미 가진 게이트와 겹치는지 보라** — policyforge 하드게이트 3종 중 1종은 `source_balance`+`recency_check`와 같은 일이라 policy 블록으로 흡수했다.
 
 **⚠️ 보안 미결(변함없음)**: 진단 중 `SLACK_BOT_TOKEN` 값이 세션 로그에 노출됨 → **재발급(rotate) 권장**(Slack 앱 Regenerate → `.env` 갱신 → `docker compose up -d --force-recreate hermes-solomon hermes-gatekeeper`).
 
-**새 세션 시작 시:** `git log --oneline -6`(HEAD 근처: policyforge→legalforge→docforge→lectureforge→migrateforge→secforge)과 `docker compose ps`(2개 Up)·`python3 scripts/lint_template.py --all` 로 상태 확인 → **`docs/13 §6` 대장**을 읽고 → 다음 대상(agentforge)부터 §2 레시피대로 진행.
+**새 세션 시작 시:** `git log --oneline -6`(HEAD 근처: legalforge→docforge→lectureforge→migrateforge→secforge→agentforge)과 `docker compose ps`(2개 Up)·`python3 scripts/lint_template.py --all` 로 상태 확인 → **`docs/13 §6` 대장**을 읽고 → 다음 대상(datasetforge)부터 §2 레시피대로 진행.
 
 **⚠️ 아키타입 K(`code-migration`)는 미션 밖의 실제 코드를 바꾸고 커밋한다.** 대상 저장소는 `HERMES_WRITE_SAFE_ROOT` 안이어야 하고, **`/work/company` 자신을 대상으로 삼으면 안 된다**(파이프라인이 자기 코드를 고치게 된다). 코드 변경 개시 직전에 Sam 승인 게이트가 있다.
+
+**⚠️ 아키타입 M(`agent-eval`)은 코드를 만들어 실행하고 LLM API 를 수십~수백 회 호출한다** — 비용이 발생한다. stage 8(Run Plan)이 호출 수·비용을 산정하고 **stage 9 실행 직전에 Sam 승인 게이트**가 있다. 코퍼스 원문과 run 예측(`raw.jsonl`)은 `_private/`(gitignore), 코드·설정·지표·보고서는 커밋 대상이다. **커밋되는 것이 문서만이 아니므로** `secret_redaction` 이 `.py`·`.json`·`.yaml` 까지 훑는다(정책 `scan_extensions`).
 
 **⚠️ 이 저장소는 PUBLIC 이다.** Deliver 단계가 `reports/` 를 커밋·push 하므로 **미션 산출물에 민감 정보가 남으면 그대로 공개된다.** 아키타입 H(법률 문서)는 초안을 플레이스홀더로 쓰고 `legal_safety` 가 강제한다(실제 개인정보는 `_personal/`). 아키타입 L(보안 감사)은 **취약점 상세를 `_private/`(gitignore)에, 공유용 요약만 `report/`에** 두고 `secret_redaction` 이 커밋 대상을 검사한다.

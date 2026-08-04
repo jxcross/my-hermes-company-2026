@@ -25,6 +25,30 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#36 — agentforge → 아키타입 M(AI 시스템 평가) · <b>퇴보를 "유의한 개선"으로 통과시키던 게이트</b>를 뒤집다</h2>
+    <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "docs/13 §6 진행 대장 확인하고 agentforge 변환 진행하라."(진행 대장 #13)</div>
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li><b>⚠️ 통계 유의성 게이트가 "다른가"만 재고 "더 나은가"를 재지 않았다</b>(이번 변환의 최대 결함 · 실측): 판정식이 <code>ci_excludes_zero = (ci_lo &gt; 0) or (ci_hi &lt; 0)</code> · <code>effect_ok = abs(d) &gt;= min_effect</code>라 <b>방향이 지워져 있다.</b> 제안 시스템이 baseline보다 <b>30%p 퇴보</b>한 픽스처를 넣으니 <code>Cohen's d -11.157 · CI [-0.3023, -0.2882] · verdict: PASS · exit=0</code>. 개선을 주장하려고 만든 논문 산출물이 <b>성능 퇴보를 통계적으로 입증한 채 finalize</b>된다. → <code>higher_is_better</code> 축을 넣고 개선 방향의 CI 하한만 인정하도록 <code>stat_significance</code>로 재작성.</li>
+      <li><b>⚠️ 분모를 채점 대상이 스스로 정한다</b>(code-docs의 '분모 자기결정'과 같은 계열 · 실측): 두 run에 <b>공통으로 존재하는 항목</b>만 짝지어 비교하고 5건 이상이면 통과시킨다. 50문항 중 <b>잘한 6문항만</b> 채점해 낸 픽스처가 <code>paired n: 6 · Cohen's d +inf · PASS</code>. → 평가셋 대비 <b>짝 커버리지 하한</b>(90%)을 요구.</li>
+      <li><b>⚠️ 축퇴 케이스에서 효과크기가 무한대</b>: 차이가 모든 항목에서 같으면 표준편차 0 → 원본은 <code>float("inf")</code>를 돌려주고 CI도 한 점으로 수렴해 0을 제외한다. <b>균일한 +0.001이 "무한대 효과"로 통과.</b> → 표준편차 0이면 효과크기를 판정 근거에서 빼고 <b>실질 유의성</b>(<code>min_mean_diff</code>)으로 판정.</li>
+      <li><b>⚠️ 재현성 게이트가 세 곳에서 fail-open</b>(실측): <code>runs/</code>가 <b>비어 있으면</b> <code>scanned 0 runs · PASS</code>(평가를 한 번도 안 돌린 것이 "재현 가능") · <code>raw.jsonl</code>이 없으면 <b>검사를 건너뛰어</b> PASS · <code>metrics.json</code>이 없어도 통과. 전부 fail-closed로 뒤집었다.</li>
+      <li><b>⚠️ 이번엔 대조 대상을 담은 변수조차 없었다</b>: docstring은 "raw.jsonl row count matches <b>gold set count</b>"라 선언하는데 코드는 <code>metrics.n_items</code>(<b>그 run이 스스로 적은 숫자</b>)와 비교한다. 파일 전체에서 <code>gold</code>는 <b>docstring 12행에만 있고 코드에는 없다</b>(<code>--gold</code> 인자 자체가 없음). migrateforge의 죽은 변수보다 한 단계 더 나아간 형태 — 읽는 시늉조차 없다. → 평가셋을 실제로 읽어 대조.</li>
+      <li><b>⚠️ 반대 방향의 고장</b>(legalforge 계열): 버전 핀 휴리스틱("숫자 2개 미만이면 FAIL")이 agentforge <b>자신의 CLAUDE.md가 기본값으로 못박은</b> <code>text-embedding-3-small</code>을 반려한다(실측 <code>exit=1</code>). → 숫자 세기를 버리고 <b>핀 되지 않은 별칭</b>(<code>latest</code>·<code>gpt-4o</code> 등)만 반려.</li>
+      <li><b>★ GATE 1은 스크립트가 아예 없었다 → <code>eval_set_quality</code> 신설</b>: 원본은 <b>모든 수치의 분모가 되는 평가셋</b>만 LLM 크리틱 하나에 맡겼다. 평가셋이 부실하면 뒤의 통계·재현성 게이트는 부실한 측정을 정밀하게 재는 일이 된다. 규모·난이도 분포·카테고리 커버리지·정답 충실도에 더해 <b>환각 <code>gold_context</code></b>를 실제 chunk 목록과 대조한다(원본 CLAUDE.md가 "Never invent a gold context"라고 <b>선언만</b> 하던 것).</li>
+      <li><b>★ <code>run_completeness</code> 신설</b>: 원본은 실패 run을 <b>집계에서 빼고 남은 것으로 게이트를 통과</b>시킨다("gates may still pass with remaining runs"). 재현성을 위해 seed를 여러 개 돌려 놓고 <b>잘 나온 seed만 남기면</b> 그 목적이 사라진다. → 선언한 시스템 × seed 매트릭스 전건 실재 + baseline·proposed는 전건 성공 + 디렉터리 이름↔<code>config.system</code> 대조.</li>
+      <li><b>🔒 커밋되는 것이 문서만이 아니다</b>: 이 아키타입은 <b>코드와 설정을 커밋</b>하므로 <code>src/*/config.yaml</code>·<code>runs/*/config.json</code>에 API 키가 남으면 <code>.md</code>만 훑던 <code>secret_redaction</code>이 못 잡는다. → 확장자를 <code>scan_extensions</code> 정책으로 뺐다(<b>기본값 <code>[".md"]</code>이라 아키타입 L 동작은 그대로</b> — sec 하네스 22/22로 회귀 없음 확인). 코퍼스 원문·<code>raw.jsonl</code>은 <code>_private/</code>(저작권·라이선스).</li>
+      <li><b>신규 profile 0개 — 대장의 "예상 있음(평가 실행)"은 또 빗나갔다</b>: <code>system-builder</code>는 tools가 <code>developer</code>와 동일하고 <code>run-evaluator</code>는 <b>실행 결과로 산출·판정</b>하므로 <code>tester</code>다. <b>아키타입 D 때 만든 3종이 D·K·M을 모두 받쳤다</b> — profile을 계약 단위로 자른 판단이 값을 했다.</li>
+      <li><b>병렬 판단이 K와 갈린다</b>: K는 git 인덱스가 공유 자원이라 병렬을 <b>제거</b>했지만, M의 시스템 구현은 <code>src/&lt;id&gt;/</code>로 트리가 겹치지 않고 <b>여기서 커밋을 하지 않는다</b>(커밋은 Deliver 한 번). 같은 "코드를 쓰는 병렬"이라도 <b>공유 자원이 무엇인지</b>로 갈린다.</li>
+      <li><b>깨뜨린 픽스처 43케이스</b>(지금까지 최대): 정상 6 + 결함 31 + <b>원본 결함 회귀방어 6</b> + 설계 회귀방어 3 + L 회귀방어 1. 단위 테스트 12종 추가. <b>하네스가 픽스처 자신의 버그도 잡았다</b> — truncate-before-read로 48행 대신 0행을 검사하고 있었다(게이트는 옳았지만 <b>테스트가 주장한 것을 테스트하지 않고 있었다</b>).</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      <b>아키타입 M 확보 — 13/20</b>. 린터 13/13. 테스트 <b>29+21+121 = 171종 통과</b> · <b>E2E 7종 146케이스 전건 통과</b>. 객관 게이트 <b>34종</b>. <b>변환 13건 연속 결함 발견</b>(원본 게이트 2종에서 5건 + 반대 방향 1건, 전부 실측). 새 교훈 3건을 docs/13 §5에 기록: <b>비교 게이트는 "어느 쪽이 이겨야 통과인가"가 코드에 있는지 보라</b>(<code>abs()</code>와 <code>or</code>는 방향을 지우는 자리 · 통계 검정은 기본이 양측이라 그냥 옮기면 방향이 사라진다) · <b>docstring이 "A를 B와 대조한다"면 B를 받을 인자가 있는지부터 보라</b> · <b>게이트 재사용 시 그 아키타입이 커밋하는 것의 종류를 세라</b>(새 게이트보다 정책 축을 하나 여는 편이 낫다 — 쌍둥이 게이트를 막는다). 검증을 앞으로 당기는 판단이 <b>6회째</b>(비용이 두 배가 되는 지점 앞). 다음 변환 = datasetforge.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#35 — 2026-08-05 세션 핸드오프 (변환 12/20 · E2E 하네스 저장소 편입)</h2>
     <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "다음 작업부터는 새로운 세션에서 이어서 하겠다. 관련 파일들 업데이트하라. 첫 질문도 알려달라."</div>
