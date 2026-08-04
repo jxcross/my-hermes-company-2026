@@ -46,6 +46,7 @@ MAX_REVISION_ROUNDS = int(os.environ.get("GATE_KEEPER_MAX_ROUNDS", "2"))  # 게�
 NOTIFY_TIMEOUT = int(os.environ.get("GATE_KEEPER_NOTIFY_TIMEOUT", "60"))  # Slack 통지 타임아웃(초)
 MAX_DEFER = int(os.environ.get("GATE_KEEPER_MAX_DEFER", "6"))  # 판정 신호 미확정 시 재시도 횟수(race 방지)
 _DEFER_COUNTS: dict = {}  # key -> 재시도 횟수(검증자 done 직후 VERDICT 코멘트 in-flight 대비)
+_CHILD_DEFER_COUNTS: dict = {}  # key -> 자식 상태 조회 실패(None) 재시도 횟수(fail-open 방지)
 HERMES = ["hermes", "kanban"]
 VERDICT_RE = re.compile(r"VERDICT:\s*(PASS|FAIL)", re.IGNORECASE)
 # fail-closed 폴백 키워드(표준 토큰이 없는 구 미션·누락 대비)
@@ -330,6 +331,26 @@ def verifier_instruction(show: dict, assignee: str) -> str:
     return instr or "수정 지시는 검증 산출물(review/·verify/)을 참조."
 
 
+# ── 자식 상태 분류 ─────────────────────────────────────────────────────────
+def classify_children(children: list, status_of) -> tuple[list, list]:
+    """downstream 자식을 (actionable, unknown) 으로 분류.
+    - actionable : 아직 진행 대기(done/archived 아님)로 *확인된* 자식(게이트 대상).
+    - unknown    : 상태 조회가 실패(None)해 *확정 불가*한 자식.
+
+    핵심: None(조회 실패)을 종단(done/archived)과 섞지 않는다. 예전엔 둘을 함께
+    actionable 에서 제거해, transient kanban 오류 한 번이 검증자를 processed 로 확정 →
+    blocked downstream 을 영구 고아화(게이트 조용히 통과 = fail-open)했다. 이제 unknown 은
+    별도로 돌려주고, 호출부가 fail-closed(보류·재시도)로 처리한다."""
+    actionable, unknown = [], []
+    for c in children:
+        st = status_of(c)
+        if st is None:
+            unknown.append(c)
+        elif st not in ("done", "archived"):
+            actionable.append(c)
+    return actionable, unknown
+
+
 # ── 폴 1회 ───────────────────────────────────────────────────────────────
 def poll_once(processed: set, dry: bool) -> None:
     tasks = kanban_json(["list", "--json"]) or []
@@ -353,7 +374,17 @@ def poll_once(processed: set, dry: bool) -> None:
         # 활성 게이트만 처리: downstream 중 아직 done/archived 아닌 것(=진행 대기)이 있어야 한다.
         # 완료된 미션(모든 downstream done)·종단 검증자(children 없음)는 건너뛴다 →
         # 과거 미션 재처리 방지, 사이드카 재시작에도 안전(상태파일 무관).
-        actionable = [c for c in children if task_status(c) not in ("done", "archived", None)]
+        actionable, unknown = classify_children(children, task_status)
+        # fail-closed: 자식 상태를 하나라도 확정 못하면(kanban 조회 실패=None) 종단으로
+        # 오인해 게이트를 조용히 통과시키지 않는다. 다음 폴에서 재시도(processed 미기록).
+        # MAX_DEFER 초과 시에만 확인된 자식으로 진행(무한 보류 방지 — 삭제된 자식 등 대비).
+        if unknown:
+            n = _CHILD_DEFER_COUNTS.get(key, 0) + 1
+            _CHILD_DEFER_COUNTS[key] = n
+            if n <= MAX_DEFER:
+                log(f"자식 상태 미확정: {vid} '{title}' children={unknown} — 재시도 {n}/{MAX_DEFER}(조회실패 대비)")
+                continue
+            log(f"자식 상태 미확정: {vid} — {MAX_DEFER}회 후 확인된 자식만으로 진행")
         if not actionable:
             if not dry:
                 processed.add(key)
