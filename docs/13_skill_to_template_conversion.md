@@ -1,6 +1,6 @@
 # 13. harness 스킬 → 템플릿 YAML 변환 — 작업 절차서
 
-> 작성일: 2026-08-04 · 상태: **작업 중(2/20 완료)** · 성격: working doc(재개 가능)
+> 작성일: 2026-08-04 · 상태: **작업 중(3/20 — A·B 실행가능 · D는 profile 3종 승인 대기)** · 성격: working doc(재개 가능)
 > 관련: [`12_pipeline_negotiation.md`](./12_pipeline_negotiation.md)(§8 phasing 2b) · [`11_template_driven_missions.md`](./11_template_driven_missions.md)(템플릿 스키마 §3.A·§3.B) · 소스: 형제 repo `other_projects/harness-templates`
 >
 > **⚠️ 이 문서는 여러 세션에 걸쳐 이어서 작업하기 위한 것이다.** 새 세션은 **§6 진행 대장**에서 다음 대상을 고르고 → **§2 레시피**대로 변환하고 → **§6 갱신 + 커밋**하면 된다. 재개 방법은 §8.
@@ -70,9 +70,16 @@ docker exec hermes-solomon sh -c 'cd /work/company && \
 | `synthesizer` | synthesize · outline · structure · summarize | — | `paperforge-synthesize-outline` · `trendforge-synthesize-trends` |
 | `writer` | draft · write · compose · section | — | `paperforge-draft-section` · `trendforge-draft-section` |
 | `fact-checker` | fact-check · verify · evidence · recency · citation | `Bash`(게이트 스크립트 실행) | `paperforge-fact-check` · `trendforge-{evidence-critic,recency-check}` |
-| `reviewer` | review · critic · clarity · logic · style · bias | — | `paperforge-{logic-critic,style-edit}` · `trendforge-{clarity-check,bias-check}` |
+| `reviewer` | review · critic · clarity · logic · style · bias | — | `paperforge-{logic-critic,style-edit}` · `trendforge-{clarity-check,bias-check}` · `specflow` **Design Review(신설)** |
+| `architect` ⚠신규 | architect · erd · diagram · wireframe · style-design | `Read,Write,Grep,Glob`(쓰기만·실행 없음) | `specflow-{architect,erd-designer,diagrammer,wireframer,style-designer}` |
+| `developer` ⚠신규 | backend-dev · frontend-dev · implement · build | **`Edit`** + `Bash` | `specflow-{backend-dev,frontend-dev}` |
+| `tester` ⚠신규 | e2e-test · run · regression · verify-by-execution | **`mcp__playwright__*`** + `Bash` | `specflow-e2e-tester` |
+
+⚠신규 = **아직 생성되지 않은 profile**. 템플릿은 `requires_profiles:`로 선언하고, `instantiate_template.py`가 미등록을 감지하면 **미리보기는 경고만·실제 인스턴스화는 중단**한다.
 
 **신규 profile 후보 신호**: `Edit`(코드 수정) · `mcp__playwright__*`(브라우저 E2E) · 스캐너·빌더 계열. → §7에 쌓고 Sam 승인 전까지 만들지 않는다.
+
+**tools가 같으면 같은 계약일 가능성이 높다** — specflow에서 `backend-dev`/`frontend-dev`가 `Read,Write,Edit,Bash,Grep,Glob`로 **완전히 동일**했고, `architect`/`erd-designer`/`wireframer`도 `Read,Write,Grep,Glob`로 동일했다. tools 단독으로는 판별력이 낮지만(246개 중 112개가 `Read,Write,Bash`), **한 스킬 안에서 tools가 일치하는 agent들**은 대개 같은 profile의 샤드다.
 
 **절대 병합 금지**: `fact-checker` ≠ `reviewer`. "둘 다 검증"이라고 합치면 작성자≠검증자 불변식이 얕아진다.
 
@@ -110,6 +117,21 @@ paperforge의 `gather-recent`(최신성 가중 검색)를 워커로 그대로 �
 ### ⚠️ 산출 도구를 게이트로 오분류
 `bib_export.py`는 BibTeX를 **생성**할 뿐 판정하지 않는다. 게이트가 아니다.
 
+### ⚠️ 검증자가 아예 없는 스킬이 있다
+**[발견: webapp-build 변환, 2026-08-04]** specflow에는 critic·fact-check 계열이 **하나도 없다**. 완료 판정이 "체크박스가 다 찼는가 + e2e가 green인가"뿐이다. 그대로 옮기면 우리 불변식(검증 2지점·작성자≠검증자)을 통째로 위반한다.
+
+**해결**: 검증 단계를 **신설**했다 — 5 Design Review(reviewer: PRD 요구사항 커버리지·시나리오 추적·ERD/구조/화면 상호 모순)와 8 Test & Verify(tester: 시나리오 전건 실행 검증). 원본에 없다고 빼면 안 된다. **없으면 만든다**가 원칙이다.
+
+부수 효과로 작성자≠검증자가 자연스럽게 성립했다 — `developer`가 짜고 `tester`가 검증한다.
+
+### ⚠️ 코드 병렬은 task 단위가 아니라 "겹치지 않는 디렉터리" 단위로 나눈다
+specflow는 task별(`/backend-task <N>`)로 구현한다. 이를 `per_item`으로 옮기면 **여러 subagent가 같은 디렉터리를 동시에 고쳐 충돌**한다. 문서 샤드(`analysis/<id>.md`)와 달리 코드는 상호 참조가 많다.
+
+**해결**: `workers: [backend, frontend]`로 **버킷 분할**(서로 겹치지 않는 트리)하고, 각 워커가 자기 버킷의 task를 선행관계 순서대로 **순차** 처리하게 했다. `merge_to: null` — 코드는 병합 대상이 아니다.
+
+### ⚠️ 도메인이 다르면 policy 블록도 갈아끼운다
+`recency_policy`·`source_balance_policy`는 조사·집필 아키타입(A·B)의 정책이다. 웹개발에는 의미가 없어 `completion_policy`(체크박스 강제·E2E green·시나리오 커버리지)로 대체했다. **정책은 템플릿 소유**이므로 도메인마다 새로 정의하면 된다.
+
 ### ⚠️ 중간 Sam 게이트의 승인 요약이 부실하다 (미해결)
 `gate_keeper.gate_summary()`는 `upstream` 유무로 **진입 게이트/산출 게이트**만 구분하고, 산출 게이트는 `report.md`를 찾는다. academic-paper의 중간 승인(stage 8)은 `outline.md`가 대상이라 요약이 산출물 목록 나열로 떨어진다. **후속 개선 대상**(§7).
 
@@ -119,8 +141,8 @@ paperforge의 `gather-recent`(최신성 가중 검색)를 워커로 그대로 �
 |---|---|---|---|---|---|---|
 | 1 | trendforge | domain | 8-stage · agents 14 | ✅ **proven** (A) | `trend-report.yaml` | 0 |
 | 2 | paperforge | research | 8-stage · agents 12 | ✅ **draft** (B) | `academic-paper.yaml` | 0 |
-| 3 | specflow | domain | 12-step · agents 12 | ⬜ **다음** | — | 예상 있음(개발) |
-| 4 | reviewforge | research | 9-stage · agents 12 | ⬜ | — | 0 예상 |
+| 3 | specflow | domain | 12-step · agents 12 | ⚠️ **draft (D) — profile 3종 대기** | `webapp-build.yaml` | **3**(architect·developer·tester) |
+| 4 | reviewforge | research | 9-stage · agents 12 | ⬜ **다음** | — | 0 예상 |
 | 5 | litmonitor | research | 5-stage · agents 7 | ⬜ | — | 0 예상 |
 | 6 | patentforge | domain | 8-stage · agents 11 | ⬜ | — | ? |
 | 7 | policyforge | domain | 9-stage · agents 14 | ⬜ | — | 0 예상 |
@@ -146,9 +168,18 @@ paperforge의 `gather-recent`(최신성 가중 검색)를 워커로 그대로 �
 
 | 후보명 | 근거 agent | 출처 스킬 | 왜 기존으로 안 되나 | 상태 |
 |---|---|---|---|---|
-| *(아직 없음 — trendforge·paperforge 모두 0)* | | | | |
+| **`architect`** | `architect`·`erd-designer`·`diagrammer`·`wireframer`·`style-designer` (5종, tools 동일) | specflow | 설계는 집필(`writer`)도 종합(`synthesizer`)도 아니다 — 구조·스키마·화면을 **결정**한다. 산출이 문서지만 판단 성격이 다르다 | **Sam 승인 대기** |
+| **`developer`** | `backend-dev`·`frontend-dev` (tools 동일) | specflow | **코드를 쓴다**(`Edit`). 기존 8종 중 파일을 수정하는 profile이 없다 | **Sam 승인 대기** |
+| **`tester`** | `e2e-tester` | specflow | **실행 결과로 판정**한다(`Bash`+`playwright`). `reviewer`는 읽고 판단하지 구동하지 않는다. developer의 검증자 역할이라 분리 필수(작성자≠검증자) | **Sam 승인 대기** |
+
+> **`webapp-build.yaml`은 이 3종이 생성되기 전까지 실행할 수 없다.** `instantiate_template.py`가 미등록을 감지해
+> 미리보기(`--dry-run`)는 경고만 내고 통과시키지만 **실제 인스턴스화는 중단**한다(존재하지 않는 assignee로
+> 카드가 생기면 아무도 집지 못한다). 생성 절차: `profiles-src/<name>/`에 SOUL·config 작성 →
+> `hermes profile create` → `hermes-home/profiles/<name>/`에 배포 → [`docs/05`](./05_stage0_setup_guide.md) 부트스트랩 목록 갱신.
 
 **후속 과제**
+- **신규 profile 3종 SOUL 작성** — 원본 agent md(`description`+`Inputs`+`Procedure`)가 초안 재료다
+- **객관 게이트 2종 신설** — `doc_consistency`(설계 문서 상호 정합·시나리오 커버리지)·`test_run`(테스트 실행 결과). 현재 webapp-build의 검증 2지점은 `objective: []`로 **LLM 판정만** 걸려 있어 이중 게이트가 반쪽이다
 - `bib_export.py` 이식 — BibTeX 산출(게이트 아님). academic-paper Deliver 단계에 붙일지 판단
 - `gate_keeper.gate_summary()` — 중간 Sam 게이트(진입도 산출도 아닌 경우) 요약 개선(§5)
 - `lint_template.py` 분리 — 현재 불변식은 `instantiate_template.check_invariants`에 인라인([`docs/12 §7`](./12_pipeline_negotiation.md))
@@ -163,7 +194,8 @@ paperforge의 `gather-recent`(최신성 가중 검색)를 워커로 그대로 �
      python3 scripts/instantiate_template.py <name> M-2026-TEST --dry-run --render mermaid'
    docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/test_instantiate_template.py'
    ```
-   불변식 위반 0 · 테스트 통과 · `reports/M-2026-TEST/` 미생성
+   불변식 위반 0 · 테스트 통과 · `reports/M-2026-TEST/` 미생성 · 미등록 profile 경고가 뜨면
+   템플릿의 `requires_profiles:`와 일치하는지 확인(§7에 후보로 등재)
 4. **갱신한다**: §6 대장(상태·템플릿명·신규 profile) · §3 매핑 사전에 별칭 추가 · 새 함정이 있으면 §5
 5. **커밋한다**: `feat(template): <name> 변환 — 아키타입 <X>` + `history.html` 기록
 

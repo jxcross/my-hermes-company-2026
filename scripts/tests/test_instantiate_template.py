@@ -156,6 +156,43 @@ def test_shipped_templates_have_no_gate_overlap():
         assert not errs, (name, errs)
 
 
+# ── 미등록 profile 감지 ───────────────────────────────────────────────────
+# webapp-build(D) 변환에서 첫 발생: architect·developer·tester 신규 필요.
+# 고정 8종을 박지 않고 profiles-src/ 를 진실로 삼는다(profile 수는 늘어날 수 있다).
+def test_registered_profiles_reads_profiles_src():
+    have = it.registered_profiles()
+    assert "default" in have, have            # solomon-profile 은 별도 위치
+    assert {"scout", "reader", "writer", "reviewer", "fact-checker"} <= have, have
+
+
+def test_missing_profiles_detects_unknown():
+    tpl = {"stages": [{"id": 1, "profile": "scout"}, {"id": 2, "profile": "developer"}]}
+    assert it.missing_profiles(tpl) == ["developer"]
+
+
+def test_missing_profiles_dedups_and_keeps_order():
+    tpl = {"stages": [{"id": 1, "profile": "tester"}, {"id": 2, "profile": "architect"},
+                      {"id": 3, "profile": "tester"}]}
+    assert it.missing_profiles(tpl) == ["tester", "architect"]
+
+
+def test_existing_templates_have_no_missing_profiles():
+    """A·B 는 지금 바로 돌 수 있어야 한다."""
+    for name in ("trend-report", "academic-paper"):
+        assert it.missing_profiles(it.load_template(name)) == [], name
+
+
+def test_webapp_build_declares_its_required_profiles():
+    """D 는 아직 못 돈다 — 필요한 profile 을 템플릿이 스스로 선언하고 실제와 일치해야 한다."""
+    tpl = it.load_template("webapp-build")
+    assert sorted(it.missing_profiles(tpl)) == sorted(tpl["requires_profiles"]), tpl["requires_profiles"]
+
+
+def test_webapp_build_invariants_pass():
+    """profile 이 없다는 것과 불변식 위반은 별개 — 구조 자체는 유효해야 한다."""
+    assert it.check_invariants(it.load_template("webapp-build")) == []
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

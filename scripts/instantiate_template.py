@@ -82,6 +82,28 @@ def stage_by_id(stages: list[dict], sid: int) -> dict | None:
     return next((s for s in stages if s.get("id") == sid), None)
 
 
+# ── profile 등록 확인 ────────────────────────────────────────────────────
+def registered_profiles() -> set[str]:
+    """현재 보유한 profile 집합. profiles-src/<name>/ (git 기준 진실) + default(Solomon).
+    고정 목록을 박지 않는다 — profile 수는 미션이 요구하면 늘어난다(docs/12 §2⑤)."""
+    src = os.path.join(REPO_ROOT, "profiles-src")
+    names = {"default"}
+    if os.path.isdir(src):
+        names |= {d for d in os.listdir(src) if os.path.isdir(os.path.join(src, d))}
+    return names
+
+
+def missing_profiles(tpl: dict) -> list[str]:
+    """템플릿이 쓰는 profile 중 아직 없는 것. 순서 보존·중복 제거."""
+    have = registered_profiles()
+    out: list[str] = []
+    for s in tpl.get("stages", []):
+        p = s.get("profile")
+        if p and p not in have and p not in out:
+            out.append(p)
+    return out
+
+
 def check_invariants(tpl: dict) -> list[str]:
     """선언된 Layer0 불변식을 구조적으로 검사. 위반 목록 반환(비면 통과)."""
     stages = tpl.get("stages", [])
@@ -391,6 +413,17 @@ def main() -> int:
         for e in errs:
             log(f"  - {e}")
         return 1
+
+    # 미등록 profile: 협상·미리보기 단계에선 경고만(docs/12 §2⑤ — 거부가 아니라 "생성할까요?"),
+    # 실제 인스턴스화는 중단한다(존재하지 않는 assignee 로 카드가 생성되면 아무도 못 집는다).
+    missing = missing_profiles(tpl)
+    if missing:
+        log(f"⚠ 미등록 profile {len(missing)}종: {', '.join(missing)}")
+        log(f"  → 생성 필요: profiles-src/<name>/(SOUL·config) + hermes profile create. "
+            f"Sam 승인 사항이다(docs/12 §2⑤).")
+        if not args.dry_run:
+            log("✗ 인스턴스화 중단 — profile 생성 후 다시 실행하라.")
+            return 1
 
     if args.render != "none":
         r = render_mermaid(tpl, args.mission) if args.render == "mermaid" else render_ascii(tpl, args.mission)

@@ -1,0 +1,120 @@
+# 아키타입 D — 문서 주도 웹앱 개발 (10단계)
+# 출처: other_projects/harness-templates/domain-harnesses/project_specflow
+#       (.claude/skills/specflow/SKILL.md 12-step + agents 12종). 변환 절차: docs/13
+#
+# ⚠️ 이 템플릿은 아직 실행할 수 없다 — 신규 profile 3종이 필요하다(requires_profiles).
+#    Sam 승인 후 profiles-src/ 에 생성해야 인스턴스화된다. docs/13 §7.
+#
+# 변환 판단(요약 — 상세·근거는 docs/13 §2·§5):
+#  - specflow 는 **검증자가 하나도 없다**(critic·fact-check 부재. 완료 판정 = 체크박스 + e2e green).
+#    우리 불변식이 요구하는 검증 2지점을 신설했다: 5 Design Review(문서 정합성)·8 Test & Verify(구현).
+#  - backend-dev / frontend-dev 는 tools 가 **완전히 동일**(Read,Write,Edit,Bash,Grep,Glob)하고
+#    담당 디렉터리만 다르다 → profile 1개(`developer`) + `parallel: workers [backend, frontend]`.
+#  - architect / erd-designer / diagrammer / wireframer / style-designer 도 tools 동일
+#    (Read,Write,Grep,Glob) — 전부 설계 문서 산출 → profile 1개(`architect`) + 5워커.
+#  - e2e-tester 는 tools 가 다르고(Bash + playwright) **실행 결과로 판정**한다 → 별도 profile
+#    (`tester`). developer 가 작성하고 tester 가 검증 → 작성자≠검증자 자동 충족.
+#  - 원본의 사람 승인 3곳(step 1·2·7 후) 중 PRD(2)·실행계획(→7 구현 개시)을 sam_gate 로 보존.
+#    ⚠️ 실행계획 stage(6)는 검증자(5) downstream 이라 여기에 sam_gate 를 달면 게이트가 겹쳐
+#    검증 게이트가 소멸한다 → 승인을 7(Implementation)로 내렸다. docs/13 §5.
+#  - `step_state.py`·`extract_tasks.py` 는 상태머신·파서로, Kanban 이 대체한다(미이식).
+#
+# 스키마 규약은 templates/trend-report.yaml 머리말 참조.
+
+name: webapp-build
+category: engineering
+display_name: 문서 주도 웹앱 개발
+maturity: draft            # + 신규 profile 미생성 상태 = 아직 실행 불가
+requires_profiles: [architect, developer, tester]   # ← Sam 승인 후 생성 필요
+goal_kr: 한 줄 구상에서 출발해 명세 문서 → 설계 → 구현 → E2E 검증까지 완주한 웹앱을 산출한다.
+invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop, sources_cited]
+
+policy:
+  # 웹개발에는 recency/source_balance 가 맞지 않는다. 대신 완료조건 정책을 선언한다.
+  # (객관 게이트 doc_consistency·test_run 은 미구현 — docs/13 §7 후속 과제)
+  completion_policy:
+    require_task_checkboxes: true    # 실행계획의 모든 task 에 완료조건 체크박스
+    require_e2e_green: true          # E2E 전 시나리오 통과 전까지 Deliver 금지
+    require_scenario_coverage: true  # 사용자 시나리오 전건이 구현·테스트로 추적돼야 함
+
+stages:
+  - id: 1
+    name: Scoping
+    profile: default          # Solomon
+    sam_gate: true
+    upstream: []
+    body: "프로젝트 목표·경계·완료조건·기술 제약(스택·배포 환경)을 reports/<MID>/SCOPE.md에 작성. ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라(중복 방지). 오직 SCOPE.md 산출과 이 task 완료만."
+  - id: 2
+    name: Domain & PRD
+    profile: default          # 요구사항 정의 = 기획(Solomon 소유). specflow step 1+2
+    sam_gate: true            # 원본의 PRD 승인 게이트 보존 — 여기서 틀리면 전부 틀린다
+    upstream: [1]
+    body: "도메인 정의(문제·핵심개념·용어) + PRD(요구사항·범위·비범위·성공지표)를 spec/1-domain.md·spec/2-prd.md에 작성. ⚠️ PRD는 Sam 승인 대상이다 — 승인 전 설계로 넘어가지 마라."
+  - id: 3
+    name: User Scenarios
+    profile: writer           # 서술 문서 집필
+    upstream: [2]
+    body: "PRD의 각 요구사항을 사용자 시나리오(액터·전제·단계·기대결과·예외)로 전개해 spec/3-scenarios.md에 작성. 각 시나리오에 추적용 id 부여(S-01…) — 이후 구현·E2E가 이 id로 커버리지를 증명한다."
+  - id: 4
+    name: Design
+    profile: architect        # ← 신규 profile
+    upstream: [3]
+    parallel:
+      mode: workers
+      # specflow step 4·5·6·8·9 를 한 스테이지의 5워커로 합쳤다 — tools·산출 성격이 동일하다.
+      workers: [structure, arch_diagram, erd, wireframe, style]
+      batch_size: 3          # 5워커 = 3 + 2, 2라운드
+      shard: "spec/4-design.<worker>.md"
+      merge_to: "spec/4-design.md"
+    body: "설계 산출: structure=디렉터리·모듈 구조 · arch_diagram=컴포넌트·데이터흐름(mermaid) · erd=엔티티·관계 + database/schema.sql · wireframe=주요 화면(ASCII/mermaid, 외부 이미지 금지) · style=타이포·컬러·간격·컴포넌트·인터랙션 상태. 각 워커는 자기 shard 에만 쓴다."
+  - id: 5
+    name: Design Review
+    profile: reviewer         # ≠ architect
+    verifier: true
+    upstream: [4]
+    gate:
+      objective: []            # doc_consistency 객관 게이트 미구현 — docs/13 §7
+      llm: reviewer_verdict
+      draft: "reports/<MID>/spec/4-design.md"
+    body: "설계 검증(specflow에 없던 단계 — 우리 불변식): PRD 요구사항 전건이 설계에 반영됐는가 · 시나리오 S-id 전건이 화면·엔드포인트로 추적되는가 · ERD와 구조·와이어프레임이 서로 모순되지 않는가 · 비범위가 새어 들어오지 않았는가. 끝에 VERDICT: PASS|FAIL."
+  - id: 6
+    name: Execution Plan
+    profile: default          # 계획 수립 = Solomon. specflow step 7
+    upstream: [5]             # 게이트: 5 PASS 시 게이트키퍼가 unblock
+    body: "설계를 backend·frontend·database 버킷의 task로 분해해 spec/5-plan.md에 작성. 각 task에 ① 완료조건 체크박스 ② 선행 task id ③ 커버하는 시나리오 S-id 를 반드시 명시. 이 계획이 다음 단계 구현의 분할 기준이다."
+  - id: 7
+    name: Implementation
+    profile: developer        # ← 신규 profile
+    sam_gate: true            # 원본 step7 승인 보존 = 실행계획 확정 후 구현 개시
+    upstream: [6]
+    parallel:
+      mode: workers
+      # ⚠️ task 단위(per_item)가 아니라 버킷 단위(workers)로 나눈다 — 코드는 같은 디렉터리를
+      #    동시 수정하면 충돌한다. backend/ 와 frontend/ 는 서로 겹치지 않으므로 안전하다.
+      #    각 워커는 자기 버킷의 task 를 선행관계 순서대로 순차 처리한다.
+      workers: [backend, frontend]
+      batch_size: 2
+      shard: "<worker>/"
+      merge_to: null           # 코드는 병합 대상이 아니다 — 각 워커가 자기 트리에 직접 쓴다
+    body: "spec/5-plan.md의 자기 버킷 task를 선행관계 순서대로 구현하고 각 task의 완료조건 체크박스를 채운다. 단위 테스트를 함께 작성한다. 다른 버킷의 디렉터리를 수정하지 마라(경합 방지). 스키마 변경이 필요하면 database/schema.sql을 갱신하고 계획에 기록한다."
+  - id: 8
+    name: Test & Verify
+    profile: tester           # ← 신규 profile. ≠ developer (작성자≠검증자)
+    verifier: true
+    upstream: [7]
+    gate:
+      objective: []            # test_run 객관 게이트 미구현 — docs/13 §7
+      llm: tester_verdict
+      draft: null
+    body: "E2E 시나리오 실행(specflow e2e-tester 계승): spec/3-scenarios.md의 S-id 전건을 실제 구동으로 검증하고 결과를 test/report.md에 기록. 완료조건 체크박스 미충족·시나리오 미커버·테스트 실패가 있으면 FAIL. 끝에 VERDICT: PASS|FAIL."
+  - id: 9
+    name: Wiki Update
+    profile: curator
+    upstream: [8]             # 게이트: 8 PASS 시 unblock
+    body: "설계 결정·재사용 가능한 패턴·함정을 llm-wiki에 반영(entities/concepts) + reflection + 재사용률 갱신."
+  - id: 10
+    name: Deliver
+    profile: default          # Solomon
+    sam_gate: true
+    upstream: [9]
+    body: "산출물 커밋 + git push(컨테이너 GITHUB_TOKEN 자격으로 origin) + Slack 요약. ⚠️ Slack 게시는 반드시 `hermes send --to slack:#mission-log \"<요약+커밋링크>\"`(Web API)로 하라 — 에이전트 slack 도구는 인바운드 Socket Mode 어댑터에 의존해 실패할 수 있다(현재 flapping)."
