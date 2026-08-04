@@ -120,6 +120,42 @@ def test_shipped_template_declares_batch_size_on_every_parallel_stage():
         assert isinstance(s["parallel"].get("batch_size"), int), f"stage {s['id']} batch_size 미선언"
 
 
+# ── 게이트 겹침 불변식 ────────────────────────────────────────────────────
+# academic-paper 변환에서 발견: sam_gate 와 검증자 downstream 이 한 stage 에 겹치면
+# 번역기가 block 을 하나만 걸고 sam_gate 가 우선해 검증 게이트가 조용히 사라진다
+# (= 검증 FAIL 이어도 Sam 승인만으로 진행 = 불변식 우회).
+def _tpl(stages):
+    return {"invariants": ["scoping_gate", "deliver_gate", "revision_loop"], "stages": stages}
+
+
+OVERLAP = _tpl([
+    {"id": 1, "name": "Scoping", "profile": "default", "sam_gate": True, "upstream": []},
+    {"id": 2, "name": "Draft", "profile": "writer", "upstream": [1]},
+    {"id": 3, "name": "Verify", "profile": "reviewer", "verifier": True, "upstream": [2]},
+    {"id": 4, "name": "Next", "profile": "synthesizer", "sam_gate": True, "upstream": [3]},  # ← 겹침
+    {"id": 5, "name": "Deliver", "profile": "default", "sam_gate": True, "upstream": [4]},
+])
+
+
+def test_gate_overlap_is_rejected():
+    errs = it.check_invariants(OVERLAP)
+    assert any("게이트 겹침" in e and "stage 4" in e for e in errs), errs
+
+
+def test_gate_separated_passes():
+    """승인 지점을 인접 stage(5)로 내리면 통과."""
+    stages = [dict(s) for s in OVERLAP["stages"]]
+    stages[3].pop("sam_gate")            # stage 4 = 검증 게이트만
+    errs = it.check_invariants(_tpl(stages))
+    assert not any("게이트 겹침" in e for e in errs), errs
+
+
+def test_shipped_templates_have_no_gate_overlap():
+    for name in ("trend-report", "academic-paper"):
+        errs = it.check_invariants(it.load_template(name))
+        assert not errs, (name, errs)
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

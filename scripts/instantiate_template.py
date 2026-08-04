@@ -103,6 +103,14 @@ def check_invariants(tpl: dict) -> list[str]:
         prod = stage_by_id(stages, ups[0]) if ups else None
         if prod and prod.get("profile") == v.get("profile"):
             errs.append(f"작성자≠검증자 위반: stage {v['id']}({v['profile']}) == producer {prod['id']}")
+    # 게이트 겹침: 한 stage 에 sam_gate 와 검증자 downstream 이 동시에 걸리면 안 된다.
+    # 번역기는 카드당 block 을 하나만 걸고 sam_gate 가 우선하므로(instantiate 2절), 검증 게이트가
+    # 조용히 사라져 검증 FAIL 이어도 Sam 승인만으로 진행된다(불변식 우회). 승인 지점을 인접
+    # stage 로 옮겨 분리하라. [발견: academic-paper 변환, docs/13 §5]
+    for s in stages:
+        if s.get("sam_gate") and is_gated_downstream(s, stages):
+            errs.append(f"게이트 겹침: stage {s['id']}({s['name']})에 sam_gate 와 검증 게이트가 동시 — "
+                        f"승인 지점을 인접 stage 로 분리하라")
     return errs
 
 

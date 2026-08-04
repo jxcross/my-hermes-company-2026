@@ -197,6 +197,10 @@ Sam이 보는 것은 **mermaid DAG + 변경 요약 3줄**뿐이다. YAML은 Solo
    임포트의 선행 조건이자 협상 루프의 토대. 템플릿이 1개여도 즉시 쓸모가 있다.
 2. **스킬 임포터 (20종 일괄)** — harness 20종을 YAML로 변환해 **전부 `draft` 등급으로 적재**.
    agent→profile 매핑에서 미등록 profile이 나오면 목록으로 뽑아 Sam에게 신설 여부를 묻는다.
+   > **[2026-08-04 진행 중]** 자동 변환기를 먼저 만들지 않고 **수동 변환으로 레시피를 확립**하는 쪽으로
+   > 갔다. 절차·매핑 사전·진행 대장은 **[`13_skill_to_template_conversion.md`](./13_skill_to_template_conversion.md)**.
+   > 현재 2/20(trendforge=A · paperforge=B), 신규 profile 0개. 자동화(`import_skill.py`) 여부는
+   > 수동 변환이 몇 건 더 쌓인 뒤 판단한다.
 3. **공통 골격 추출** — 적재된 20종의 공통 뼈대를 뽑아 `templates/_base.yaml` 생성.
    *(상상이 아니라 귀납. 신규 구성의 출발점이자 린터 기준.)*
 4. **매처 + manifest** — 템플릿 재고가 생긴 뒤라야 3-way 판정이 의미를 갖는다.

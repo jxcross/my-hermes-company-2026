@@ -25,6 +25,23 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#22 — paperforge → 아키타입 B 변환 + 변환 절차서(docs/13) · 게이트 겹침 결함 수정</h2>
+    <div class="meta">2026-08-04 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "템플릿으로 가져오는 건 agents가 아니라 스킬 아닌가" → paperforge를 먼저 하나 변환해보고, <b>그 경험으로 다른 것들도 변환할 수 있는 방법을 md로 정리</b>. 한 세션에 20종은 무리이니 <b>새 세션에서 이어서 할 수 있는 문서</b>로.</div>
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li><b>층위 정리</b>: harness의 <code>SKILL.md</code>(오케스트레이터)=우리 <b>템플릿</b> · <code>agents/*.md</code>(격리 컨텍스트·제한 tools·입출력 계약)=우리 <b>profile</b>. agents를 분리한 이유 4가지(컨텍스트 격리·병렬 디스패치·권한 최소화·작성자≠검증자) 확인. ⇒ <b>246개 전수 분석 폐기</b>, "스킬을 변환하다 막히는 것만 모으는" 방식으로 전환.</li>
+      <li><b>paperforge 실측</b>(SKILL.md 311줄 + agent 12종): 8단계 → 우리 11단계 매핑. <b>핵심 판단 3가지</b> — ①병렬 워커(gather 3·read-extract N·draft-section N)는 <b>profile이 아니라 같은 계약의 샤드</b>→<code>parallel</code> 블록 흡수 ②stage7 3비평가(logic/fact/style)는 축이 달라 <b>우리 두 검증 지점(6 사실·인용 / 9 논리·문체)으로 재배치</b> ③원본의 "outline 승인 대기"를 sam_gate로 보존. <b>신규 profile 0개</b>.</li>
+      <li><b>결함 발견·수정 — 게이트 겹침</b>: Synthesis에 sam_gate를 달았더니 그 stage가 <b>동시에 검증자 downstream</b>이었다. 번역기는 카드당 block을 하나만 걸고 sam_gate가 우선(<code>if sam_gate: … elif is_gated_downstream:</code>) → <b>검증 게이트가 조용히 소멸</b>(검증 FAIL이어도 Sam 승인만으로 진행 = 불변식 우회). 승인 지점을 인접 stage(8 Draft Sections)로 분리하고, <code>check_invariants</code>에 <b>겹침 검사를 추가해 재발 차단</b> + 테스트 3종.</li>
+      <li><b>변환 판단 부수 발견</b>: 수집 워커는 '검색 전략'이 아니라 <b>'산출 taxonomy'로 분할</b>해야 <code>source_balance</code> 게이트가 워커 산출을 검사할 수 있다(paperforge <code>gather-recent</code>는 워커가 아니라 <code>recency_policy</code>로 흡수) · 산출 도구(<code>bib_export.py</code>)는 게이트가 아니다.</li>
+      <li><code>templates/academic-paper.yaml</code>(11 stage · 팬아웃 3 · 검증 2 · Sam 게이트 3 · 논문용 taxonomy 6종) + <b><code>docs/13</code></b>(레시피 8단계 · agent→profile 매핑 사전 · 불변식 보강 체크리스트 · 함정 5건 · <b>20종 진행 대장</b> · 재개 방법) + CLAUDE.md·docs/12 포인터.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      <b>아키타입 B 확보</b>(dry-run 불변식 위반 0 · 게이트 5개 정상 · 비파괴 확인) + 테스트 <b>20/20</b>. 변환 1건이 <b>불변식 우회 결함</b>을 잡아냈다(실제로 해보지 않았으면 못 봄). <b>docs/13이 재개 지점</b> — 새 세션은 §6 대장에서 다음 대상(specflow=D)을 고르면 된다. 현재 <b>2/20</b>, 신규 profile 후보 0건.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#21 — 미션 파이프라인 협상 설계 (docs/12) — 구상 검토·지적·대안</h2>
     <div class="meta">2026-08-04 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "미션은 던지는 게 아니라 Sam↔Solomon이 목적·범위·워크플로우를 논의해 확정한 뒤 전권을 넘기는 방식이다. 대화 중 적당한 템플릿 yaml을 찾고 단계를 가감할 수 있나? 더 나은 업무 프로세스는?" → <b>구상을 검토하고 잘못된 부분을 지적하고 더 좋은 방향을 제시하라</b> → 정리해 md로 저장.</div>
