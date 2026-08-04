@@ -1,0 +1,134 @@
+# 아키타입 K — 코드베이스 마이그레이션 (10단계)
+# 출처: other_projects/harness-templates/domain-harnesses/project_migrateforge
+#       (.claude/skills/migrateforge/SKILL.md 8-stage + agents 13종). 변환 절차: docs/13
+#
+# ⚠️ **이 아키타입은 지금까지 중 유일하게 미션 밖의 실제 코드를 변경하고 커밋한다.**
+#    다른 아키타입은 `reports/<MID>/` 에 문서를 쌓을 뿐이지만, 이것은 대상 저장소의 파일을
+#    고치고 git 이력을 남긴다. 그래서 안전 규약이 파이프라인 설계의 일부다:
+#
+#    ① **대상 저장소는 `HERMES_WRITE_SAFE_ROOT` 안**이어야 한다
+#       (`/opt/data` · `/work/company` · `/work/llm-wiki`). 밖이면 워커가 쓸 수 없다.
+#    ② **이 저장소(`/work/company`) 자신을 대상으로 삼지 마라** — 파이프라인이 자기 코드를
+#       고치는 상황이 되고, gate_keeper 가 도는 중에 gate_keeper 가 바뀐다.
+#    ③ **변환은 순차 실행이다**(아래 참조).
+#    ④ 코드 변경 개시 전 **Sam 승인 게이트**(stage 6)를 반드시 지난다.
+#
+# ⚠️ **원본의 병렬 배치 실행을 그대로 옮기지 않았다.** 원본 stage 5 는 독립 배치를 병렬
+#    subagent 로 돌리고 각자 `git commit` 한다. 같은 저장소에서 동시 커밋은 `.git/index.lock`
+#    을 두고 경합해 실패하거나 커밋이 뒤섞인다. specflow 에서 배운 "코드 병렬은 겹치지 않는
+#    디렉터리 단위로"(docs/13 §5)보다 더 강한 제약이다 — **디렉터리를 나눠도 git 인덱스는
+#    공유 자원**이다. 게다가 이 아키타입의 하드게이트(원자 커밋)는 커밋 순서의 원자성을
+#    요구하므로 병렬과 근본적으로 상충한다. → `parallel` 선언 없음(순차).
+#
+# 변환 판단(요약 — 상세·근거는 docs/13 §2·§5):
+#  - 원본 게이트 3종을 전부 이식했고 **3종 모두에서 결함**이 나왔다(§5):
+#      test_pass_rate    : **기준선을 보지 않아 회귀를 못 잡는다**(100%→96% 도 '합격') ·
+#                          분모 자기결정(깨진 테스트를 지우면 100%)
+#      behavior_diff     : 계획을 읽어 변수에 담고 **한 번도 참조하지 않는다**(죽은 변수) —
+#                          판정이 `acceptable: yes` 자기 신고뿐 · 차이 0건이면 무조건 통과
+#      atomic_commit     : 커밋 메시지가 **비어 있으면 검사를 건너뜀** · 자기 신고 SHA 만 셈 ·
+#                          혼합 커밋 검사를 선언만 하고 안 함
+#  - `atomic_commit` 은 **두 지점에서 쓴다** — 계획 검증(draft=plan.md)과 실행 검증
+#    (draft=transforms/). legal-draft 의 law_citation 과 같은 이중 배치다.
+#  - **신규 profile 0개** — 대장의 "예상 있음(개발·테스트)"은 아키타입 D 때 만든
+#    `developer`·`tester`·`architect` 로 충족된다.
+#  - `migration_lint.py`(코드 스캔 보조) · `bundle_export.py` · `runs_state.py` 는 미이식.
+#
+# 스키마 규약은 templates/trend-report.yaml 머리말 참조.
+
+name: code-migration
+category: engineering
+display_name: 코드베이스 마이그레이션(버전·타입·프레임워크)
+maturity: draft
+goal_kr: 기존 코드베이스를 목표 버전·타입 시스템·프레임워크로 옮기되, 원자 커밋으로 되돌릴 수 있게 하고 기준선 대비 행동과 테스트가 나빠지지 않았음을 증명한다.
+requires_profiles: [architect, developer, tester]
+invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop]
+# ⚠️ `sources_cited` 를 선언하지 않는다 — 이 아키타입의 근거는 웹 출처가 아니라
+#    **기준선 측정값과 git 이력**이다. 그 대조는 sources.yaml 보다 강하다(code-docs 와 같다).
+
+policy:
+  migration_policy:
+    commit_prefix: migrate
+    require_git_verify: true     # 자기 신고가 아니라 실제 git log 와 대조한다(읽기 전용)
+    require_rollback: true       # 되돌릴 수 없는 step 은 원자 커밋이 아니다
+    allow_file_overlap: false    # step 간 파일 겹침 금지 — 개별 revert 가 불가능해진다
+    plan_file: plan.md
+
+  test_policy:
+    threshold: 0.95
+    allow_pass_count_drop: false # ⚠️ 이것이 회귀 게이트의 본체다(원본에 없던 검사)
+    allow_test_count_drop: false # 깨진 테스트를 지워 통과율을 올리는 경로 차단
+    baseline_file: baseline.md
+
+  behavior_policy:
+    require_intentional_ref: true  # '의도된 변경'은 계획의 id 를 참조해야 인정
+    min_case_coverage: 1.0         # 기준선 지문을 전건 재실행해야 한다
+    plan_file: plan.md
+    baseline_file: baseline.md
+
+stages:
+  - id: 1
+    name: Scoping
+    profile: default          # Solomon
+    sam_gate: true
+    upstream: []
+    body: "마이그레이션 범위를 확정해 reports/<MID>/SCOPE.md 에 작성 — 출발/목표(예: Python 3.8→3.12 · JS→TS · React 16→18) · 대상 범위와 **제외 범위** · 허용 위험도 · 마감 · 완료조건. ⚠️ **frontmatter 에 다음을 반드시 선언**하라(객관 게이트가 이 값으로 실제 저장소와 대조한다):\n`codebase: <경로>` · `migration_types: [version, type, framework, storage]` 중 해당 항목 · `test_command: <테스트 실행 명령>`.\n⚠️ **안전 규약**: ① `codebase` 는 `HERMES_WRITE_SAFE_ROOT`(`/opt/data`·`/work/company`·`/work/llm-wiki`) 안이어야 워커가 쓸 수 있다. ② **`/work/company` 자신을 대상으로 삼지 마라** — 파이프라인이 자기 코드를 고치게 되고 게이트키퍼가 도는 중에 게이트키퍼가 바뀐다. ③ 대상 저장소는 **깨끗한 작업 트리**여야 한다(커밋 안 된 변경이 있으면 원자 커밋 검사가 무의미해진다). ④ 이 파이프라인은 **force push 를 하지 않는다** — 되돌리기는 `git revert` 로만. ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라."
+  - id: 2
+    name: Codebase Ingest
+    profile: reader
+    upstream: [1]
+    body: "대상 코드베이스를 읽어 codebase.md 에 정리 — 언어와 버전 · 프레임워크 · 의존성 목록과 목표 버전 호환성 · **테스트 프레임워크와 실행 방법** · 디렉터리 구조 · 마이그레이션에 걸리는 지점(deprecated API 사용처, 목표 버전에서 사라진 기능, 타입 미지정 영역)을 **파일·줄 단위로** 목록화한다. ⚠️ 코드를 **고치지 마라** — 이 단계는 읽기만 한다. ⚠️ 추측하지 말고 실제로 열어 보라. 의존성은 lock 파일까지 확인한다."
+  - id: 3
+    name: Migration Plan
+    profile: architect
+    upstream: [2]
+    body: "원자 커밋 단위 변환 계획을 plan.md 에 설계한다. **블록 형식을 정확히 지켜라**(객관 게이트가 파싱한다):\n```steps\n- id: s1\n  type: syntax\n  files: [src/a.py, src/b.py]\n  commit_message: \"migrate(syntax): print 문을 함수 호출로 변환\"\n  rollback: git revert <sha>\n  depends_on: []\n```\n그리고 **의도적 행동 변경**을 따로 선언하라:\n```intentional\n- id: ic1\n  change: Python 3 에서 문자열 기본 인코딩이 달라져 bytes 반환이 str 로 바뀐다\n  affected: [f3]\n```\n⚠️ **step 간 파일이 겹치면 안 된다** — 겹치면 개별 revert 가 불가능해져 게이트가 반려한다. ⚠️ 모든 step 에 `rollback:` 을 적어라. ⚠️ 행동이 바뀌는 것을 알고 있다면 **여기서 선언하라** — 선언되지 않은 행동 변화는 검증 단계에서 회귀로 판정된다. ⚠️ 위험한 것(공개 API 시그니처 변경·데이터 형식 변경)을 앞쪽 step 에 두어 일찍 드러나게 하라."
+  - id: 4
+    name: Plan Verify
+    profile: reviewer          # ≠ architect
+    verifier: true
+    upstream: [3]
+    gate:
+      objective: [atomic_commit]
+      llm: reviewer_verdict
+      draft: "reports/<MID>/plan.md"
+    body: "계획을 독립 검토한다(**코드를 건드리기 전이 가장 싸다**): ① **원자성의 실질** — 객관 게이트는 파일 겹침과 필드 존재만 본다. **한 step 이 실제로 하나의 의미 단위인지**는 네가 판단한다(파일 3개를 건드려도 한 가지 변환이면 원자적이고, 파일 1개라도 두 가지 변환을 섞으면 아니다). ② **선후 관계** — `depends_on` 이 실제 코드 의존성을 반영하는가, 앞 step 이 깨진 상태를 남겨 뒤 step 이 검증 불가능해지지 않는가. ③ **롤백 가능성** — 데이터 형식 변경처럼 되돌려도 원상복구가 안 되는 것이 섞여 있지 않은가(있다면 그 step 은 Sam 에게 별도 고지해야 한다). ④ **의도적 변경 선언의 충분성** — 목표 버전에서 당연히 달라지는 동작(문자열·정수 나눗셈·정렬 안정성 등)을 빠뜨리지 않았는가. ⑤ 제외 범위를 침범하지 않는가. 끝에 VERDICT: PASS|FAIL."
+  - id: 5
+    name: Baseline Snapshot
+    profile: tester
+    upstream: [4]              # 게이트: 4 PASS 시 게이트키퍼가 unblock
+    body: "**변환 전** 기준선을 baseline.md 에 기록한다 — SCOPE.md 의 `test_command` 로 기존 테스트를 실행하고 결과를 `n_tests_total: <정수>` · `n_passed: <정수>` 줄로 남긴다(게이트가 이 두 줄을 읽어 회귀를 판정한다). 그리고 **행동 지문**을 만든다:\n```fingerprint\n- case: f1\n  input: 대표 입력(재현 가능한 형태로)\n  output: 실제 관측된 출력\n  how: 재실행 방법(명령 또는 스크립트 경로)\n```\n⚠️ **지문은 마이그레이션이 깨뜨릴 만한 것을 골라라** — 문자열/바이트, 정수 나눗셈, 정렬 순서, 날짜 처리, 직렬화 형식, 부동소수 출력. 단순 getter 를 100개 넣는 것보다 위험 지점 10개가 낫다. ⚠️ 기준선이 이미 실패하는 테스트가 있으면 **그 사실을 그대로 기록**하라(숨기면 나중에 회귀로 오인된다). ⚠️ 이 단계는 코드를 **바꾸지 않는다** — 실행하고 기록만 한다."
+  - id: 6
+    name: Transform Execute
+    profile: developer
+    sam_gate: true             # ⚠️ 실제 코드 변경 개시 — 사람이 승인한다
+    approval_artifact: "reports/<MID>/plan.md"
+    upstream: [5]
+    body: "plan.md 의 step 을 **`depends_on` 순서대로 하나씩** 실행한다. ⚠️ **순차 실행이다 — 병렬로 나누지 마라.** 같은 저장소에서 동시에 커밋하면 `.git/index.lock` 경합으로 실패하거나 커밋이 뒤섞이고, 원자 커밋 게이트가 무너진다. subagent 팬아웃을 쓰지 마라.\n각 step 마다: ① 선언된 `files:` **만** 수정 ② 해당 파일만 `git add` ③ `commit_message` 그대로 커밋 ④ 결과를 transforms/batch-NN.md 에 기록한다:\n```executed\n- step_id: s1\n  commit_sha: <실제 SHA>\n  commit_message: \"migrate(syntax): print 문을 함수 호출로 변환\"\n  files_changed: [src/a.py, src/b.py]\n```\n⚠️ **SHA 를 지어내지 마라** — 게이트가 실제 `git log` 와 대조한다. ⚠️ 선언되지 않은 파일을 함께 커밋하지 마라(혼합 커밋으로 반려된다). 계획에 없는 문제를 발견하면 **고치지 말고 기록**해 검증 단계로 넘겨라 — 범위 이탈은 반려 사유다. ⚠️ 실패한 step 은 `git revert` 로 되돌리고 기록에 남겨라. **force push 금지.**"
+  - id: 7
+    name: Verify Run
+    profile: tester
+    upstream: [6]
+    body: "변환 후 상태를 실행으로 검증하고 verify/ 아래에 기록한다. ① `verify/regression.md` — 기존 테스트 재실행. `n_tests_total_after: <정수>` · `n_passed_after: <정수>` 줄 필수(게이트가 기준선과 대조한다). 실패 케이스는 이름과 원인을 적는다. ② `verify/diff.md` — baseline.md 의 **모든 지문 케이스를 재실행**하고 상단에 `checked_cases: <정수>` 를 적은 뒤 차이를 기록한다:\n```diffs\n- entry: f3\n  acceptable: yes\n  intentional_id: ic1\n  reason: plan.md 가 선언한 문자열 타입 변경\n```\n⚠️ **`acceptable: yes` 로 적으려면 반드시 `intentional_id` 로 계획의 선언을 참조**해야 한다 — 참조 없는 '괜찮음'은 게이트가 거부한다(원본은 자기 신고만으로 통과시켰다). ③ `verify/new-test.md` — 마이그레이션으로 생긴 새 동작에 대한 테스트를 추가하고 `n_new_tests_added:` · `n_passed:` 기록. ④ 타입 마이그레이션이 범위에 있으면 `verify/type-check.md` — tsc/mypy 결과. ⚠️ **테스트를 지우거나 skip 처리해 통과율을 올리지 마라** — 게이트가 기준선 대비 테스트 수 감소를 반려한다."
+  - id: 8
+    name: Migration Verify
+    profile: fact-checker      # ≠ tester
+    verifier: true
+    upstream: [7]
+    gate:
+      objective: [test_pass_rate, behavior_diff, atomic_commit]
+      llm: fact_checker_verdict
+      draft: "reports/<MID>/verify"
+    body: "보고된 것이 **사실인지** 검증한다(객관 게이트는 숫자와 형식만 본다): ① **수치의 진위** — regression.md 의 통과 수가 실제 실행 로그와 맞는가, 실패를 skip 으로 바꿔 놓지 않았는가. ② **행동 차이 판정의 타당성** — `intentional_id` 를 참조했다고 해서 정말 그 변경인가(계획의 ic1 은 문자열 인코딩인데 실제 차이는 정렬 순서인 경우를 잡아라). ③ **지문 재실행의 진실성** — `checked_cases` 수만 채우고 실제로는 일부만 돌리지 않았는가. ④ **커밋의 실질** — 게이트가 파일 목록을 대조하지만, 커밋 내용이 그 step 의 변환인지는 네가 diff 를 읽어 판단한다. ⑤ 남은 실패 테스트가 마이그레이션과 무관한 기존 실패인가. 끝에 VERDICT: PASS|FAIL."
+  - id: 9
+    name: Wiki Update
+    profile: curator
+    upstream: [8]             # 게이트: 8 PASS 시 unblock
+    body: "마이그레이션 지형(출발→목표별 걸림돌 목록·변환 패턴·의도적 행동 변경 사례·되돌리기 경험)을 llm-wiki 에 반영(entities/concepts) + reflection + 재사용률 갱신. 같은 전환(예: Python 3.8→3.12)을 다른 저장소에서 또 할 때 계획 단계를 재사용할 수 있게 정리한다."
+  - id: 10
+    name: Deliver
+    profile: default          # Solomon
+    sam_gate: true
+    approval_artifact: "reports/<MID>/verify/regression.md"
+    upstream: [9]
+    body: "① 번들 조립 `reports/<MID>/migration-bundle/`: migration-report.md(무엇을 왜 어떻게 바꿨는가) · change-summary.md(step→커밋 SHA 표) · test-results.md(기준선 대비 표) · behavior-diff.md(의도적 변경 목록과 근거) · **rollback-guide.md**(역순 revert 절차와 SHA) · post-migration-checklist.md(배포 전 확인 항목). ② 미션 문서 커밋 + git push(컨테이너 GITHUB_TOKEN 자격) + Slack 요약. ⚠️ **대상 저장소의 커밋은 이미 그 저장소에 있다** — 이 단계에서 다시 만들지 마라. 대상 저장소를 push 할지는 **Sam 이 정한다**(자동 push 하지 마라). ⚠️ Slack 요약에 **커밋 수 · 기준선 대비 통과율 · 의도적 행동 변경 건수 · 롤백 방법**을 포함하라. ⚠️ Slack 게시는 반드시 `hermes send --to slack:#mission-log \"<요약+커밋링크>\"`(Web API)로 하라."

@@ -45,6 +45,9 @@ objective_coverage = _load("objective_coverage")
 bloom_distribution = _load("bloom_distribution")
 course_consistency = _load("course_consistency")
 content_accessibility = _load("content_accessibility")
+atomic_commit = _load("atomic_commit")
+test_pass_rate = _load("test_pass_rate")
+behavior_diff = _load("behavior_diff")
 
 
 # ── prisma_counts ────────────────────────────────────────────────────────
@@ -689,6 +692,69 @@ def test_korean_image_hint_alt_recognized():
 
 def test_headings_are_not_counted_as_sentences():
     assert content_accessibility.sentences("## 학습목표 복습\n") == []
+
+
+
+# ── atomic_commit (아키타입 K · 원본 GATE 3) ───────────────────────────────
+def test_missing_commit_message_is_failed_not_skipped():
+    """원본 `if msg and not RE.match(msg)` — 메시지가 **비어 있으면 검사를 건너뛴다**.
+    안 적으면 통과하는 형식 검사는 형식 검사가 아니다."""
+    steps = [{"id": "s1", "files": "[a.py]", "rollback": "revert"}]     # commit_message 없음
+    assert atomic_commit.check_plan(steps, "migrate", True, False) is True
+
+
+def test_file_overlap_between_steps_is_failed():
+    """겹치면 개별 revert 가 불가능해져 원자성이 깨진다(원본에 없던 검사)."""
+    steps = [
+        {"id": "s1", "files": "[a.py]", "rollback": "r", "commit_message": "migrate(x): 하나"},
+        {"id": "s2", "files": "[a.py]", "rollback": "r", "commit_message": "migrate(x): 둘"},
+    ]
+    assert atomic_commit.check_plan(steps, "migrate", True, False) is True
+    assert atomic_commit.check_plan(steps, "migrate", True, True) is False   # 허용 정책이면 통과
+
+
+def test_missing_rollback_is_failed():
+    steps = [{"id": "s1", "files": "[a.py]", "commit_message": "migrate(x): 하나"}]
+    assert atomic_commit.check_plan(steps, "migrate", True, False) is True
+    assert atomic_commit.check_plan(steps, "migrate", False, False) is False
+
+
+def test_as_list_parses_inline_yaml_list():
+    assert atomic_commit.as_list("[a.py, b/c.py]") == ["a.py", "b/c.py"]
+    assert atomic_commit.as_list("") == []
+
+
+# ── test_pass_rate (아키타입 K · 원본 GATE 1) ──────────────────────────────
+def test_field_returns_none_when_absent():
+    """원본 `parse_int_field` 는 없으면 0 을 준다 — 형식 오류가 '0/0 = 0%' 라는
+    그럴듯한 판정으로 둔갑한다. 우리는 None 으로 구분해 fail-closed 한다."""
+    assert test_pass_rate.field("n_passed: 19\n", "n_passed") == 19
+    assert test_pass_rate.field("n_passed: 19\n", "n_tests_total") is None
+
+
+def test_field_requires_whole_line_integer():
+    """`n_passed_after: 19건` 같은 값은 숫자로 받지 않는다(조용한 오독 방지)."""
+    assert test_pass_rate.field("n_passed: 열아홉\n", "n_passed") is None
+
+
+# ── behavior_diff (아키타입 K · 원본 GATE 2) ───────────────────────────────
+def test_accept_only_exact_yes():
+    """원본 `"yes" in acceptable` — `not yes` 도 `yes, 확인 안 함` 도 통과했다."""
+    assert "yes" in behavior_diff.ACCEPT_OK and "true" in behavior_diff.ACCEPT_OK
+    assert "not yes" not in behavior_diff.ACCEPT_OK
+
+
+def test_parse_items_binds_fields_to_entry():
+    text = ("```diffs\n- entry: f1\n  acceptable: yes\n  intentional_id: ic1\n"
+            "- entry: f2\n  acceptable: no\n```\n")
+    got = behavior_diff.parse_items(text, "diffs", "entry")
+    assert got[0]["intentional_id"] == "ic1" and got[1]["acceptable"] == "no"
+    assert "intentional_id" not in got[1]
+
+
+def test_fingerprint_block_parsed_from_baseline():
+    text = "```fingerprint\n- case: f1\n  input: x\n- case: f2\n  input: y\n```\n"
+    assert [c["case"] for c in behavior_diff.parse_items(text, "fingerprint", "case")] == ["f1", "f2"]
 
 
 
