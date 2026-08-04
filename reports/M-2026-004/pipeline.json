@@ -1,0 +1,190 @@
+{
+  "mission": "M-2026-004",
+  "template": "trend-report",
+  "topic": "온디바이스 LLM 추론 최적화 동향",
+  "policy_file": "reports/M-2026-004/SCOPE.md",
+  "sources_file": "reports/M-2026-004/raw/sources.yaml",
+  "policy": {
+    "recency_policy": {
+      "cutoff_year_offset": -2,
+      "recent_ratio": 0.6,
+      "hard_block_year_offset": -5,
+      "seminal_exceptions": true
+    },
+    "source_balance_policy": {
+      "categories": [
+        "academic",
+        "vendor",
+        "research_org",
+        "standards",
+        "news"
+      ],
+      "min_per_category": {
+        "academic": 2,
+        "vendor": 2,
+        "research_org": 1,
+        "standards": 0,
+        "news": 0
+      },
+      "hard_block_if_missing": false
+    }
+  },
+  "stages": [
+    {
+      "id": 1,
+      "name": "Scoping",
+      "task_id": "t_be5998ea",
+      "profile": "default",
+      "verifier": false,
+      "sam_gate": true,
+      "upstream_task_ids": []
+    },
+    {
+      "id": 2,
+      "name": "Search Strategy",
+      "task_id": "t_9bc5fca6",
+      "profile": "scout",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_be5998ea"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Collection",
+      "task_id": "t_142368a5",
+      "profile": "scout",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_9bc5fca6"
+      ],
+      "parallel": {
+        "mode": "workers",
+        "workers": [
+          "academic",
+          "vendor",
+          "research_org",
+          "standards",
+          "news"
+        ],
+        "merge_to": "raw/sources.yaml"
+      }
+    },
+    {
+      "id": 4,
+      "name": "Dedup·Relevance",
+      "task_id": "t_0feffcb1",
+      "profile": "curator",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_142368a5"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Deep Analysis",
+      "task_id": "t_34c97488",
+      "profile": "reader",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_0feffcb1"
+      ],
+      "parallel": {
+        "mode": "per_item",
+        "over": "raw/sources.yaml 의 status=selected 자료 각각",
+        "merge_to": "analysis/_index.md"
+      }
+    },
+    {
+      "id": 6,
+      "name": "Cross-Verify",
+      "task_id": "t_f24b5e50",
+      "profile": "fact-checker",
+      "verifier": true,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_34c97488"
+      ],
+      "gate": {
+        "objective": [
+          "recency_check",
+          "source_balance"
+        ],
+        "llm": "fact_checker_verdict",
+        "draft": null
+      }
+    },
+    {
+      "id": 7,
+      "name": "Synthesis",
+      "task_id": "t_e5bcf652",
+      "profile": "synthesizer",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_f24b5e50"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "Report Draft",
+      "task_id": "t_155e857e",
+      "profile": "writer",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_e5bcf652"
+      ],
+      "parallel": {
+        "mode": "per_item",
+        "over": "보고서 섹션(개요·기술분류·성숙도·적용후보·결론 등 7단계 종합 기준)",
+        "merge_to": "report.md"
+      }
+    },
+    {
+      "id": 9,
+      "name": "Independent Review",
+      "task_id": "t_0c9acde5",
+      "profile": "reviewer",
+      "verifier": true,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_155e857e"
+      ],
+      "gate": {
+        "objective": [
+          "recency_check",
+          "source_balance"
+        ],
+        "llm": "reviewer_verdict",
+        "draft": "reports/M-2026-004/report.md"
+      }
+    },
+    {
+      "id": 10,
+      "name": "Wiki Update",
+      "task_id": "t_bac6929a",
+      "profile": "curator",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_0c9acde5"
+      ]
+    },
+    {
+      "id": 11,
+      "name": "Deliver",
+      "task_id": "t_2daad491",
+      "profile": "default",
+      "verifier": false,
+      "sam_gate": true,
+      "upstream_task_ids": [
+        "t_bac6929a"
+      ]
+    }
+  ]
+}

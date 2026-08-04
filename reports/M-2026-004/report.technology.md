@@ -1,0 +1,21 @@
+## 기술 분류와 성숙도
+
+본 절의 성숙도는 다음과 같이 사용한다. **연구**는 논문·제안 수준이거나 독립 재현 및 운영 조건이 부족한 경우, **초기**는 구현물 또는 제품 경로는 있으나 지원 범위·비교 조건·운영 안정성의 범위가 제한된 경우다. 이는 보편적 성능 우위나 즉시 도입 가능성을 뜻하지 않는다. 아래 분류는 기존 Reader 분석과 검증 결과를 재구성한 것이며, 성능·메모리·지연 수치는 각각의 장치, 정밀도, 런타임, 작업 단계 및 길이 조건 밖으로 일반화하지 않는다.
+
+| 분류 | 기술/메커니즘 | 성숙도 | 근거와 경계 |
+|---|---|---|---|
+| **A. 모델 구조·가중치 압축** | sub-billion deep-and-thin, SwiGLU, embedding sharing, GQA, immediate block-wise sharing, W8A8 PTQ | **연구** | [MobileLLM](https://arxiv.org/abs/2402.14905v2)은 125M/350M 범위에서 구조 조합과 즉시 블록 공유의 평가를 제시하고 iPhone 13·ExecuTorch·FP16 프로파일도 보고한다. 다만 모바일 실측은 125M 계열의 한 기기 조건에 한정된다. 에너지, 다른 SoC, 장문맥으로 일반화할 근거는 없다. |
+| **B. KV cache 양자화·관리** | KIVI의 key per-channel/value per-token 2-bit 양자화, full-precision residual window | **연구** | [KIVI](https://arxiv.org/abs/2402.02750v2)는 긴 생성에서 KV cache 병목을 겨냥한 알고리즘과 실험을 제공한다. 그러나 Falcon-7B에서는 2-bit 품질 하락 가능성과 4-bit 필요성도 함께 제시된다. 따라서 2-bit를 보편적 기본값으로 둘 수 없으며, 효율 평가는 A100 및 합성 workload 조건에 묶인다. |
+| **C. DRAM–Flash 계층형 메모리** | flash weight loading, activation-sparsity predictor, windowing, row-column bundling, embedding/overflow KV의 Flash 배치 | **연구** | [LLM in a Flash](https://arxiv.org/abs/2312.11514v3)와 [MNN-LLM](https://arxiv.org/abs/2506.10443v1)은 제한된 DRAM에서 I/O·가중치·KV 배치를 다룬다. 전자는 half-memory·single-sequence·특정 SSD/backend 조건, 후자는 Qwen2/Xiaomi 14의 대역폭·Flash 가정에 한정된다. MNN의 Flash KV 추정과 성능은 장기 열, 전력, OS I/O 경합을 측정하지 않았다. |
+| **D. 요청 적응형 SLO 조정** | submodel 전환, prompt compression, TTFT/TPOT SLO 기반 선택(ElastiLM) | **연구** | [Elastic On-Device LLM Service](https://arxiv.org/abs/2409.09071v2)는 모델 크기와 프롬프트 길이를 함께 조절하는 설계 및 Redmi K60의 관계 측정을 제시한다. 다만 핵심 평가표와 baseline 정의는 보존된 원문에서 중간 생략된 범위에 속한다. 정확도·전환·메모리 우위는 저자 보고로만 사용하며, SLO 역시 full-model latency 대비 비율이지 절대 UX 예산이 아니다. |
+| **E. 런타임·하드웨어 가속** | CPU/GPU data reorder, heterogeneous core balancing, mixed precision, LoRA, LiteRT 양자화, Qualcomm NPU API | **초기** | [MNN-LLM](https://arxiv.org/abs/2506.10443v1)은 Xiaomi 14에서 엔진별 prefill/decode 결과를 제시하지만, MLC-LLM 비교는 양자화가 대칭/비대칭으로 달라 동일 조건 비교가 아니다. [Google AI Edge](https://developers.googleblog.com/en/google-ai-edge-small-language-models-multimodality-rag-function-calling)와 [QAI AppBuilder](https://docs.qualcomm.com/doc/80-94755-1/80-94755-1_REV_AA_QAI_AppBuilder_-_WoS.pdf)는 구현·배포 경로를 제공한다. 그러나 제품 문서의 지연·호환·생산성 서술은 독립 성능 검증이 아니다. |
+| **F. 온디바이스 기능 조합** | RAG, function calling, 멀티모달 SLM, AICore/ML Kit API, OpenAI-compatible local endpoint | **초기** | [Google AI Edge](https://developers.googleblog.com/en/google-ai-edge-small-language-models-multimodality-rag-function-calling)의 현재 RAG/function-calling 문서·코드는 확인되며, 실제 함수 실행은 앱 코드가 담당한다. [Gemini Nano/AICore](https://ai.google.dev/gemini-api/docs/get-started/android_aicore)와 [QAI AppBuilder](https://docs.qualcomm.com/doc/80-94755-1/80-94755-1_REV_AA_QAI_AppBuilder_-_WoS.pdf)는 시스템/API 경계를 제시한다. 지원 기기·모달리티·안전·API 호환성·품질은 문서 범위를 넘어 확정할 수 없고, 발표 시점 SDK 가용성은 미검증 상태다. |
+| **G. 모델/메모리 가변화** | Gemma 3n PLE, KVC sharing, activation quantization, MatFormer, E2B/E4B 유효 파라미터 표기 | **초기** | [Gemma 3n 발표](https://developers.googleblog.com/introducing-gemma-3n)에서 `E`는 총 파라미터가 아닌 effective parameter 정의로 확인된다. PLE·속도·메모리·품질은 공급자 발표이며 재현 조건이 부족하다. 오디오 기능은 발표 당시 public implementation이 후속 예정이었으므로, 멀티모달 소개와 실제 preview checkpoint 범위를 구분해야 한다. |
+| **H. 성능 평가·비교 운영** | MLPerf Client v1.0의 PC/client LLM 도구 경로, MLPerf Inference v5.0의 TTFT/TPOT·정확도 기준·결과 생태계 | **초기** | [MLPerf Client v1.0](https://mlcommons.org/2025/07/mlperf-client-v1-0), [MLPerf Inference v5.0 방법론](https://mlcommons.org/2025/04/llm-inference-v5), [v5.0 결과 발표](https://mlcommons.org/2025/04/mlperf-inference-v5-0-results)는 공통 workload와 지표 언어를 제공한다. 그러나 Client 발표에는 상세 사양·결과가 없으며, Inference 방법론 발표와 결과 발표를 시스템 순위 근거로 합쳐서는 안 된다. MLPerf 405B/70B 자료는 온디바이스 실증이 아니라 비교 설계의 참조로 제한한다. |
+
+### 해석 경계
+
+- MobileLLM(iPhone 13/ExecuTorch/FP16), MNN-LLM(Xiaomi 14/CPU·OpenCL), KIVI(A100), LLM in a Flash(M1/M2/RTX 4090), Gemma·AI Edge(S24 Ultra 등)는 모델·정밀도·작업 단계·장치가 다르다. 따라서 token/s, 배율, 메모리 수치를 하나의 순위로 만들 수 없다.
+- MLPerf의 방법론 자료와 결과 발표 자료는 같은 릴리스라도 역할이 다르다. 전자는 설계·워크로드, 후자는 발표 수준의 집계에 관한 자료이며, 개별 시스템 결과나 온디바이스 우열의 근거가 아니다.
+- 제품 문서에서 API의 존재 또는 현재 안내가 확인된다는 것과 특정 시점의 가용성, 성능, 품질, 보안 효과가 검증되었다는 것은 별개의 주장이다.
+- Google 관련 발표의 모델 수·가용성·계보·수치·효능 표현은 공급자 발표 또는 미검증 상태를 유지한다. 특히 E2B/E4B를 총 파라미터 2B/4B 모델로 바꾸어 서술하지 않는다.

@@ -1,0 +1,22 @@
+- id: nist-ai-100-2e2023
+  title: "Adversarial Machine Learning: A Taxonomy and Terminology of Attacks and Mitigations"
+  url: "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-2e2023.pdf"
+  doi: "https://doi.org/10.6028/NIST.AI.100-2e2023"
+  publisher: "National Institute of Standards and Technology"
+  issuing_body: "NIST Trustworthy and Responsible AI"
+  document_series: "NIST Artificial Intelligence (AI) Report"
+  document_identifier: "NIST AI 100-2e2023"
+  authors:
+    - "Apostol Vassilev"
+    - "Alina Oprea"
+    - "Alie Fordyce"
+    - "Hyrum Anderson"
+  publication_date_observed: "2024-01"
+  published_year: 2024
+  approval_date_observed: "2024-01-02"
+  collection_date: "2026-08-03"
+  collected_at: "2026-08-03"
+  source_type: standards
+  status: selected
+  raw_path: "raw/nist-ai-100-2e2023.md"
+  raw_sha256: "9fb63936c0c3e93f5fbc24f1807ba0cb410394c3819b252f27ccf9144d1f5e2c"

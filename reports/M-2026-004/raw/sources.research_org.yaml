@@ -1,0 +1,43 @@
+- id: mlcommons-mlperf-client-v1-0
+  title: "MLCommons Releases MLPerf Client v1.0: A New Standard for AI PC and Client LLM Benchmarking"
+  url: "https://mlcommons.org/2025/07/mlperf-client-v1-0"
+  publication_date_observed: "2025-07-30"
+  published_year: 2025
+  collection_date: "2026-08-03"
+  collected_at: "2026-08-03"
+  source_type: research_org
+  status: selected
+  raw_path: "raw/mlcommons-mlperf-client-v1-0.md"
+
+- id: mlcommons-mlperf-client-v1-0-release
+  title: "MLPerf Client 1.0.0"
+  url: "https://github.com/mlcommons/mlperf_client/releases/tag/v1.0"
+  publication_date_observed: "2025-07-30T14:58:53Z"
+  published_year: 2025
+  collection_date: "2026-08-03"
+  collected_at: "2026-08-03"
+  source_type: research_org
+  status: selected
+  raw_path: "raw/mlcommons-mlperf-client-v1-0-release.md"
+
+- id: mlcommons-mlperf-inference-v5-0
+  title: "MLPerf Inference v5.0 Advances Language Model Capabilities for GenAI"
+  url: "https://mlcommons.org/2025/04/llm-inference-v5"
+  publication_date_observed: "2025-04-02"
+  published_year: 2025
+  collection_date: "2026-08-03"
+  collected_at: "2026-08-03"
+  source_type: research_org
+  status: selected
+  raw_path: "raw/mlcommons-mlperf-inference-v5-0.md"
+
+- id: mlcommons-mlperf-inference-v5-0-results
+  title: "MLCommons Releases New MLPerf Inference v5.0 Benchmark Results"
+  url: "https://mlcommons.org/2025/04/mlperf-inference-v5-0-results"
+  publication_date_observed: "2025-04-02"
+  published_year: 2025
+  collection_date: "2026-08-03"
+  collected_at: "2026-08-03"
+  source_type: research_org
+  status: selected
+  raw_path: "raw/mlcommons-mlperf-inference-v5-0-results.md"

@@ -1,0 +1,142 @@
+- id: mobilellm-optimizing-sub-billion-parameter-language-models
+  title: "MobileLLM: Optimizing Sub-billion Parameter Language Models for On-Device Use Cases"
+  url: "https://arxiv.org/abs/2402.14905v2"
+  published_year: 2024
+  source_type: academic
+  collected_at: 2026-08-03
+  status: selected
+- id: kivi-tuning-free-asymmetric-2bit-kv-cache-quantization
+  title: "KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache"
+  url: "https://arxiv.org/abs/2402.02750v2"
+  published_year: 2024
+  source_type: academic
+  collected_at: 2026-08-03
+  status: selected
+- id: elastic-on-device-llm-service
+  title: "Elastic On-Device LLM Service"
+  url: "https://arxiv.org/abs/2409.09071v2"
+  published_year: 2024
+  source_type: academic
+  collected_at: 2026-08-03
+  status: selected
+- id: mnn-llm-generic-inference-engine-mobile-devices
+  title: "MNN-LLM: A Generic Inference Engine for Fast Large Language Model Deployment on Mobile Devices"
+  url: "https://arxiv.org/abs/2506.10443v1"
+  published_year: 2025
+  source_type: academic
+  collected_at: 2026-08-03
+  status: selected
+- id: llm-in-a-flash-efficient-inference-limited-memory
+  title: "LLM in a flash: Efficient Large Language Model Inference with Limited Memory"
+  url: "https://arxiv.org/abs/2312.11514v3"
+  published_year: 2023
+  source_type: academic
+  collected_at: 2026-08-03
+  status: selected
+- id: apple-llm-in-a-flash
+  title: "LLM in a Flash: Efficient Large Language Model Inference with Limited Memory"
+  url: "https://machinelearning.apple.com/research/efficient-large-language"
+  published_year: 2024
+  source_type: vendor
+  collected_at: 2026-08-03
+  status: excluded
+  exclusion_reason: "Duplicate vendor landing page for the same LLM in a Flash paper; the versioned academic PDF is the canonical source."
+  canonical_replacement: llm-in-a-flash-efficient-inference-limited-memory
+- id: google-ai-edge
+  title: "Run AI on-device with Google AI Edge"
+  url: "https://ai.google.dev/edge"
+  published_year: null
+  source_type: vendor
+  collected_at: 2026-08-03
+  status: excluded
+  exclusion_reason: "No page publication date observed in the collected original."
+- id: google-ai-edge-on-device-slms
+  title: "On-device small language models with multimodality, RAG, and Function Calling"
+  url: "https://developers.googleblog.com/en/google-ai-edge-small-language-models-multimodality-rag-function-calling"
+  published_year: 2025
+  source_type: vendor
+  collected_at: 2026-08-03
+  status: selected
+- id: google-gemini-nano-aicore
+  title: "Gemini Nano"
+  url: "https://ai.google.dev/gemini-api/docs/get-started/android_aicore"
+  published_year: 2026
+  source_type: vendor
+  collected_at: 2026-08-03
+  status: selected
+- id: google-gemma-3n
+  title: "Announcing Gemma 3n preview: powerful, efficient, mobile-first AI"
+  url: "https://developers.googleblog.com/introducing-gemma-3n"
+  published_year: 2025
+  source_type: vendor
+  collected_at: 2026-08-03
+  status: selected
+- id: qualcomm-qai-appbuilder-wos
+  title: "QAI AppBuilder - WoS"
+  url: "https://docs.qualcomm.com/doc/80-94755-1/80-94755-1_REV_AA_QAI_AppBuilder_-_WoS.pdf"
+  published_year: 2025
+  source_type: vendor
+  collected_at: 2026-08-03
+  status: selected
+- id: mlcommons-mlperf-client-v1-0
+  title: "MLCommons Releases MLPerf Client v1.0: A New Standard for AI PC and Client LLM Benchmarking"
+  url: "https://mlcommons.org/2025/07/mlperf-client-v1-0"
+  published_year: 2025
+  source_type: research_org
+  collected_at: 2026-08-03
+  status: selected
+- id: mlcommons-mlperf-client-v1-0-release
+  title: "MLPerf Client 1.0.0"
+  url: "https://github.com/mlcommons/mlperf_client/releases/tag/v1.0"
+  published_year: 2025
+  source_type: research_org
+  collected_at: 2026-08-03
+  status: excluded
+  exclusion_reason: "Duplicate MLPerf Client v1.0 release metadata; the MLCommons announcement preserves the benchmark scope and support-path context more completely."
+  canonical_replacement: mlcommons-mlperf-client-v1-0
+- id: mlcommons-mlperf-inference-v5-0
+  title: "MLPerf Inference v5.0 Advances Language Model Capabilities for GenAI"
+  url: "https://mlcommons.org/2025/04/llm-inference-v5"
+  published_year: 2025
+  source_type: research_org
+  collected_at: 2026-08-03
+  status: selected
+- id: mlcommons-mlperf-inference-v5-0-results
+  title: "MLCommons Releases New MLPerf Inference v5.0 Benchmark Results"
+  url: "https://mlcommons.org/2025/04/mlperf-inference-v5-0-results"
+  published_year: 2025
+  source_type: research_org
+  collected_at: 2026-08-03
+  status: selected
+- id: nist-ai-100-2e2023
+  title: "Adversarial Machine Learning: A Taxonomy and Terminology of Attacks and Mitigations"
+  url: "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-2e2023.pdf"
+  published_year: 2024
+  source_type: standards
+  collected_at: 2026-08-03
+  status: excluded
+  exclusion_reason: "Out of scope: adversarial-ML taxonomy does not provide direct on-device LLM inference optimization evidence for this mission."
+- id: tomshardware-amd-ryzen-8040-llm-benchmarks
+  title: "AMD claims LLMs run up to 79% faster on Ryzen 8040 CPUs compared to Intel’s newest Core Ultra chips"
+  url: "https://www.tomshardware.com/pc-components/cpus/amd-claims-llms-run-up-to-79-faster-on-ryzen-8040-cpus-compared-to-intels-newest-core-ultra-chips"
+  published_year: 2024
+  source_type: news
+  collected_at: 2026-08-03
+  status: excluded
+  exclusion_reason: "Excluded from the canonical analysis set: secondary reporting of vendor comparative claims without the primary benchmark methodology needed for grounded comparison."
+- id: tomshardware-ryzen-ai-300-local-llm-lm-studio
+  title: "Ryzen AI 300 takes big wins over Intel in LLM AI performance — up to 27% faster token generation than Lunar Lake in LM Studio"
+  url: "https://www.tomshardware.com/pc-components/cpus/ryzen-ai-300-takes-big-wins-over-intel-in-llm-ai-performance-up-to-27-percent-faster-token-generation-than-lunar-lake-in-lm-studio"
+  published_year: 2024
+  source_type: news
+  collected_at: 2026-08-03
+  status: excluded
+  exclusion_reason: "Excluded from the canonical analysis set: secondary reporting with device-specific claims but insufficient primary methodology for comparable inference analysis."
+- id: venturebeat-ibm-granite-4-nano-local-browser
+  title: "IBM's open source Granite 4.0 Nano AI models are small enough to run locally directly in your browser"
+  url: "https://venturebeat.com/technology/ibms-open-source-granite-4-0-nano-ai-models-are-small-enough-to-run-locally"
+  published_year: 2025
+  source_type: news
+  collected_at: 2026-08-03
+  status: excluded
+  exclusion_reason: "Excluded from the canonical analysis set: secondary news coverage is not needed after primary academic, vendor, and MLCommons sources cover the mission dimensions."

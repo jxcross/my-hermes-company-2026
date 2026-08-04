@@ -1,0 +1,67 @@
+- id: apple-llm-in-a-flash
+  title: "LLM in a Flash: Efficient Large Language Model Inference with Limited Memory"
+  url: "https://machinelearning.apple.com/research/efficient-large-language"
+  publication_date_or_year_observed: "August 2024"
+  collected_date: "2026-08-03"
+  source_type: vendor
+  access_status: public_accessible
+  date_status: publication_date_observed
+  status: selected
+  raw_file: "raw/apple-llm-in-a-flash.md"
+
+- id: google-ai-edge
+  title: "Run AI on-device with Google AI Edge"
+  url: "https://ai.google.dev/edge"
+  publication_date_or_year_observed: null
+  collected_date: "2026-08-03"
+  source_type: vendor
+  access_status: public_accessible
+  date_status: no_page_publication_date_observed
+  status: excluded
+  raw_file: "raw/google-ai-edge.md"
+  replacement_id: google-ai-edge-on-device-slms
+
+- id: google-ai-edge-on-device-slms
+  title: "On-device small language models with multimodality, RAG, and Function Calling"
+  url: "https://developers.googleblog.com/en/google-ai-edge-small-language-models-multimodality-rag-function-calling"
+  publication_date_or_year_observed: "May 20, 2025"
+  collected_date: "2026-08-03"
+  source_type: vendor
+  access_status: public_accessible
+  date_status: publication_date_observed
+  status: selected
+  raw_file: "raw/google-ai-edge-on-device-slms.md"
+  replaces_id: google-ai-edge
+
+- id: google-gemini-nano-aicore
+  title: "Gemini Nano"
+  url: "https://ai.google.dev/gemini-api/docs/get-started/android_aicore"
+  publication_date_or_year_observed: "2026-04-02 UTC"
+  collected_date: "2026-08-03"
+  source_type: vendor
+  access_status: public_accessible
+  date_status: last_updated_date_observed
+  status: selected
+  raw_file: "raw/google-gemini-nano-aicore.md"
+
+- id: google-gemma-3n
+  title: "Announcing Gemma 3n preview: powerful, efficient, mobile-first AI"
+  url: "https://developers.googleblog.com/introducing-gemma-3n"
+  publication_date_or_year_observed: "May 20, 2025"
+  collected_date: "2026-08-03"
+  source_type: vendor
+  access_status: public_accessible
+  date_status: publication_date_observed
+  status: selected
+  raw_file: "raw/google-gemma-3n.md"
+
+- id: qualcomm-qai-appbuilder-wos
+  title: "QAI AppBuilder - WoS"
+  url: "https://docs.qualcomm.com/doc/80-94755-1/80-94755-1_REV_AA_QAI_AppBuilder_-_WoS.pdf"
+  publication_date_or_year_observed: "October 2025"
+  collected_date: "2026-08-03"
+  source_type: vendor
+  access_status: publicly_accessible_with_embedded_terms
+  date_status: revision_date_observed
+  status: selected
+  raw_file: "raw/qualcomm-qai-appbuilder-wos.md"

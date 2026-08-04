@@ -1,0 +1,32 @@
+- id: tomshardware-amd-ryzen-8040-llm-benchmarks
+  title: "AMD claims LLMs run up to 79% faster on Ryzen 8040 CPUs compared to Intel’s newest Core Ultra chips"
+  url: "https://www.tomshardware.com/pc-components/cpus/amd-claims-llms-run-up-to-79-faster-on-ryzen-8040-cpus-compared-to-intels-newest-core-ultra-chips"
+  publication_date_observed: "2024-04-05"
+  published_year: 2024
+  collection_date: "2026-08-03"
+  collected_at: "2026-08-03"
+  source_type: news
+  status: selected
+  raw_path: "raw/tomshardware-amd-ryzen-8040-llm-benchmarks.md"
+
+- id: tomshardware-ryzen-ai-300-local-llm-lm-studio
+  title: "Ryzen AI 300 takes big wins over Intel in LLM AI performance — up to 27% faster token generation than Lunar Lake in LM Studio"
+  url: "https://www.tomshardware.com/pc-components/cpus/ryzen-ai-300-takes-big-wins-over-intel-in-llm-ai-performance-up-to-27-percent-faster-token-generation-than-lunar-lake-in-lm-studio"
+  publication_date_observed: "2024-10-30"
+  published_year: 2024
+  collection_date: "2026-08-03"
+  collected_at: "2026-08-03"
+  source_type: news
+  status: selected
+  raw_path: "raw/tomshardware-ryzen-ai-300-local-llm-lm-studio.md"
+
+- id: venturebeat-ibm-granite-4-nano-local-browser
+  title: "IBM's open source Granite 4.0 Nano AI models are small enough to run locally directly in your browser"
+  url: "https://venturebeat.com/technology/ibms-open-source-granite-4-0-nano-ai-models-are-small-enough-to-run-locally"
+  publication_date_observed: "2025-10-28"
+  published_year: 2025
+  collection_date: "2026-08-03"
+  collected_at: "2026-08-03"
+  source_type: news
+  status: selected
+  raw_path: "raw/venturebeat-ibm-granite-4-nano-local-browser.md"
