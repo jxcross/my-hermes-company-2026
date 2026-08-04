@@ -25,6 +25,24 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#26 — litmonitor → 아키타입 E(주기 문헌 모니터) · 미션 간 지속 상태 도입</h2>
+    <div class="meta">2026-08-04 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "다음 진행"(docs/13 진행 대장 #5, litmonitor).</div>
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li><b>구조 차이 — 주기 실행</b>: litmonitor는 다른 하네스와 달리 <code>/loop weekly</code>로 반복 실행된다. 우리 모델은 <b>미션 1건 = 파이프라인 1회 실행</b>이라 매 회차가 새 미션이 되는데, "이미 본 논문" 기억은 미션을 가로질러 살아야 한다. → <b><code>monitors/&lt;monitor_id&gt;/</code> 지속 상태 신설</b>(watchlist·_seen.tsv·history, git 추적). <code>monitor_id</code>는 Scoping이 SCOPE.md frontmatter에 선언하고 게이트가 그 값으로 상태를 찾는다.</li>
+      <li><b>조건부 단계는 그래프에 넣지 않았다</b>: 원본 stage1(seed-config)은 '첫 회차에만' 도는 조건부 단계인데, 조건부 분기를 Kanban에 넣으면 gate_keeper의 순차 모델이 깨진다 → Scoping이 "없으면 만들고 있으면 검토"로 흡수.</li>
+      <li><b>검증 2지점 신설</b>(원본은 검증자 0): 5 Cross-Verify(요약이 원문과 맞는가 + 버전 업데이트·중복 게재처럼 id가 달라 기계가 못 잡는 중복) · 8 Independent Review(요약 왜곡·행동 제안 타당성·선별 충실성).</li>
+      <li><b>객관 게이트 2종 신설</b>: <code>seen_dedup</code>(멱등성이 이 아키타입의 <b>핵심 계약</b>이라 게이트로 승격 — 이미 본 논문 혼입·id 형식·워커 병합 중복·수집 실패를 '신규 없음'으로 오인 방지) · <code>digest_shape</code>(항목 수·id 실재·요약 분량·행동 라벨). 산출 도구 2종 이식: <code>tools/monitor_state.py</code>·<code>tools/relevance_score.py</code>(회차 간 재현성).</li>
+      <li><b>테스트가 결함을 먼저 잡음</b>: <code>digest_shape.word_count</code>가 행동 줄의 <b>근거 부분을 요약 분량에 합산</b>해, 한 줄 요약도 근거를 길게 쓰면 하한을 통과했다 → 행동 줄을 <b>줄 단위로 제거</b>하도록 수정. 라벨 정규식도 영문 한정을 풀어 "행동 줄 없음"과 "라벨이 틀림"을 구분(집필자 진단 정확도).</li>
+      <li>라이브 픽스처로 멱등성 왕복 검증: 첫 회차 PASS → seen 봉인 → 같은 후보 재수집 시 <b>FAIL</b> → <code>filter</code>로 걸러내면 신규만 통과. docs/13 §2④·§3·§5 함정·§6 대장·§7 갱신 + <code>monitors/README.md</code>.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      <b>아키타입 E 확보 — 5/20</b>(A·B·B'·D·E 전부 실행가능). 린터 5/5. 테스트 <b>27+21+25 = 73종 통과</b>. 객관 게이트 <b>8종</b>·산출 도구 3종. 변환 5건 연속으로 결함을 잡았다. 다음 변환 = patentforge.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#25 — reviewforge → 아키타입 B'(PRISMA 체계적 문헌고찰) · 이식 게이트의 느슨함 발견·수정</h2>
     <div class="meta">2026-08-04 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "실미션은 전체 변환 후에 하나씩 해볼 것이다. reviewforge 변환하라."</div>

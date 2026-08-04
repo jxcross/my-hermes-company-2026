@@ -1,0 +1,131 @@
+# 아키타입 E — 주기 문헌 모니터 (10단계)
+# 출처: other_projects/harness-templates/research-harnesses/project_litmonitor
+#       (.claude/skills/litmonitor/SKILL.md 5-stage + agents 7종). 변환 절차: docs/13
+#
+# ⚠️ 이 아키타입만의 특성: **주기 실행**이다(원본은 `/loop weekly /litmonitor`).
+#    우리 모델은 "미션 1건 = 파이프라인 1회 실행"이므로 **매 회차가 새 미션**이 되고,
+#    "이미 본 논문" 기억은 미션을 가로질러 살아야 한다. → **미션 간 지속 상태** 도입:
+#      monitors/<monitor_id>/watchlist.yaml  감시 대상(Scoping 에서 확정, 회차마다 재사용)
+#      monitors/<monitor_id>/_seen.tsv       본 논문 id 로그(append-only)
+#      monitors/<monitor_id>/history/        회차별 다이제스트 보관
+#    미션 디렉터리(reports/<MID>/)에는 **그 회차의 산출만** 담는다.
+#    ⚠️ Scoping 이 SCOPE.md frontmatter 에 `monitor_id:` 를 반드시 선언해야 한다 —
+#       seen_dedup 게이트가 이 값으로 상태 디렉터리를 찾는다.
+#
+# 변환 판단(요약 — 상세·근거는 docs/13 §2·§5):
+#  - 원본 stage 1(seed-config)은 '첫 회차에만' 실행된다. 우리는 조건부 단계를 두지 않고
+#    **Scoping(1)이 watchlist 를 확정·재사용**하게 했다(없으면 생성, 있으면 검토·갱신).
+#    조건부 분기를 Kanban 그래프에 넣으면 gate_keeper 의 단순한 순차 모델이 깨진다.
+#  - 원본은 **검증자가 하나도 없다**(specflow 와 같은 문제). 검증 2지점 신설:
+#    5 Cross-Verify(요약이 원문과 맞는가 + 신규성) · 8 Independent Review(다이제스트 품질).
+#  - 멱등성이 이 아키타입의 핵심 계약이라 **객관 게이트로 승격**했다(`seen_dedup`).
+#    같은 논문을 매주 다시 보고하면 모니터의 존재 이유가 사라진다.
+#  - 다이제스트는 매주 같은 형식이어야 비교·누적이 되므로 형식도 게이트다(`digest_shape`).
+#  - `relevance_score.py`(결정적 점수)는 판정이 아니라 산출 → `scripts/tools/` 로 이식.
+#    `seen_tracker.py` → `scripts/tools/monitor_state.py`. `history_archive.py` 는
+#    Deliver 단계의 파일 이동으로 흡수(별도 스크립트 불요).
+#  - 신규 profile 0개.
+#
+# 스키마 규약은 templates/trend-report.yaml 머리말 참조.
+
+name: lit-monitor
+category: research
+display_name: 주기 문헌 모니터
+maturity: draft
+goal_kr: 감시 대상 주제·저자·학회의 신규 논문을 회차마다 수집·선별해 행동 제안이 붙은 다이제스트를 산출한다.
+invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop, sources_cited]
+
+policy:
+  monitor_policy:
+    monitor_id: default            # SCOPE.md frontmatter 의 monitor_id 가 우선한다
+    allow_seen_overlap: false      # 이미 본 논문이 후보에 섞이면 FAIL(멱등성 계약)
+    min_candidates: 1              # 0 이면 '신규 없음' 회차를 허용(조용한 주간용)
+    top_n: 5                       # 다이제스트에 올릴 논문 수 상한
+    min_items: 1
+    summary_min_words: 60          # 어절(공백 기준) — 국문·영문 공통
+    summary_max_words: 220
+    actions: [cite, rebut, monitor, skip, handoff]
+  recency_policy:
+    # 모니터는 '신간'이 대상이므로 최신성 요구가 가장 엄격하다.
+    cutoff_year_offset: -1
+    recent_ratio: 0.9
+    hard_block_year_offset: -3
+    seminal_exceptions: false
+
+stages:
+  - id: 1
+    name: Scoping
+    profile: default          # Solomon
+    sam_gate: true
+    upstream: []
+    body: "① `monitors/<monitor_id>/watchlist.yaml` 을 확인한다 — 없으면 감시 대상(키워드·저자·학회·소스)을 Sam과 합의해 생성하고, 있으면 이번 회차에 조정할 것이 있는지 검토한다(회차마다 재사용). ② reports/<MID>/SCOPE.md 에 이번 회차 범위·top_n·관련성 기준을 쓰되 **frontmatter 에 `monitor_id: <id>` 를 반드시 선언**하라 — 객관 게이트가 이 값으로 지속 상태를 찾는다. ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라. 오직 SCOPE.md·watchlist 산출과 이 task 완료만."
+  - id: 2
+    name: Scan
+    profile: scout
+    upstream: [1]
+    parallel:
+      mode: workers
+      # 원본과 동일하게 **소스별** 분할(각 소스가 서로 다른 신간 모집단).
+      workers: [arxiv, scholar, openreview, venue_rss]
+      batch_size: 3          # 4워커 = 3 + 1, 2라운드
+      shard: "raw/candidates.<worker>.yaml"
+      merge_to: "raw/sources.yaml"
+    body: "watchlist 기준으로 자기 소스의 **신간만** 수집한다. 각 항목 id(`<source>:<key>` 형식 필수 — 예 `arxiv:2505.01234`)·title·authors·published_year·venue·url·source_type·collected_at 기록. ⚠️ **수집 즉시 `python3 /work/company/scripts/tools/monitor_state.py --monitor <monitor_id> filter --ids-file <후보id파일>` 로 이미 본 것을 걸러내라** — 걸러내지 않으면 다음 검증 단계의 seen_dedup 게이트가 자동 반려한다. 병합 시 워커 간 중복 id도 제거한다."
+  - id: 3
+    name: Relevance Filter
+    profile: curator
+    upstream: [2]
+    body: "관련성 점수화·선별. 결정적 점수는 `python3 /work/company/scripts/tools/relevance_score.py --watchlist monitors/<monitor_id>/watchlist.yaml --candidates reports/<MID>/raw/sources.yaml --out reports/<MID>/scored.yaml` 로 먼저 계산하고(회차 간 재현성), **경계선 사례만 판단으로 조정**한다(조정 시 사유 기록). status=selected/rejected 판정. 상위 top_n 을 표시한다."
+  - id: 4
+    name: Deep Read
+    profile: reader
+    upstream: [3]
+    parallel:
+      mode: per_item
+      over: "scored.yaml 의 status=selected 상위 논문 각각(top_n 이내)"
+      batch_size: 3
+      shard: "analysis/<id>.md"
+      merge_to: "analysis/_index.md"
+    body: "논문별 구조화 노트: 무엇을 주장하는가 · 근거·방법 · 기존 연구 대비 무엇이 새로운가 · 우리 watchlist 관심사와의 접점 · 한계. 다이제스트 요약의 재료이므로 **원문에 있는 것만** 적는다(추측 금지)."
+  - id: 5
+    name: Cross-Verify
+    profile: fact-checker      # ≠ reader
+    verifier: true
+    upstream: [4]
+    gate:
+      objective: [seen_dedup, recency_check]
+      llm: fact_checker_verdict
+      draft: "reports/<MID>/raw/sources.yaml"   # 신규성·id 형식 검사 대상
+    body: "① 노트의 주장이 원문에 실제로 있는지 표본 교차검증(특히 '새롭다'는 판단의 근거). ② 신규성 — 이미 본 논문이 섞이지 않았는지(객관 게이트가 기계 검사하지만, **동일 연구의 버전 업데이트·중복 게재**처럼 id 가 달라 게이트가 못 잡는 경우를 네가 잡는다). 끝에 VERDICT: PASS|FAIL."
+  - id: 6
+    name: Actions & Framing
+    profile: synthesizer
+    upstream: [5]              # 게이트: 5 PASS 시 게이트키퍼가 unblock
+    body: "① 이번 회차의 흐름을 한 문단으로 요약(무엇이 움직였는가). ② 논문별 **행동 제안** 판정 — cite(우리 산출물에 인용) · rebut(반론·차별점 필요) · monitor(추적만) · skip(관련 낮음) · handoff(다른 담당에게 넘김). 각 판정에 한 줄 근거를 붙인다. framing.md 에 기록."
+  - id: 7
+    name: Digest Draft
+    profile: writer
+    upstream: [6]
+    body: "digest.md 작성. ⚠️ **항목마다 정확히 이 형식**을 지켜라(객관 게이트가 검사한다):\n`### [<id>] <제목>` → 요약 본문(60~220 어절) → `**행동**: <라벨> — <근거 한 줄>`\n맨 앞에 이번 회차 흐름 요약을 둔다. 항목 수는 top_n 이내. id 는 반드시 후보 목록에 실재하는 것만 쓴다(지어내면 자동 반려)."
+  - id: 8
+    name: Independent Review
+    profile: reviewer          # ≠ writer
+    verifier: true
+    upstream: [7]
+    gate:
+      objective: [digest_shape]
+      llm: reviewer_verdict
+      draft: "reports/<MID>/digest.md"
+    body: "독립 검토: ① 요약이 원문을 왜곡하지 않는가(과장·단정). ② 행동 제안이 근거와 맞는가 — 특히 cite/rebut 은 우리 산출물에 영향을 주므로 엄격히. ③ 선별이 watchlist 기준에 충실한가(관심사 밖 논문이 점수만으로 올라오지 않았는가). ④ 지난 회차 대비 새로운 것이 실제로 새로운가. 끝에 VERDICT: PASS|FAIL."
+  - id: 9
+    name: Wiki Update
+    profile: curator
+    upstream: [8]             # 게이트: 8 PASS 시 unblock
+    body: "이번 회차에서 얻은 개념·동향을 llm-wiki 에 반영(entities/concepts) + reflection + 재사용률 갱신. 반복 등장하는 주제는 watchlist 조정 후보로 기록한다."
+  - id: 10
+    name: Deliver
+    profile: default          # Solomon
+    sam_gate: true
+    approval_artifact: "reports/<MID>/digest.md"
+    upstream: [9]
+    body: "① **지속 상태 봉인**: `python3 /work/company/scripts/tools/monitor_state.py --monitor <monitor_id> add <후보 전체 id...> --date <회차일자>` — 이번 회차 후보 **전부**를 seen 에 추가한다(다이제스트에 올린 것만이 아니다. 그래야 다음 회차에 다시 안 뜬다). ② **히스토리 회전**: digest.md 를 `monitors/<monitor_id>/history/<YYYY-WW>.md` 로 복사. ③ 커밋 + git push(컨테이너 GITHUB_TOKEN 자격) + Slack 요약. ⚠️ Slack 게시는 반드시 `hermes send --to slack:#mission-log \"<요약+커밋링크>\"`(Web API)로 하라 — 에이전트 slack 도구는 인바운드 Socket Mode 어댑터에 의존해 실패할 수 있다(현재 flapping)."

@@ -1,6 +1,6 @@
 # 13. harness 스킬 → 템플릿 YAML 변환 — 작업 절차서
 
-> 작성일: 2026-08-04 · 상태: **작업 중(4/20 — A·B·B'·D 전부 실행가능, 라이브 미션은 A만)** · 성격: working doc(재개 가능)
+> 작성일: 2026-08-04 · 상태: **작업 중(5/20 — A·B·B'·D·E 전부 실행가능, 라이브 미션은 A만)** · 성격: working doc(재개 가능)
 > 관련: [`12_pipeline_negotiation.md`](./12_pipeline_negotiation.md)(§8 phasing 2b) · [`11_template_driven_missions.md`](./11_template_driven_missions.md)(템플릿 스키마 §3.A·§3.B) · 소스: 형제 repo `other_projects/harness-templates`
 >
 > **⚠️ 이 문서는 여러 세션에 걸쳐 이어서 작업하기 위한 것이다.** 새 세션은 **§6 진행 대장**에서 다음 대상을 고르고 → **§2 레시피**대로 변환하고 → **§6 갱신 + 커밋**하면 된다. 재개 방법은 §8.
@@ -45,8 +45,10 @@ agents는 템플릿으로 옮기는 것이 아니다. harness의 agent는 **하�
 (gate_keeper가 항상 이 셋을 넘긴다. 안 쓰는 인자도 받아만 두면 된다). 판정 대상 파일은 템플릿의
 `gate.draft`로 지정한다. **이식한 게이트는 반드시 일부러 깨뜨린 픽스처로 검증하라**(§5).
 
-현재 보유 게이트: `recency_check` · `source_balance` · `doc_consistency` · `test_run` ·
-`prisma_counts` · `prisma_checklist`. 회귀 테스트는 `scripts/tests/test_gates.py`.
+현재 보유 게이트(8종): `recency_check` · `source_balance` · `doc_consistency` · `test_run` ·
+`prisma_counts` · `prisma_checklist` · `seen_dedup` · `digest_shape`.
+산출 도구는 `scripts/tools/`: `bib_export` · `monitor_state` · `relevance_score`.
+회귀 테스트는 `scripts/tests/test_gates.py`.
 
 ### ⑤ 불변식을 보강한다 (§4 체크리스트)
 원본에는 우리 불변식이 대개 없다. 빠진 단계를 채운다.
@@ -71,12 +73,12 @@ docker exec hermes-solomon sh -c 'cd /work/company && \
 
 | 우리 profile | 동사 신호 | tools 신호 | 확인된 별칭 |
 |---|---|---|---|
-| `default` (Solomon) | clarify · scope-interview · finalize · deliver · orchestrate | `AskUserQuestion` | `paperforge-clarify-topic` · `paperforge-finalize` · `trendforge-clarify-scope` · `trendforge-finalize` · `reviewforge-{clarify-question,finalize}` |
-| `scout` | gather · ingest · collect · scan · search · survey | `WebSearch` `WebFetch` | `paperforge-scope-survey` · `paperforge-gather-{arxiv,web,recent}` · `trendforge-landscape-survey` · `trendforge-gather-{academic,industry,patents,news}` · `reviewforge-{search-protocol,search-database}` |
+| `default` (Solomon) | clarify · scope-interview · finalize · deliver · orchestrate | `AskUserQuestion` | `paperforge-clarify-topic` · `paperforge-finalize` · `trendforge-clarify-scope` · `trendforge-finalize` · `reviewforge-{clarify-question,finalize}` · `litmonitor-seed-config` |
+| `scout` | gather · ingest · collect · scan · search · survey | `WebSearch` `WebFetch` | `paperforge-scope-survey` · `paperforge-gather-{arxiv,web,recent}` · `trendforge-landscape-survey` · `trendforge-gather-{academic,industry,patents,news}` · `reviewforge-{search-protocol,search-database}` · `litmonitor-scan-{arxiv,scholar,openreview}` |
 | `reader` | read-extract · analyze · classify · appraise | — | `paperforge-read-extract` · `trendforge-read-extract` · `reviewforge-{data-extract,quality-appraise}` |
-| `curator` | dedup · filter · screen · normalize · cite-pack · cross-link | — | `reviewforge-prisma-screening` · *(다른 스킬엔 대개 없어 우리가 보강)* |
-| `synthesizer` | synthesize · outline · structure · summarize | — | `paperforge-synthesize-outline` · `trendforge-synthesize-trends` · `reviewforge-synthesize` |
-| `writer` | draft · write · compose · section | — | `paperforge-draft-section` · `trendforge-draft-section` |
+| `curator` | dedup · filter · screen · normalize · cite-pack · cross-link | — | `reviewforge-prisma-screening` · `litmonitor-relevance-filter` · *(다른 스킬엔 대개 없어 우리가 보강)* |
+| `synthesizer` | synthesize · outline · structure · summarize | — | `paperforge-synthesize-outline` · `trendforge-synthesize-trends` · `reviewforge-synthesize` · `litmonitor-action-suggest` |
+| `writer` | draft · write · compose · section | — | `paperforge-draft-section` · `trendforge-draft-section` · `litmonitor-summarize` |
 | `fact-checker` | fact-check · verify · evidence · recency · citation | `Bash`(게이트 스크립트 실행) | `paperforge-fact-check` · `trendforge-{evidence-critic,recency-check}` · `reviewforge-evidence-coverage-check` |
 | `reviewer` | review · critic · clarity · logic · style · bias | — | `paperforge-{logic-critic,style-edit}` · `trendforge-{clarity-check,bias-check}` · `reviewforge-{prisma-compliance-check,bias-balance-check,clarity-check}` · `specflow` **Design Review(신설)** |
 | `architect` ⚠신규 | architect · erd · diagram · wireframe · style-design | `Read,Write,Grep,Glob`(쓰기만·실행 없음) | `specflow-{architect,erd-designer,diagrammer,wireframer,style-designer}` |
@@ -144,6 +146,13 @@ specflow는 task별(`/backend-task <N>`)로 구현한다. 이를 `per_item`으�
 ### ⚠️ 도메인이 다르면 policy 블록도 갈아끼운다
 `recency_policy`·`source_balance_policy`는 조사·집필 아키타입(A·B)의 정책이다. 웹개발에는 의미가 없어 `completion_policy`(체크박스 강제·E2E green·시나리오 커버리지)로 대체했다. **정책은 템플릿 소유**이므로 도메인마다 새로 정의하면 된다.
 
+### ⚠️ 주기 실행 스킬은 "미션 간 지속 상태"를 요구한다
+**[발견: lit-monitor 변환, 2026-08-04]** litmonitor는 다른 하네스와 달리 **주기 실행**용이다(`/loop weekly`). 우리 모델은 **미션 1건 = 파이프라인 1회 실행**이라 매 회차가 새 미션이 되는데, "이미 본 논문" 기억은 미션을 가로질러 살아야 한다. 미션 디렉터리(`reports/<MID>/`)에 두면 다음 회차가 못 읽는다.
+
+**해결**: `monitors/<monitor_id>/`에 지속 상태를 분리했다(watchlist·`_seen.tsv`·history). git 추적 대상이라 PC 간에도 이어진다. `monitor_id`는 **Scoping이 SCOPE.md frontmatter에 선언**하고 게이트가 그 값으로 상태를 찾는다. 주기 실행 아키타입을 또 만들 때는 이 패턴을 재사용하라.
+
+**부수 판단**: 원본 stage 1(seed-config)은 "첫 회차에만" 도는 조건부 단계다. **조건부 분기를 Kanban 그래프에 넣지 않았다** — gate_keeper의 단순한 순차 모델이 깨진다. 대신 Scoping이 "없으면 만들고 있으면 검토"하게 흡수했다.
+
 ### ⚠️ 이식한 게이트의 휴리스틱을 그대로 믿지 마라 — 픽스처로 때려봐야 안다
 **[발견: systematic-review 변환, 2026-08-04]** reviewforge의 `prisma_audit.py`는 27항목 각각에 대해 `키워드 or 절힌트`가 맞으면 **PARTIAL**을 줬다. 그런데 절 힌트는 대부분 `methods`·`results` 같은 흔한 제목이라 **어느 원고에나 맞는다.** 결과적으로 PROSPERO 등록·연구비·이해상충·근거 확실성처럼 **가장 자주 누락되는 항목**이 키워드가 통째로 없는데도 PARTIAL로 살아남아 게이트를 통과했다(픽스처로 해당 문구를 전부 지웠는데 `exit=0`).
 
@@ -167,8 +176,8 @@ trend-report는 **산출 taxonomy**(source_type)로 나눴고(§5 위), systemat
 | 2 | paperforge | research | 8-stage · agents 12 | ✅ **draft** (B) | `academic-paper.yaml` | 0 |
 | 3 | specflow | domain | 12-step · agents 12 | ✅ **draft (D) · 실행가능** | `webapp-build.yaml` | **3 생성완료**(architect·developer·tester) |
 | 4 | reviewforge | research | 9-stage · agents 12 | ✅ **draft (B')** | `systematic-review.yaml` | 0 |
-| 5 | litmonitor | research | 5-stage · agents 7 | ⬜ **다음** | — | 0 예상 |
-| 6 | patentforge | domain | 8-stage · agents 11 | ⬜ | — | ? |
+| 5 | litmonitor | research | 5-stage · agents 7 | ✅ **draft (E)** | `lit-monitor.yaml` | 0 |
+| 6 | patentforge | domain | 8-stage · agents 11 | ⬜ **다음** | — | ? |
 | 7 | policyforge | domain | 9-stage · agents 14 | ⬜ | — | 0 예상 |
 | 8 | legalforge | domain | 8-stage · agents 13 | ⬜ | — | ? |
 | 9 | docforge | domain | 8-stage · agents 13 | ⬜ | — | 예상 있음(코드 읽기) |
@@ -218,6 +227,16 @@ trend-report는 **산출 taxonomy**(source_type)로 나눴고(§5 위), systemat
 - ✅ `scripts/tests/test_gates.py` 신설(15종) — 게이트 판정이 조용히 느슨해지는 것을 막는다
 - **미이식**: `meta_analysis.py`(효과크기 통합 — 판정 아닌 산출) · `latex_export.py`(LaTeX 변환) ·
   `papers_state.py`(큐 상태머신 — Kanban 이 대체). 메타분석은 필요해지면 `tools/`로 이식 검토
+
+**lit-monitor 변환에서 나온 것 (2026-08-04)**
+- ✅ `gates/seen_dedup.py`(멱등성 — 이미 본 논문 혼입·id 형식·워커 병합 중복) ·
+  `gates/digest_shape.py`(항목 수·id 실재·요약 분량·행동 라벨)
+- ✅ `tools/monitor_state.py`(미션 간 seen 로그) · `tools/relevance_score.py`(결정적 점수)
+- ✅ `monitors/` 디렉터리 신설 + README(지속 상태 규약)
+- **자체 발견**: `digest_shape.word_count`가 행동 줄의 **근거 부분을 요약 분량에 합산**해,
+  한 줄 요약도 근거를 길게 쓰면 하한을 통과했다 → 행동 줄을 **줄 단위로 제거**하도록 수정
+  (테스트가 먼저 잡았다)
+- **미이식**: `history_archive.py`(Deliver 단계의 파일 이동으로 흡수 — 별도 스크립트 불요)
 
 **새 후속 과제** (다음 세션 이후)
 - `test_run.py`는 테스트를 **실행하지 않는다** — Tester가 남긴 `results.json`을 검사할 뿐이다. 게이트키퍼가 미션 코드를 임의 실행하면 임의 코드 실행 통로가 되기 때문. 자기보고 신뢰 구간이 남아 있으므로, CI 연동 등 **독립 실행 경로**가 생기면 교체 검토

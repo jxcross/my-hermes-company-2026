@@ -28,6 +28,8 @@ prisma_counts = _load("prisma_counts")
 prisma_checklist = _load("prisma_checklist")
 doc_consistency = _load("doc_consistency")
 test_run = _load("test_run")
+digest_shape = _load("digest_shape")
+seen_dedup = _load("seen_dedup")
 
 
 # ── prisma_counts ────────────────────────────────────────────────────────
@@ -117,6 +119,103 @@ def test_pass_words_cover_common_spellings():
     for w in ("pass", "passed", "ok", "green", "true"):
         assert w in test_run.PASS_WORDS
     assert "fail" not in test_run.PASS_WORDS and "skip" not in test_run.PASS_WORDS
+
+
+# ── digest_shape (아키타입 E) ─────────────────────────────────────────────
+DIGEST = """# 주간
+서문
+
+### [arxiv:1] 첫 논문
+요약 본문이 여기에 충분히 길게 들어간다 하나 둘 셋 넷 다섯 여섯 일곱 여덟 아홉 열.
+**행동**: cite — 근거
+
+### [scholar:2] 둘째 논문
+짧다.
+**행동**: 대충 — 잘못된 라벨
+"""
+
+
+def test_digest_splits_items_by_id():
+    items = digest_shape.split_items(DIGEST)
+    assert [i[0] for i in items] == ["arxiv:1", "scholar:2"]
+
+
+def test_digest_word_count_excludes_action_line():
+    """행동 줄이 요약 분량에 섞이면 짧은 요약이 통과해버린다."""
+    _, body = digest_shape.split_items(DIGEST)[1]
+    assert digest_shape.word_count(body) == 1          # '짧다.' 만
+
+
+def test_digest_action_label_captured_even_if_invalid():
+    """'행동 줄 없음'과 '라벨이 틀림'을 구분해야 집필자에게 정확히 알려줄 수 있다."""
+    _, body = digest_shape.split_items(DIGEST)[1]
+    m = digest_shape.ACTION_RE.search(body)
+    assert m and m.group(1) == "대충"
+
+
+def test_digest_no_items_when_format_ignored():
+    assert digest_shape.split_items("그냥 산문입니다.") == []
+
+
+def test_digest_default_actions():
+    assert set(digest_shape.DEFAULT_ACTIONS) == {"cite", "rebut", "monitor", "skip", "handoff"}
+
+
+# ── seen_dedup (아키타입 E) ───────────────────────────────────────────────
+def test_id_format_requires_source_prefix():
+    """id 는 `<source>:<key>` 여야 seen 추적이 소스 간 충돌 없이 된다."""
+    assert seen_dedup.ID_RE.match("arxiv:2505.01234")
+    assert seen_dedup.ID_RE.match("openreview:AbC-1_2")
+    assert not seen_dedup.ID_RE.match("no-colon-id")
+    assert not seen_dedup.ID_RE.match(":missing-source")
+
+
+def test_scope_monitor_id_read_from_frontmatter():
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    with open(_os.path.join(d, "SCOPE.md"), "w", encoding="utf-8") as f:
+        f.write("---\nmonitor_id: weekly-llm\n---\n# 범위\n")
+    assert seen_dedup.scope_monitor_id(d) == "weekly-llm"
+
+
+def test_scope_monitor_id_absent_returns_none():
+    import tempfile
+    assert seen_dedup.scope_monitor_id(tempfile.mkdtemp()) is None
+
+
+# ── monitor_state (지속 상태) ─────────────────────────────────────────────
+def _monitor_state():
+    path = os.path.join(GATES, "..", "tools", "monitor_state.py")
+    spec = importlib.util.spec_from_file_location("monitor_state", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_monitor_state_roundtrip_is_idempotent():
+    import tempfile
+    ms = _monitor_state()
+    root = tempfile.mkdtemp()
+    os.environ["HERMES_MONITORS_ROOT"] = root
+    try:
+        assert ms.load_seen("w") == {}                       # 첫 회차
+        assert ms.append_seen("w", ["arxiv:1", "arxiv:2"], "2026-08-04") == 2
+        assert ms.append_seen("w", ["arxiv:1", "arxiv:3"], "2026-08-11") == 1   # 멱등
+        seen = ms.load_seen("w")
+        assert set(seen) == {"arxiv:1", "arxiv:2", "arxiv:3"}
+        assert seen["arxiv:1"] == "2026-08-04"               # 최초 관측일 보존
+    finally:
+        os.environ.pop("HERMES_MONITORS_ROOT", None)
+
+
+def test_monitor_state_root_is_overridable():
+    """테스트가 repo 의 monitors/ 를 오염시키지 않아야 한다."""
+    ms = _monitor_state()
+    os.environ["HERMES_MONITORS_ROOT"] = "/tmp/does-not-exist-xyz"
+    try:
+        assert ms.seen_path("w").startswith("/tmp/does-not-exist-xyz")
+    finally:
+        os.environ.pop("HERMES_MONITORS_ROOT", None)
 
 
 if __name__ == "__main__":
