@@ -1,6 +1,6 @@
 # 12. 미션 파이프라인 협상 — 설계
 
-> 작성일: 2026-08-04 · 상태: **검토용 초안(구현 전)** · 성격: design spec
+> 작성일: 2026-08-04 · 개정: 2026-08-04(Sam 결정 2건 반영 — 임포트 우선·profile 비고정) · 상태: **검토용 초안(구현 전)** · 성격: design spec
 > 관련: [`11_template_driven_missions.md`](./11_template_driven_missions.md)(§3.F 협상 4단계·§2 3계층) · [`03_mission_pipeline_and_workflow.md`](./03_mission_pipeline_and_workflow.md)(Scoping 소유권) · [`10_stage1_plan.md`](./10_stage1_plan.md)(§4.3 자율분해 사고) · 참고 소스: 형제 repo `other_projects/harness-templates`
 > 후속: 이 문서는 "협상을 어떻게 성립시킬 것인가"를 고정한다. 구현은 §8 phasing에 따라 **phase별 별도 계획**으로 진행한다.
 
@@ -74,15 +74,30 @@ Sam은 YAML도 stage 번호도 보지 않는다.
 떨어진다.
 
 ### ⑤ 임포트의 진짜 작업은 "agent → profile 매핑"이다
-paperforge는 자기 agent를 12개 갖고 있으나(`.claude/agents/paperforge-*.md`), 우리 profile은 **8종 고정**이다
+paperforge는 자기 agent를 12개 갖고 있으나(`.claude/agents/paperforge-*.md`), 우리 profile은 현재 8종이다
 — `default(Solomon)`·`scout`·`reader`·`writer`·`synthesizer`·`curator`·`fact-checker`·`reviewer`.
 따라서 임포트는 파일 변환이 아니라 **역할 매핑 판단**이고, 매핑되지 않는 역할이 나오면 기존 profile에
-흡수할지 새 profile을 만들지 결정해야 한다. 린터가 `stage.profile ∈ 8종`을 강제하지 않으면 **존재하지 않는
-assignee로 카드가 생성**된다.
+흡수할지 새 profile을 만들지 결정해야 한다. 린터가 profile 존재를 검사하지 않으면 **존재하지 않는 assignee로
+카드가 생성**된다.
+
+> **[2026-08-04 Sam 결정] profile 수는 8종으로 고정하지 않는다.** 미션이 요구하면 신설할 수 있다.
+> 다만 profile은 공짜가 아니므로 세 규칙을 둔다:
+> 1. **린터는 `profile ∈ 현재 등록된 profile`을 검사**한다(고정 목록이 아니라 `hermes profile list` 기준).
+>    미등록이면 거부가 아니라 **"`<name>` profile이 필요합니다 — 생성할까요?" 경고**를 낸다.
+> 2. **profile 신설은 Sam 승인 사항**이다. `profiles-src/<name>/`(git)과 `hermes-home/profiles/<name>/`(로컬)
+>    양쪽에 있어야 하고, 늘어날수록 **새 PC 부트스트랩 절차가 길어진다**([`05_stage0_setup_guide.md`](./05_stage0_setup_guide.md)).
+> 3. **증식 억제** — 전문화 4계층의 취지는 "좁은 SOUL"이지 "많은 SOUL"이 아니다. 기존 profile로 흡수 가능하면
+>    흡수한다. 단 **검증자 역할은 반드시 별도 profile**(작성자≠검증자 불변식)이라는 선은 절대 넘지 않는다.
 
 ### ⑥ 조정이 자산으로 쌓이지 않는다
 "특허 수집 단계 추가"를 세 번째 미션에서도 하고 있다면 그건 새 템플릿이어야 한다. 복리 성장을 표방하는데
 조정이 매번 휘발되면 라이브러리가 자라지 않는다.
+
+> **[2026-08-04 Sam 결정] 골격은 상상이 아니라 귀납으로 얻는다.** 빈 `_base.yaml`을 먼저 쓰는 대신
+> **harness 20종을 전부 YAML로 변환·적재한 뒤 그 공통 뼈대를 추출**해 `_base.yaml`로 삼는다. 실제로 동작한
+> 20개에서 뽑은 골격이 상상해서 만든 골격보다 낫다. 전제는 둘: **(a) 전부 `draft` 등급으로만 적재**
+> (변환됐다 ≠ 우리 런타임에서 동작한다) **(b) 린터를 먼저 만든다**(검증 수단 없이 20개를 쏟아 넣으면
+> profile 미등록·검증자 누락이 섞인 채 쌓인다). → §8 phasing에 반영.
 
 ## 3. 제안 A — 3층 구조
 
@@ -163,9 +178,9 @@ Sam이 보는 것은 **mermaid DAG + 변경 요약 3줄**뿐이다. YAML은 Solo
 
 | 파일 | 역할 | 상태 |
 |---|---|---|
-| `templates/_base.yaml` | 불변 골격(Layer 0) | 신규 |
+| `templates/_base.yaml` | 불변 골격(Layer 0). **임포트 20종에서 공통 뼈대를 추출해 생성** | 신규 |
 | `templates/manifest.json` | 템플릿 목록 · 키워드 · maturity | 신규 |
-| `scripts/lint_template.py` | 불변식 린터(독립 CLI). `instantiate_template.check_invariants` 이관 + **profile 8종 검사** 추가 | 신규(이관) |
+| `scripts/lint_template.py` | 불변식 린터(독립 CLI). `instantiate_template.check_invariants` 이관 + **profile 등록 여부 검사**(미등록 시 "생성할까요?" 경고) 추가 | 신규(이관) |
 | `scripts/match_template.py` | 3-way 매칭 + 근거 출력 | 신규 |
 | `scripts/mission_spec.py` | 오버레이 병합 · upstream 재배선 · 승인 시 동결 | 신규 |
 | `scripts/import_skill.py` | harness 스킬 → YAML 초안(agent→profile 매핑 포함) | 신규 |
@@ -175,11 +190,18 @@ Sam이 보는 것은 **mermaid DAG + 변경 요약 3줄**뿐이다. YAML은 Solo
 
 ## 8. 권장 단계 (phasing) — 각 phase는 별도 구현 계획
 
-1. **오버레이 + 린터** — 단계 가감과 불변식 강제. 템플릿이 1개여도 즉시 쓸모가 있고 나머지 전부의 토대.
-2. **매처 + manifest** — 템플릿이 3개 이상일 때 의미가 생긴다.
-3. **스킬 임포터** — B(논문)·D(웹개발) 확보. **린터가 있어야 변환본 품질을 검증**할 수 있으므로 1 이후.
-4. **의도 번역 프로토콜** — Solomon SOUL에 협상 규약 반영. 라이브 미션으로 검증.
-5. **축적 루프** — maturity 승격 · 조정 반복 감지.
+> **[2026-08-04 개정]** Sam 결정(§2 상단·§2⑤)에 따라 **"빈 골격 먼저"에서 "임포트 먼저, 골격은 귀납"**으로
+> 순서를 바꾼다. 린터는 임포트의 **선행 조건**이다 — 검증 수단 없이 20종을 적재하면 안 된다.
+
+1. **린터 + 오버레이** — `lint_template.py` 독립 CLI(불변식 + profile 등록 검사) + 미션 오버레이(단계 가감).
+   임포트의 선행 조건이자 협상 루프의 토대. 템플릿이 1개여도 즉시 쓸모가 있다.
+2. **스킬 임포터 (20종 일괄)** — harness 20종을 YAML로 변환해 **전부 `draft` 등급으로 적재**.
+   agent→profile 매핑에서 미등록 profile이 나오면 목록으로 뽑아 Sam에게 신설 여부를 묻는다.
+3. **공통 골격 추출** — 적재된 20종의 공통 뼈대를 뽑아 `templates/_base.yaml` 생성.
+   *(상상이 아니라 귀납. 신규 구성의 출발점이자 린터 기준.)*
+4. **매처 + manifest** — 템플릿 재고가 생긴 뒤라야 3-way 판정이 의미를 갖는다.
+5. **의도 번역 프로토콜** — Solomon SOUL에 협상 규약 반영. 라이브 미션으로 검증.
+6. **축적 루프** — maturity 승격(draft→tested→proven) · 조정 반복 감지.
 
 ## 9. 미결 (Sam 결정 필요)
 
@@ -191,7 +213,9 @@ Sam이 보는 것은 **mermaid DAG + 변경 요약 3줄**뿐이다. YAML은 Solo
 
 ## 10. 검증 (설계 타당성 판정)
 
-- 린터가 불변식 위반 오버레이(**검증자 제거 · Sam 게이트 제거 · 미등록 profile**)를 거부한다.
+- 린터가 불변식 위반 오버레이(**검증자 제거 · Sam 게이트 제거**)를 거부하고, **미등록 profile**은 거부 대신
+  "생성할까요?" 경고로 보고한다.
+- 임포트 20종이 전부 `draft`로 적재되고, 린터가 각각에 대해 위반 항목과 필요한 신규 profile 목록을 낸다.
 - 오버레이로 단계를 제거하면 upstream이 자동 재배선되어 **DAG가 끊기지 않는다**(dry-run mermaid로 확인).
 - 승인 동결본(`pipeline.resolved.yaml`)과 실제 생성된 카드 그래프가 **일치**한다.
 - 조정 없는 `trend-report` 인스턴스화 결과가 현행과 **동일**(회귀 없음).
@@ -205,4 +229,8 @@ Sam이 보는 것은 **mermaid DAG + 변경 요약 3줄**뿐이다. YAML은 Solo
   고정하고(`drop` → `add` → `override` 순), 테스트로 못박는다.
 - **임포트의 신뢰 경계** — 외부 스킬의 프롬프트·스크립트를 그대로 실행하면 프롬프트 인젝션·임의 코드 실행
   위험이 있다. 임포트는 **초안 생성까지만** 하고 사람 검토 게이트를 반드시 거친다.
+- **profile 증식** — 20종 임포트가 신규 profile 요구를 무더기로 낼 수 있다. 흡수 우선 원칙과 Sam 승인
+  게이트가 없으면 부트스트랩 절차가 감당 못 할 만큼 길어진다(§2⑤).
+- **draft 적재의 착시** — 20종이 `templates/`에 들어차면 "라이브러리가 풍부하다"고 느끼기 쉽지만 실증된 것은
+  여전히 `trend-report` 하나다. 매처는 반드시 maturity를 점수에 반영해야 한다.
 - **범위 억제** — 웹 UI 편집기는 이 문서의 범위 밖이다(§9 협상 장소 결정 후 별도 판단).
