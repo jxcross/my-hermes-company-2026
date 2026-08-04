@@ -25,6 +25,37 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#19 — Phase 2 #3·#4: Slack 승인 게이트 자동화 (Web API) + 승인요청 내용</h2>
+    <div class="meta">2026-08-04 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> Slack 인바운드 이어서 — Socket Mode flapping + "Sam이 Slack 승인해도 unblock 안 됨" 배선. 이후 "승인요청에 내용이 없어 판단 불가" 개선.</div>
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li><b>Socket Mode flapping 진단</b>: 원인=WebSocket 전송 간헐 타임아웃(네트워크성; app/bot 토큰 유효, Web API 정상). force-recreate가 stale 연결 청소→현재 안정. 근본은 환경 → <b>승인 흐름을 Web API 폴링으로 설계해 비의존</b>.</li>
+      <li><b>승인 자동화(#3+#4)</b> gate_keeper <code>approval_poll</code> 추가: #4 활성 Sam-게이트를 <code>#approvals</code>에 자동 승인요청 게시 + #3 <code>SLACK_ALLOWED_USERS</code>(Sam)의 <code>승인</code>(단일)/<code>승인 &lt;task_id&gt;</code>(명시) 감지→<code>kanban unblock</code>. 부정형·타인 스킵, 기동 시 과거 메시지 baseline 처리(소급 방지). 상태파일 dict 확장(processed+approval_posted+approval_seen).</li>
+      <li><b>승인요청 내용</b>(<code>gate_summary</code>): 진입 게이트=주제·파이프라인 계획·정책, 산출 게이트=보고서 요약·검증·공개 대상 → Sam이 내용 보고 승인/반려 판단 가능.</li>
+      <li>순수함수 단위테스트 17종(<code>scripts/tests/test_gate_keeper.py</code>) + <b>라이브 E2E</b>(테스트 게이트→자동 게시→Sam 실제 <code>승인</code>→blocked→ready) 검증.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      Phase 2 #3·#4 해소(커밋 3d…13586f0·18be2d3). Sam이 Slack에서 <code>승인</code> 한 마디로 게이트 자동 통과, 요청엔 판단 내용 포함. Socket Mode 비의존이라 flapping에도 견고. <b>미결</b>: 진단 중 SLACK_BOT_TOKEN 세션 노출→재발급 권장 · Socket Mode 인바운드 flapping 모니터.
+    </div>
+  </div>
+
+  <div class="entry">
+    <h2>#18 — Phase 2 #2: 컨테이너 git push 자격 + Deliver Slack Web API 경로</h2>
+    <div class="meta">2026-08-04 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> 컨테이너 GITHUB_TOKEN·Slack 자격부터 해결 — Deliver가 컨테이너 내부에서 push·게시하도록(호스트 폴백 제거).</div>
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li><b>Git 자격(진짜 부재)</b>: <code>.env</code>에 Sam의 Fine-grained PAT(Contents:write) + docker-compose <code>GIT_CONFIG_*</code>로 github.com credential helper 주입(토큰 파일 미저장·env 런타임 조회, <code>.git/config</code> 신원 보존). <b>컨테이너 직접 <code>git push</code> 성공</b> 검증(호스트 폴백 제거).</li>
+      <li><b>Slack(자격 아님-오진)</b>: 창값은 정상, Web API 게시 작동. 원인=Socket Mode 인바운드 flapping에 에이전트 slack 도구 의존. Deliver 게시를 <code>hermes send</code>(Web API) 경로로 고정(템플릿 stage11 body).</li>
+      <li>.env.example 슬롯·docs/11 §7·CLAUDE.md 갱신.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      Deliver가 컨테이너 자체에서 origin push + Slack 게시 가능(커밋 ec69bb7). Git=토큰+helper, Slack=Web API 경로. 잔여 Socket Mode flapping은 #19에서 우회.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#17 — Phase 2-①: 미션 파이프라인 병렬화 (subagent 스테이지 내 팬아웃)</h2>
     <div class="meta">2026-08-03 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> 상태 확인 후 Phase 2(병렬화)부터 계획·구현. 순차 실행이 최대 병목(docs/11 §7).</div>

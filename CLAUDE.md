@@ -48,4 +48,7 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 5. **매처(C)·전용 린터(E)** — 미션→템플릿 자동 선택, 불변식 린터 분리. **B/D 아키타입**(논문·웹개발) 추가.
 6. **성장 지표 대시보드** — 재작업률·wiki 재사용률·소요시간 누적.
 
-새 세션 시작 시: 최신 `git log`(현 HEAD 근처: Slack복구→게이트키퍼→템플릿설계→Pilot P0–P4)와 `docker compose ps`(hermes-solomon + **hermes-gatekeeper** 2개 Up)·`hermes profile list`로 상태 확인 → **`docs/11 §7`(Pilot 결과·미해결)** 읽고 → 위 Phase 2 우선순위 중 Sam이 지정한 것부터 계획 제시.
+**[2026-08-04 세션 완료]** Phase 2 대거 진전: 병렬화(1)·컨테이너 git 자격+Deliver Slack(2)·Slack 승인 자동화(3·4) **모두 해소**. 라이브 파일럿 M-2026-004 11/11 완주. gate_keeper fail-open 결함 발견·수정. 남은 우선순위 = **위 5(매처·린터·B/D 아키타입)·6(지표 대시보드)** + Socket Mode 인바운드 flapping 모니터.
+**⚠️ 보안 미결**: 진단 중 `SLACK_BOT_TOKEN` 값이 세션 로그에 노출됨 → **재발급(rotate) 권장**(Slack 앱 Regenerate → `.env` 갱신 → `docker compose up -d --force-recreate hermes-solomon hermes-gatekeeper`).
+
+새 세션 시작 시: 최신 `git log`(현 HEAD 근처: 병렬화→fail-open수정→git자격→승인자동화→gate_summary)와 `docker compose ps`(hermes-solomon + **hermes-gatekeeper** 2개 Up)·`hermes profile list`로 상태 확인 → **`docs/11 §7`(Pilot 결과·미해결)** 읽고 → 위 Phase 2 우선순위 중 Sam이 지정한 것부터 계획 제시.
