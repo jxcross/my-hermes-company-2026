@@ -28,6 +28,13 @@ services:
       - HERMES_WRITE_SAFE_ROOT=/opt/data:/work/company:/work/llm-wiki
       # Curator의 karpathy-llm-wiki 스킬이 지식을 적재할 위치(마운트된 llm-wiki repo).
       - WIKI_PATH=/work/llm-wiki
+      # Deliver(git push) 자격: .env 의 GITHUB_TOKEN(env_file 로 자동 주입)을 읽는 credential
+      # helper 를 github.com HTTPS 에 주입. 토큰은 파일에 저장 안 함(env 런타임 조회). GIT_CONFIG_*
+      # 는 .git/config(신원 user.email) 위에 *추가*만 하므로 커밋 신원은 보존. compose 는 $$→$ 로
+      # 이스케이프해 helper 가 실행 시점에 $GITHUB_TOKEN 을 셸 확장하게 한다.
+      - GIT_CONFIG_COUNT=1
+      - GIT_CONFIG_KEY_0=credential.https://github.com.helper
+      - 'GIT_CONFIG_VALUE_0=!f() { echo username=x-access-token; echo "password=$$GITHUB_TOKEN"; }; f'
     ports:
       - "127.0.0.1:8652:8642"   # gateway/API (호스트 8652 → 컨테이너 8642)
       - "127.0.0.1:9129:9119"   # 웹 대시보드=게시판 (호스트 9129 → 컨테이너 9119)

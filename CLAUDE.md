@@ -43,8 +43,8 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 
 **← 현 최우선: Phase 2** (`docs/11 §7`의 미해결·개선점):
 1. ~~**병렬화**~~ **[완료·라이브검증 2026-08-04]** subagent 스테이지 내 팬아웃 구현(형제 task 아님 — Hermes는 동일 profile task 순차 실행). 번역기가 템플릿 `parallel` 블록을 읽어 stage 3·5·8 task **본문에 delegation 배치 위임 프로토콜 주입**(스테이지 1 task 유지→gate_keeper 무손상). **라이브 파일럿 M-2026-004 완주**(11/11, 보고서 커밋 b585526): stage3 병렬 subagent 디스패치→worker shard 5·병합, stage5 분석 12·stage8 집필 7 shard. 파일럿이 **gate_keeper fail-open 결함 발견·수정**(자식 transient 조회실패 None을 종단 오인→downstream 고아화; `classify_children`+defer, 테스트 4종, 커밋 3d25a54). 상세 `docs/11 §5·§3.B·§7`. 신규 미션: `python3 scripts/instantiate_template.py trend-report <MID> --topic "..."`.
-2. **컨테이너 GITHUB_TOKEN** — Deliver의 `git push`가 컨테이너 자격증명 부재로 실패(현 호스트 폴백). `.env`에 토큰 + git 자격 설정.
-3. **Slack 승인→Kanban unblock 배선** — Sam이 Slack 승인해도 Solomon이 해당 task를 unblock 안 함(대화 응답만). Solomon이 "승인" → `kanban unblock` 표준 처리하도록.
+2. ~~**컨테이너 GITHUB_TOKEN**~~ **[해소 2026-08-04]** `.env`의 `GITHUB_TOKEN`(Fine-grained PAT, Contents:write) + docker-compose가 `GIT_CONFIG_*`로 github.com credential helper 주입(토큰 파일 미저장, 신원 보존). 컨테이너 `git push` 인증 검증됨. ~~**Deliver Slack 실패**~~ **[해소]** Deliver 게시를 `hermes send`(Web API)로 고정(템플릿 stage11). **[신규 잔여] Slack Socket Mode 인바운드 flapping**(2026-08-02~, 아웃바운드는 정상) 조사 필요.
+3. **Slack 승인→Kanban unblock 배선** — Sam이 Slack 승인해도 Solomon이 해당 task를 unblock 안 함(대화 응답만). Solomon이 "승인" → `kanban unblock` 표준 처리하도록. (Socket Mode 인바운드 flapping과 함께 볼 것.)
 4. **pre-blocked Sam 게이트 활성 알림** — 게이트키퍼가 상위 done 시 `#approvals`에 승인요청 자동 게시.
 5. **매처(C)·전용 린터(E)** — 미션→템플릿 자동 선택, 불변식 린터 분리. **B/D 아키타입**(논문·웹개발) 추가.
 6. **성장 지표 대시보드** — 재작업률·wiki 재사용률·소요시간 누적.
