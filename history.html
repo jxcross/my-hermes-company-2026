@@ -25,6 +25,23 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#20 — 개념 점검 문답 + <code>parallel.batch_size</code> (delegation 배치 상한 명시)</h2>
+    <div class="meta">2026-08-04 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> 이전 세션 이어서 상태 파악 → "지금까지 내가 생각한 개념대로 개발됐는지" 점검 문답(무엇을 만든 것인가·템플릿은 누가 만드나·harness 스킬 재활용·Kanban 매핑·새 웹UI 통신·subagent 병렬 방식) → 마지막에 <b><code>parallel.batch_size</code> 추가 지시</b>.</div>
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li><b>세션 재개 상태 점검</b>: HEAD d81de93 · 컨테이너 2개 Up · Kanban 전부 done(활성 게이트·잔여 테스트 카드 없음). <b>Slack 도달 불가 재발 확인</b> — google/github 200이나 <code>slack.com/api/auth.test</code>는 호스트·컨테이너 모두 timeout(DNS는 정상 해석). docs/10 §4.3 런북대로 <b>코드 아닌 네트워크 문제</b>로 판정(게이트키퍼 <code>conversations.history</code> WARN의 원인).</li>
+      <li><b>개념 점검 문답</b>: 번역기=<code>instantiate_template.py</code>+감시자 <code>gate_keeper.py</code> · <code>trend-report.yaml</code>은 build_pipeline.sh를 손으로 선언화+trendforge 흡수 · <b>새 아키타입 템플릿은 현재 사람이 작성</b>(매처C는 선택만, 생성 경로 미구현) · harness-templates 22종은 <code>SKILL.md</code>+<code>agents/*.md</code>+<code>scripts/*.py</code>가 <code>stages</code>/<code>profile</code>/<code>gates</code>와 1:1 대응해 <b>어댑터로 자동 변환 가능</b>(단 불변식 강제 린터 + 신뢰경계 검토 필요) · 새 웹UI는 <b>읽기=Hermes API(현재 401 인증필요)·쓰기=CLI 유지</b>의 사이드카 구성 권고(Kanban 상태머신 이중화 회피).</li>
+      <li><b>결함 규명(batch)</b>: Hermes <code>delegate_task</code>는 배치가 <code>max_concurrent_children</code>(현 <b>3</b>)을 넘으면 <b>큐잉하지 않고 <code>Too many tasks…</code> tool_error 로 거절</b>(근거: hermes-agent 스킬 <code>delegate-task-concurrency-diagnosis.md</code>의 캡 경로 3종). 기존 주입 문구는 "<b>한 번에</b> 위임하라"만 말해 5워커 분할을 <b>모델 판단에 의존</b>. agent.log 10,064줄에 <code>Too many tasks</code>·<code>Truncated</code> <b>0건</b> → M-2026-004의 scout는 알아서 3+2로 나눠 성공했으나 <b>보장이 아님</b>.</li>
+      <li><b>구현</b>: 템플릿 <code>parallel.batch_size</code>(기본 3·하한 1, 불량값 폴백) 신설 — <code>normalize_batch_size()</code>·<code>batch_plan()</code>·<code>batch_lines()</code>. 주입 문구가 <b>"최대 3개씩, 이 단계는 5 = 3 + 2 총 2라운드"</b>와 거절 동작 경고를 명시하고, per_item은 "항목 수를 세고 올림 나눗셈으로 라운드 계산". 렌더 라벨 <code>⇉5워커/배치3×2R</code>, <code>pipeline.json</code>에 batch_size 기록. trend-report stage 3·5·8에 선언.</li>
+      <li><b>검증</b>: 신규 <code>scripts/tests/test_instantiate_template.py</code> <b>17/17 PASS</b>(기본값·명시값·불량값·하한·구식 <code>parallel: true</code> 호환·라운드계산·주입문구·라벨·실템플릿 선언) + gate_keeper 기존 17/17 유지 + dry-run(불변식·mermaid·잔여파일 없음) 확인.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      팬아웃 분할이 <b>모델 추측 → 템플릿 선언</b>으로 이동(재현성 확보). 실제 동시성은 여전히 3이므로 <b>속도를 더 얻으려면 컨테이너 <code>delegation.max_concurrent_children</code>와 템플릿 <code>batch_size</code>를 함께</b> 올려야 함(둘은 독립 — 템플릿이 크면 tool_error, 작으면 동시성 손해). <b>미결</b>: Slack 네트워크 도달 불가(Sam 조치) · SLACK_BOT_TOKEN 재발급 · 미션 진행상황 Slack 실시간 보고 부재(게이트·Deliver 시점만 통지).
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#19 — Phase 2 #3·#4: Slack 승인 게이트 자동화 (Web API) + 승인요청 내용</h2>
     <div class="meta">2026-08-04 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> Slack 인바운드 이어서 — Socket Mode flapping + "Sam이 Slack 승인해도 unblock 안 됨" 배선. 이후 "승인요청에 내용이 없어 판단 불가" 개선.</div>
@@ -67,7 +84,6 @@
       <li><b>번역기</b>(<code>instantiate_template.py</code>): <code>fanout_body()</code> 신설 — 병렬 스테이지 task <b>본문에 delegation 배치 위임 프로토콜 주입</b>(스테이지 카드 1개 유지, gate_keeper 무손상). pipeline.json 병렬 메타 기록 + mermaid/ascii 팬아웃 표기(⇉5워커·⇉동적).</li>
       <li><b>경합 회피:</b> worker/항목별 개별 shard(<code>raw/sources.&lt;worker&gt;.yaml</code>·<code>analysis/&lt;id&gt;.md</code>·<code>report.&lt;section&gt;.md</code>) → 오케스트레이터가 스테이지 끝에서 canonical로 병합·dedup.</li>
       <li><b>dry-run 검증:</b> 불변식 통과 · 주입 본문(workers/per_item) 정확 · pipeline.json 메타 정확 · mermaid 표기 정상. docs/11 §5·§3.B·§7 갱신.</li>
-    </ol>
       <li><b>라이브 파일럿 M-2026-004</b>("온디바이스 LLM 추론 최적화 동향") 실행 → <b>병렬 팬아웃 실증</b>: stage3 scout가 <code>delegation</code> 배치로 source_type별 <b>병렬 subagent 디스패치</b>(라이브 transcript 확인)→worker shard 5개→병합, stage5 분석 12 shard, stage8 집필 7 섹션 shard→report.md. 이중 게이트(6·9) 리비전 루프 정상.</li>
       <li><b>파일럿이 발견한 gate_keeper 결함 → 근본 수정</b>: stage10 정지. 체계적 디버깅으로 <b>fail-open</b> 규명 — <code>poll_once</code>가 자식 상태 transient 조회실패(None)를 종단(done/archived)으로 오인→검증자 영구 processed→blocked downstream 고아화(fail-closed 원칙 위반). <code>classify_children</code> 추출로 None(unknown)을 종단과 분리, unknown시 defer(재시도). 단위테스트 4/4 + 라이브 재기동으로 stage10 정상 unblock 확인.</li>
     </ol>

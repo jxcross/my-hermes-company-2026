@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+"""
+instantiate_template 팬아웃 배치 테스트
+=======================================
+Hermes `delegate_task` 는 한 배치가 `delegation.max_concurrent_children`(기본 3)을
+넘으면 **큐잉하지 않고 tool_error 로 거절**한다. 따라서 워커가 5개인 스테이지는
+"3 + 2, 2라운드"로 나눠 위임해야 하는데, 기존 주입 문구는 "**한 번에** 위임하라"만
+말하고 배치 상한을 언급하지 않아 분할을 모델의 자체 판단에 맡기고 있었다
+(M-2026-004 에서는 scout 가 알아서 나눠 성공했으나 보장이 아니다).
+
+`parallel.batch_size` 선언 + 주입 문구의 라운드 명시가 그 추측을 제거한다.
+실행: python3 -m pytest scripts/tests/test_instantiate_template.py
+(pytest 없으면) python3 scripts/tests/test_instantiate_template.py
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+import instantiate_template as it  # noqa: E402
+
+
+# ── batch_size 정규화 ────────────────────────────────────────────────────
+def test_batch_size_defaults_when_absent():
+    p = it.parallel_spec({"parallel": {"mode": "workers", "workers": ["a"]}})
+    assert p["batch_size"] == it.DEFAULT_BATCH_SIZE, p
+
+
+def test_batch_size_explicit_wins():
+    p = it.parallel_spec({"parallel": {"mode": "workers", "workers": ["a"], "batch_size": 5}})
+    assert p["batch_size"] == 5, p
+
+
+def test_batch_size_bad_value_falls_back():
+    p = it.parallel_spec({"parallel": {"mode": "per_item", "batch_size": "많이"}})
+    assert p["batch_size"] == it.DEFAULT_BATCH_SIZE, p
+
+
+def test_batch_size_floor_is_one():
+    p = it.parallel_spec({"parallel": {"mode": "per_item", "batch_size": 0}})
+    assert p["batch_size"] == 1, p
+
+
+def test_legacy_parallel_true_still_works():
+    p = it.parallel_spec({"parallel": True, "workers": ["a", "b"]})
+    assert p["mode"] == "workers" and p["batch_size"] == it.DEFAULT_BATCH_SIZE, p
+
+
+# ── 라운드 계산 ──────────────────────────────────────────────────────────
+def test_batch_plan_splits_five_into_three_plus_two():
+    assert it.batch_plan(5, 3) == [3, 2]
+
+
+def test_batch_plan_single_round_when_under_cap():
+    assert it.batch_plan(3, 3) == [3]
+    assert it.batch_plan(2, 3) == [2]
+
+
+def test_batch_plan_empty():
+    assert it.batch_plan(0, 3) == []
+
+
+# ── 주입 문구 ────────────────────────────────────────────────────────────
+STAGE5W = {
+    "id": 3, "parallel": {
+        "mode": "workers",
+        "workers": ["academic", "vendor", "research_org", "standards", "news"],
+        "batch_size": 3, "shard": "raw/sources.<worker>.yaml", "merge_to": "raw/sources.yaml",
+    },
+}
+
+
+def test_body_states_batch_cap_and_rounds():
+    body = it.fanout_body(STAGE5W, "수집하라.")
+    assert "최대 3개" in body, body
+    assert "3 + 2" in body and "2라운드" in body, body
+
+
+def test_body_warns_batch_is_rejected_not_queued():
+    body = it.fanout_body(STAGE5W, "수집하라.")
+    assert "max_concurrent_children" in body and "거절" in body, body
+
+
+def test_body_no_longer_says_all_at_once():
+    """'한 번에' 지시는 배치 상한과 모순 — 5워커에서 tool_error 를 유발한다."""
+    assert "**한 번에**" not in it.fanout_body(STAGE5W, "수집하라.")
+
+
+def test_body_single_batch_when_workers_fit():
+    stage = {"id": 3, "parallel": {"mode": "workers", "workers": ["a", "b"], "batch_size": 3}}
+    body = it.fanout_body(stage, "x")
+    assert "한 배치로 위임" in body, body
+
+
+def test_body_per_item_tells_model_to_count_first():
+    stage = {"id": 5, "parallel": {"mode": "per_item", "over": "자료 각각", "batch_size": 3}}
+    body = it.fanout_body(stage, "분석하라.")
+    assert "동적" in body and "3개씩" in body, body
+
+
+def test_no_parallel_body_unchanged():
+    assert it.fanout_body({"id": 2}, "검색식 작성.") == "검색식 작성."
+
+
+# ── 렌더 라벨 ────────────────────────────────────────────────────────────
+def test_label_shows_batch_and_rounds():
+    assert it.fanout_label(STAGE5W) == "⇉5워커/배치3×2R"
+
+
+def test_label_omits_rounds_for_single_batch():
+    stage = {"parallel": {"mode": "workers", "workers": ["a", "b"], "batch_size": 3}}
+    assert it.fanout_label(stage) == "⇉2워커/배치3"
+
+
+# ── 실제 템플릿 ──────────────────────────────────────────────────────────
+def test_shipped_template_declares_batch_size_on_every_parallel_stage():
+    tpl = it.load_template("trend-report")
+    par = [s for s in tpl["stages"] if s.get("parallel")]
+    assert par, "trend-report 에 parallel 스테이지가 없다"
+    for s in par:
+        assert isinstance(s["parallel"].get("batch_size"), int), f"stage {s['id']} batch_size 미선언"
+
+
+if __name__ == "__main__":
+    fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
+    failed = 0
+    for fn in fns:
+        try:
+            fn()
+            print(f"PASS {fn.__name__}")
+        except Exception as e:  # noqa: BLE001
+            failed += 1
+            print(f"FAIL {fn.__name__}: {e}")
+    print(f"\n{len(fns) - failed}/{len(fns)} passed")
+    sys.exit(1 if failed else 0)

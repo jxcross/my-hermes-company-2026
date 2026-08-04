@@ -32,6 +32,13 @@ except ImportError:
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # scripts/ 의 부모
 CONTAINER_REPO = "/work/company"   # 컨테이너 내 repo 마운트 경로(kanban workspace 기준)
 
+# delegation 배치 1회당 최대 subagent 수. Hermes `delegate_task` 는 한 배치가
+# `delegation.max_concurrent_children`(기본 3)을 넘으면 큐잉하지 않고
+# "Too many tasks: N provided, but max_concurrent_children is M" tool_error 로 **거절**한다.
+# 모델의 자체 분할 추측에 맡기지 않도록 템플릿이 명시(`parallel.batch_size`)하고,
+# 미선언 시 이 기본값을 주입 문구에 박아 넣는다.
+DEFAULT_BATCH_SIZE = 3
+
 
 def log(m: str) -> None:
     print(m, flush=True)
@@ -135,17 +142,60 @@ def parallel_spec(stage: dict) -> dict | None:
     if not isinstance(p, dict):
         return None
     p.setdefault("mode", "workers" if p.get("workers") else "per_item")
+    p["batch_size"] = normalize_batch_size(p.get("batch_size"))
     return p
 
 
+def normalize_batch_size(v) -> int:
+    """batch_size 를 정수로 정규화. 미선언·불량값이면 DEFAULT_BATCH_SIZE(하한 1)."""
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        return DEFAULT_BATCH_SIZE
+    return max(1, n)
+
+
+def batch_plan(count: int, batch_size: int) -> list[int]:
+    """count 개를 batch_size 씩 나눈 라운드별 크기(예: 5,3 → [3, 2])."""
+    if count <= 0:
+        return []
+    return [min(batch_size, count - i) for i in range(0, count, batch_size)]
+
+
 def fanout_label(stage: dict) -> str:
-    """렌더용 팬아웃 요약(예: '⇉5워커' · '⇉동적')."""
+    """렌더용 팬아웃 요약(예: '⇉5워커/배치3' · '⇉동적/배치3')."""
     p = parallel_spec(stage)
     if not p:
         return ""
+    bs = p["batch_size"]
     if p["mode"] == "workers":
-        return f"⇉{len(p.get('workers') or [])}워커"
-    return "⇉동적"
+        n = len(p.get("workers") or [])
+        rounds = len(batch_plan(n, bs))
+        return f"⇉{n}워커/배치{bs}" + (f"×{rounds}R" if rounds > 1 else "")
+    return f"⇉동적/배치{bs}"
+
+
+def batch_lines(p: dict) -> list[str]:
+    """배치 크기 지시문. Hermes 는 배치 초과를 큐잉하지 않고 거절하므로
+    '몇 개씩 몇 라운드로 나눌지'를 모델 추측에 맡기지 않고 본문에 못박는다."""
+    bs = p["batch_size"]
+    out = [f"· **배치 크기: 1회 위임당 최대 {bs}개.** 대상이 {bs}개를 넘으면 {bs}개씩 나눠 "
+           f"여러 라운드로 위임하라(한 라운드의 subagent 가 모두 반환한 뒤 다음 라운드). "
+           f"한 배치에 {bs}개를 초과해 넣으면 Hermes 가 "
+           f"`Too many tasks: N provided, but max_concurrent_children is {bs}` tool_error 로 "
+           f"거절한다 — 대기열에 넣어주지 않는다."]
+    if p["mode"] == "workers":
+        n = len(p.get("workers") or [])
+        plan = batch_plan(n, bs)
+        if len(plan) > 1:
+            out.append(f"  → 이 단계: 워커 {n}개 = {' + '.join(str(x) for x in plan)}, "
+                       f"총 {len(plan)}라운드.")
+        elif n:
+            out.append(f"  → 이 단계: 워커 {n}개 ≤ {bs} 이므로 한 배치로 위임.")
+    else:
+        out.append(f"  → 이 단계: 항목 수가 동적이다. 항목 수를 먼저 세고 {bs}개씩 "
+                   f"올림 나눗셈으로 라운드를 계산해 순서대로 위임하라.")
+    return out
 
 
 def fanout_body(stage: dict, base_body: str) -> str:
@@ -156,12 +206,13 @@ def fanout_body(stage: dict, base_body: str) -> str:
     if not p:
         return base_body
     merge_to = p.get("merge_to", "")
+    bs = p["batch_size"]
     lines = [
         base_body,
         "",
         "── 병렬 팬아웃 (delegation 배치 위임) ──",
         "이 단계는 순차 처리하지 마라. 아래 작업들을 delegation 도구의 배치(parallel) "
-        "기능으로 **한 번에** 위임해 subagent 들이 동시에 실행되게 하라(각자 격리 세션).",
+        "기능으로 위임해 subagent 들이 동시에 실행되게 하라(각자 격리 세션).",
     ]
     if p["mode"] == "workers":
         workers = p.get("workers") or []
@@ -175,6 +226,7 @@ def fanout_body(stage: dict, base_body: str) -> str:
         lines.append(f"· 분할 기준: {over} — 항목마다 subagent 1개.")
         lines.append(f"· 각 subagent 는 자기 항목만 처리해 '{shard}'(항목 식별자 치환)에 기록. "
                      f"공유 파일 동시쓰기 금지(경합 방지).")
+    lines.extend(batch_lines(p))
     if merge_to:
         lines.append(f"· 모든 subagent 반환 후 **오케스트레이터(너)가** 산출 shard 들을 "
                      f"'{merge_to}'로 병합·dedup(필드 누락·형식 불량 항목 폐기). 이 병합 파일이 "
@@ -291,6 +343,7 @@ def build_pipeline_json(tpl: dict, mid: str, topic: str, ids: dict[int, str]) ->
             entry["parallel"] = {
                 "mode": ps["mode"],
                 **({"workers": ps.get("workers")} if ps["mode"] == "workers" else {"over": ps.get("over")}),
+                "batch_size": ps["batch_size"],
                 "merge_to": ps.get("merge_to"),
             }
         out_stages.append(entry)

@@ -19,6 +19,11 @@
 #       mode: per_item → 동적 분할. over: 로 분할 기준 서술, 항목마다 subagent 1개.
 #       shard    : 워커/항목별 산출 파일 패턴(<worker>·<id>·<section> 치환은 실행 profile 담당).
 #       merge_to : 오케스트레이터가 모든 subagent 반환 후 병합·dedup 하는 canonical 파일.
+#       batch_size : delegation 배치 1회당 최대 subagent 수(기본 3 = Hermes
+#                    `delegation.max_concurrent_children` 기본값). Hermes 는 배치가 이 값을
+#                    넘으면 큐잉하지 않고 tool_error 로 **거절**하므로, 초과분은 라운드로
+#                    나눠야 한다. 번역기가 "N개씩 몇 라운드"를 본문에 명시해 모델 추측을 없앤다.
+#                    컨테이너 config 를 올렸다면 여기 값도 함께 올릴 것.
 
 name: trend-report
 category: research
@@ -63,6 +68,7 @@ stages:
     parallel:
       mode: workers
       workers: [academic, vendor, research_org, standards, news]
+      batch_size: 3          # 5워커 = 3 + 2, 2라운드
       shard: "raw/sources.<worker>.yaml"
       merge_to: "raw/sources.yaml"
     body: "source_type별 원자료 수집. 각 항목 id·published_year·source_type·url·collected_at·status 기록."
@@ -78,6 +84,7 @@ stages:
     parallel:
       mode: per_item
       over: "raw/sources.yaml 의 status=selected 자료 각각"
+      batch_size: 3
       shard: "analysis/<id>.md"
       merge_to: "analysis/_index.md"
     body: "자료별 주장/근거 분리 분석."
@@ -103,6 +110,7 @@ stages:
     parallel:
       mode: per_item
       over: "보고서 섹션(개요·기술분류·성숙도·적용후보·결론 등 7단계 종합 기준)"
+      batch_size: 3
       shard: "report.<section>.md"
       merge_to: "report.md"
     body: "출처 포함 Markdown 보고서(report.md)."
