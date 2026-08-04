@@ -48,6 +48,7 @@ stages:
     name: Domain & PRD
     profile: default          # 요구사항 정의 = 기획(Solomon 소유). specflow step 1+2
     sam_gate: true            # 원본의 PRD 승인 게이트 보존 — 여기서 틀리면 전부 틀린다
+    approval_artifact: "reports/<MID>/spec/2-prd.md"
     upstream: [1]
     body: "도메인 정의(문제·핵심개념·용어) + PRD(요구사항·범위·비범위·성공지표)를 spec/1-domain.md·spec/2-prd.md에 작성. ⚠️ PRD는 Sam 승인 대상이다 — 승인 전 설계로 넘어가지 마라."
   - id: 3
@@ -73,7 +74,7 @@ stages:
     verifier: true
     upstream: [4]
     gate:
-      objective: []            # doc_consistency 객관 게이트 미구현 — docs/13 §7
+      objective: [doc_consistency]   # R-id·S-id 추적 커버리지를 LLM 없이 결정적으로 검사
       llm: reviewer_verdict
       draft: "reports/<MID>/spec/4-design.md"
     body: "설계 검증(specflow에 없던 단계 — 우리 불변식): PRD 요구사항 전건이 설계에 반영됐는가 · 시나리오 S-id 전건이 화면·엔드포인트로 추적되는가 · ERD와 구조·와이어프레임이 서로 모순되지 않는가 · 비범위가 새어 들어오지 않았는가. 끝에 VERDICT: PASS|FAIL."
@@ -86,6 +87,7 @@ stages:
     name: Implementation
     profile: developer        # ← 신규 profile
     sam_gate: true            # 원본 step7 승인 보존 = 실행계획 확정 후 구현 개시
+    approval_artifact: "reports/<MID>/spec/5-plan.md"
     upstream: [6]
     parallel:
       mode: workers
@@ -103,10 +105,10 @@ stages:
     verifier: true
     upstream: [7]
     gate:
-      objective: []            # test_run 객관 게이트 미구현 — docs/13 §7
+      objective: [test_run]          # results.json·시나리오 커버리지·체크박스를 결정적으로 검사
       llm: tester_verdict
-      draft: null
-    body: "E2E 시나리오 실행(specflow e2e-tester 계승): spec/3-scenarios.md의 S-id 전건을 실제 구동으로 검증하고 결과를 test/report.md에 기록. 완료조건 체크박스 미충족·시나리오 미커버·테스트 실패가 있으면 FAIL. 끝에 VERDICT: PASS|FAIL."
+      draft: "reports/<MID>/test/results.json"
+    body: "E2E 시나리오 실행(specflow e2e-tester 계승): spec/3-scenarios.md의 S-id 전건을 실제 구동으로 검증한다. ⚠️ 반드시 **기계 판독 결과 `test/results.json`**을 남겨라 — `{total, passed, failed, scenarios: {\"S-01\": \"pass|fail|missing\"}}`. 객관 게이트가 이 파일을 읽으며, 없거나 형식이 깨지면 fail-closed 로 반려된다. 서술 보고는 test/report.md에 따로 쓴다. 완료조건 체크박스 미충족·시나리오 미커버·테스트 실패가 있으면 FAIL. 끝에 VERDICT: PASS|FAIL."
   - id: 9
     name: Wiki Update
     profile: curator

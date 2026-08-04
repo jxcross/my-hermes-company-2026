@@ -25,6 +25,24 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#24 — profile 3종 신설(11종) + 후속 과제 5건 완료(객관게이트 2종·중간승인·bib·린터 분리)</h2>
+    <div class="meta">2026-08-04 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "3종 profile 추가하고, 후속 과제까지 수행하라"(docs/13 §7).</div>
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li><b>profile 3종 신설 → 총 11종</b>: <code>architect</code>(설계 — 구조·ERD·화면, 코드 안 씀)·<code>developer</code>(구현 — 설계 변경 금지·자기 합격판정 금지)·<code>tester</code>(실행 검증 — 코드 수정 금지). SOUL은 원본 agent md를 재료로 하되 <b>우리 역할 경계</b>(작성자≠검증자·범위 이탈 금지·<code>VERDICT:</code> 게이트 신호)를 명시. 모델 배정: architect·developer=terra, <b>tester=sol</b>(검증자 계열). <code>--clone-from writer/writer/reviewer</code>로 생성 후 SOUL·config 배포, <code>profile list</code>로 모델 확인.</li>
+      <li><b>객관 게이트 2종 신설 — 이중 게이트 완성</b>: <code>gates/doc_consistency.py</code>(PRD의 R-id·시나리오 S-id 전건이 설계에 추적되는가 + 비범위 누출 경고) · <code>gates/test_run.py</code>(results.json 실패 0 · 시나리오 전건 pass · 실행계획 체크박스 완료). webapp-build의 <code>objective: []</code>를 채웠다. <b>설계 원칙</b>: test_run은 <b>테스트를 실행하지 않는다</b> — 게이트키퍼가 미션 코드를 임의 실행하면 임의 코드 실행 통로가 되므로, 실행은 격리된 Tester가 하고 게이트는 기계 판독 결과만 판정(없거나 깨지면 fail-closed). 픽스처 6종으로 PASS/FAIL/fail-closed 전 경로 확인.</li>
+      <li><b>중간 Sam 게이트 승인 요약 해소</b>: <code>gate_summary()</code>가 upstream 유무로 진입/산출 2분기만 하고 산출 갈래는 <code>report.md</code>를 찾아, academic-paper의 목차 승인(대상=outline.md)이 파일 목록 나열로 떨어졌다. 템플릿이 <b><code>approval_artifact:</code></b>로 승인 대상을 선언하게 하고 <b>3분기</b>(진입/중간/산출)로 확장. 산출 갈래도 아키타입별 파일명(report/draft/paper.md) 탐색으로 일반화.</li>
+      <li><b><code>tools/bib_export.py</code> 이식</b>: sources.yaml→BibTeX. <b>게이트가 아니라 산출 도구</b>이므로 <code>gates/</code>가 아닌 <code>tools/</code>에 뒀다(gate_keeper는 gates/*.py만 exit code로 판정). 제외 항목 스킵·BibTeX 이스케이프·authors 리스트/문자열 수용·인용분 필터 확인.</li>
+      <li><b><code>lint_template.py</code> 분리</b>: 협상은 "조정→검사→재제시" 루프인데 인스턴스화 시점에만 도는 검사로는 못 받친다(docs/12 §4). 독립 CLI(<code>--all</code>)로 분리하되 <b>검사 로직은 번역기에 두고 import</b>(단일 진실). 위반 템플릿으로 5개 검사 전부 발화 확인.</li>
+      <li>테스트 3건이 깨졌다 — 실재 profile명을 '미등록' 표본으로 써서 profile이 생기자 무효화. <b>가공 이름(ghost-*)으로 교체</b>하고 의미를 "출하 템플릿 전부 실행가능"·"선언한 requires_profiles가 실제 등록됨"으로 바로잡음 + 중간 Sam 게이트의 approval_artifact 선언 강제 테스트 추가.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      <b>A·B·D 전부 실행 가능</b>(린터 3/3 통과 · dry-run exit 0). 테스트 <b>27 + 21 = 48종 전부 통과</b>. docs/13 §7 후속 과제 <b>5건 전부 완료</b>. 남은 것: webapp-build <b>라이브 미션 미실행</b>(draft→tested 승격 필요) · test_run의 자기보고 신뢰 구간(CI 등 독립 실행 경로 생기면 교체 검토) · 변환 17종.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#23 — specflow → 아키타입 D 변환 · 첫 신규 profile 3종 발생 + 미등록 profile 가드</h2>
     <div class="meta">2026-08-04 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> specflow도 진행(docs/13 진행 대장 #3, D 웹개발 아키타입).</div>

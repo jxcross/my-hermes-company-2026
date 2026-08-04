@@ -151,9 +151,20 @@ def test_gate_separated_passes():
 
 
 def test_shipped_templates_have_no_gate_overlap():
-    for name in ("trend-report", "academic-paper"):
+    for name in ("trend-report", "academic-paper", "webapp-build"):
         errs = it.check_invariants(it.load_template(name))
         assert not errs, (name, errs)
+
+
+def test_mid_pipeline_sam_gates_declare_approval_artifact():
+    """중간 Sam 게이트(진입·마지막이 아닌)는 승인 대상 파일을 선언해야 한다 — 없으면
+    gate_summary 가 무엇을 승인하는지 실어 보내지 못한다(docs/13 §5)."""
+    for name in ("trend-report", "academic-paper", "webapp-build"):
+        stages = it.load_template(name)["stages"]
+        for i, s in enumerate(stages):
+            mid = 0 < i < len(stages) - 1
+            if s.get("sam_gate") and mid:
+                assert s.get("approval_artifact"), (name, s["id"], s["name"])
 
 
 # ── 미등록 profile 감지 ───────────────────────────────────────────────────
@@ -166,26 +177,28 @@ def test_registered_profiles_reads_profiles_src():
 
 
 def test_missing_profiles_detects_unknown():
-    tpl = {"stages": [{"id": 1, "profile": "scout"}, {"id": 2, "profile": "developer"}]}
-    assert it.missing_profiles(tpl) == ["developer"]
+    # 실재 profile 이름을 표본으로 쓰지 않는다 — profile 은 늘어나므로 테스트가 깨진다.
+    tpl = {"stages": [{"id": 1, "profile": "scout"}, {"id": 2, "profile": "ghost-alpha"}]}
+    assert it.missing_profiles(tpl) == ["ghost-alpha"]
 
 
 def test_missing_profiles_dedups_and_keeps_order():
-    tpl = {"stages": [{"id": 1, "profile": "tester"}, {"id": 2, "profile": "architect"},
-                      {"id": 3, "profile": "tester"}]}
-    assert it.missing_profiles(tpl) == ["tester", "architect"]
+    tpl = {"stages": [{"id": 1, "profile": "ghost-beta"}, {"id": 2, "profile": "ghost-alpha"},
+                      {"id": 3, "profile": "ghost-beta"}]}
+    assert it.missing_profiles(tpl) == ["ghost-beta", "ghost-alpha"]
 
 
-def test_existing_templates_have_no_missing_profiles():
-    """A·B 는 지금 바로 돌 수 있어야 한다."""
-    for name in ("trend-report", "academic-paper"):
+def test_shipped_templates_are_all_runnable():
+    """출하 템플릿 전부가 지금 바로 돌 수 있어야 한다(미등록 profile 0)."""
+    for name in ("trend-report", "academic-paper", "webapp-build"):
         assert it.missing_profiles(it.load_template(name)) == [], name
 
 
-def test_webapp_build_declares_its_required_profiles():
-    """D 는 아직 못 돈다 — 필요한 profile 을 템플릿이 스스로 선언하고 실제와 일치해야 한다."""
+def test_webapp_build_required_profiles_are_registered():
+    """D 가 선언한 requires_profiles 가 실제로 생성돼 있어야 한다(2026-08-04 Sam 승인·생성)."""
     tpl = it.load_template("webapp-build")
-    assert sorted(it.missing_profiles(tpl)) == sorted(tpl["requires_profiles"]), tpl["requires_profiles"]
+    have = it.registered_profiles()
+    assert set(tpl["requires_profiles"]) <= have, sorted(have)
 
 
 def test_webapp_build_invariants_pass():

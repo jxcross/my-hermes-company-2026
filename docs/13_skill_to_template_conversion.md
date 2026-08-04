@@ -1,6 +1,6 @@
 # 13. harness 스킬 → 템플릿 YAML 변환 — 작업 절차서
 
-> 작성일: 2026-08-04 · 상태: **작업 중(3/20 — A·B 실행가능 · D는 profile 3종 승인 대기)** · 성격: working doc(재개 가능)
+> 작성일: 2026-08-04 · 상태: **작업 중(3/20 — A·B·D 전부 실행가능)** · 성격: working doc(재개 가능)
 > 관련: [`12_pipeline_negotiation.md`](./12_pipeline_negotiation.md)(§8 phasing 2b) · [`11_template_driven_missions.md`](./11_template_driven_missions.md)(템플릿 스키마 §3.A·§3.B) · 소스: 형제 repo `other_projects/harness-templates`
 >
 > **⚠️ 이 문서는 여러 세션에 걸쳐 이어서 작업하기 위한 것이다.** 새 세션은 **§6 진행 대장**에서 다음 대상을 고르고 → **§2 레시피**대로 변환하고 → **§6 갱신 + 커밋**하면 된다. 재개 방법은 §8.
@@ -97,6 +97,10 @@ docker exec hermes-solomon sh -c 'cd /work/company && \
 - [ ] **`sources.yaml` 계약** — 모든 주장에 출처
 - [ ] **`profile ∈ 등록된 profile`** — 없는 profile을 쓰면 존재하지 않는 assignee로 카드가 생성된다
 - [ ] **`parallel` 스테이지마다 `batch_size`** — 미선언 시 기본 3
+- [ ] **중간 Sam 게이트에는 `approval_artifact`** — 승인 대상 파일을 선언해야 요약이 실린다(§5)
+- [ ] **객관 게이트 선언** — `gate.objective`가 비어 있으면 이중 게이트가 반쪽(LLM 판정만)이다. 도메인에 맞는 게이트가 없으면 **만든다**(`doc_consistency`·`test_run`이 그렇게 생겼다)
+
+> 위 항목은 `python3 scripts/lint_template.py <name>`이 기계적으로 잡아준다(불변식 위반=exit 1, 미등록 profile=경고).
 
 ## 5. 함정 사례 (실제로 걸린 것만)
 
@@ -132,8 +136,10 @@ specflow는 task별(`/backend-task <N>`)로 구현한다. 이를 `per_item`으�
 ### ⚠️ 도메인이 다르면 policy 블록도 갈아끼운다
 `recency_policy`·`source_balance_policy`는 조사·집필 아키타입(A·B)의 정책이다. 웹개발에는 의미가 없어 `completion_policy`(체크박스 강제·E2E green·시나리오 커버리지)로 대체했다. **정책은 템플릿 소유**이므로 도메인마다 새로 정의하면 된다.
 
-### ⚠️ 중간 Sam 게이트의 승인 요약이 부실하다 (미해결)
-`gate_keeper.gate_summary()`는 `upstream` 유무로 **진입 게이트/산출 게이트**만 구분하고, 산출 게이트는 `report.md`를 찾는다. academic-paper의 중간 승인(stage 8)은 `outline.md`가 대상이라 요약이 산출물 목록 나열로 떨어진다. **후속 개선 대상**(§7).
+### ⚠️ 중간 Sam 게이트의 승인 요약이 부실하다 → **[2026-08-04 해소]**
+`gate_keeper.gate_summary()`는 `upstream` 유무로 **진입/산출** 두 갈래만 나눴고, 산출 갈래는 `report.md`를 찾았다. 그래서 academic-paper의 중간 승인(stage 8, 대상=`outline.md`)은 산출 게이트로 오분류돼 요약이 파일 목록 나열로 떨어졌다.
+
+**해결**: 템플릿이 `approval_artifact:`로 **승인 대상 파일을 선언**하고, `gate_summary`가 **3분기**(진입 / 중간 / 산출)로 갈리도록 고쳤다. 산출 갈래도 아키타입별 파일명(`report.md`·`draft.md`·`paper.md`)을 탐색한다. 새 템플릿에 중간 Sam 게이트를 둘 때는 **반드시 `approval_artifact`를 함께 선언하라** — 없으면 Sam이 무엇을 승인하는지 모른 채 승인하게 된다.
 
 ## 6. 진행 대장 (재개 지점 — 새 세션은 여기서 다음 대상을 고른다)
 
@@ -141,7 +147,7 @@ specflow는 task별(`/backend-task <N>`)로 구현한다. 이를 `per_item`으�
 |---|---|---|---|---|---|---|
 | 1 | trendforge | domain | 8-stage · agents 14 | ✅ **proven** (A) | `trend-report.yaml` | 0 |
 | 2 | paperforge | research | 8-stage · agents 12 | ✅ **draft** (B) | `academic-paper.yaml` | 0 |
-| 3 | specflow | domain | 12-step · agents 12 | ⚠️ **draft (D) — profile 3종 대기** | `webapp-build.yaml` | **3**(architect·developer·tester) |
+| 3 | specflow | domain | 12-step · agents 12 | ✅ **draft (D) · 실행가능** | `webapp-build.yaml` | **3 생성완료**(architect·developer·tester) |
 | 4 | reviewforge | research | 9-stage · agents 12 | ⬜ **다음** | — | 0 예상 |
 | 5 | litmonitor | research | 5-stage · agents 7 | ⬜ | — | 0 예상 |
 | 6 | patentforge | domain | 8-stage · agents 11 | ⬜ | — | ? |
@@ -168,21 +174,29 @@ specflow는 task별(`/backend-task <N>`)로 구현한다. 이를 `per_item`으�
 
 | 후보명 | 근거 agent | 출처 스킬 | 왜 기존으로 안 되나 | 상태 |
 |---|---|---|---|---|
-| **`architect`** | `architect`·`erd-designer`·`diagrammer`·`wireframer`·`style-designer` (5종, tools 동일) | specflow | 설계는 집필(`writer`)도 종합(`synthesizer`)도 아니다 — 구조·스키마·화면을 **결정**한다. 산출이 문서지만 판단 성격이 다르다 | **Sam 승인 대기** |
-| **`developer`** | `backend-dev`·`frontend-dev` (tools 동일) | specflow | **코드를 쓴다**(`Edit`). 기존 8종 중 파일을 수정하는 profile이 없다 | **Sam 승인 대기** |
-| **`tester`** | `e2e-tester` | specflow | **실행 결과로 판정**한다(`Bash`+`playwright`). `reviewer`는 읽고 판단하지 구동하지 않는다. developer의 검증자 역할이라 분리 필수(작성자≠검증자) | **Sam 승인 대기** |
+| **`architect`** | `architect`·`erd-designer`·`diagrammer`·`wireframer`·`style-designer` (5종, tools 동일) | specflow | 설계는 집필(`writer`)도 종합(`synthesizer`)도 아니다 — 구조·스키마·화면을 **결정**한다. 산출이 문서지만 판단 성격이 다르다 | ✅ **생성 완료**(terra) |
+| **`developer`** | `backend-dev`·`frontend-dev` (tools 동일) | specflow | **코드를 쓴다**(`Edit`). 기존 7종 중 파일을 수정하는 profile이 없다 | ✅ **생성 완료**(terra) |
+| **`tester`** | `e2e-tester` | specflow | **실행 결과로 판정**한다(`Bash`+`playwright`). `reviewer`는 읽고 판단하지 구동하지 않는다. developer의 검증자 역할이라 분리 필수(작성자≠검증자) | ✅ **생성 완료**(**sol** — 검증자) |
 
-> **`webapp-build.yaml`은 이 3종이 생성되기 전까지 실행할 수 없다.** `instantiate_template.py`가 미등록을 감지해
-> 미리보기(`--dry-run`)는 경고만 내고 통과시키지만 **실제 인스턴스화는 중단**한다(존재하지 않는 assignee로
-> 카드가 생기면 아무도 집지 못한다). 생성 절차: `profiles-src/<name>/`에 SOUL·config 작성 →
-> `hermes profile create` → `hermes-home/profiles/<name>/`에 배포 → [`docs/05`](./05_stage0_setup_guide.md) 부트스트랩 목록 갱신.
+> **[2026-08-04 Sam 승인·생성 완료]** `profiles-src/{architect,developer,tester}/`(SOUL·config) +
+> `hermes profile create --clone-from {writer,writer,reviewer}` + `hermes-home/profiles/`에 배포.
+> **profile 11종**(default 포함)으로 늘었고 `webapp-build.yaml`이 실행 가능해졌다.
+> 검증자는 `gpt-5.6-sol`(fact-checker·reviewer·**tester**), 작성자 계열은 `gpt-5.6-terra`.
+> 부트스트랩 목록은 [`profiles-src/README.md`](../profiles-src/README.md) 갱신됨.
 
-**후속 과제**
-- **신규 profile 3종 SOUL 작성** — 원본 agent md(`description`+`Inputs`+`Procedure`)가 초안 재료다
-- **객관 게이트 2종 신설** — `doc_consistency`(설계 문서 상호 정합·시나리오 커버리지)·`test_run`(테스트 실행 결과). 현재 webapp-build의 검증 2지점은 `objective: []`로 **LLM 판정만** 걸려 있어 이중 게이트가 반쪽이다
-- `bib_export.py` 이식 — BibTeX 산출(게이트 아님). academic-paper Deliver 단계에 붙일지 판단
-- `gate_keeper.gate_summary()` — 중간 Sam 게이트(진입도 산출도 아닌 경우) 요약 개선(§5)
-- `lint_template.py` 분리 — 현재 불변식은 `instantiate_template.check_invariants`에 인라인([`docs/12 §7`](./12_pipeline_negotiation.md))
+**후속 과제 — [2026-08-04 전부 완료]**
+
+| 과제 | 결과 |
+|---|---|
+| 신규 profile 3종 SOUL 작성 | ✅ 위 표. 원본 agent md를 재료로 삼되 **우리 역할 경계**(작성자≠검증자·범위 이탈 금지·게이트 신호)를 명시 |
+| 객관 게이트 2종 신설 | ✅ `scripts/gates/doc_consistency.py`(R-id·S-id 추적 커버리지 + 비범위 누출 경고) · `scripts/gates/test_run.py`(results.json·시나리오 전건 pass·체크박스 완료). webapp-build의 `objective: []` → 채움. **이중 게이트 완성** |
+| `bib_export.py` 이식 | ✅ `scripts/tools/bib_export.py` — **게이트가 아니라 산출 도구**라 `gates/`가 아닌 `tools/`에 뒀다(gate_keeper는 `gates/*.py`만 exit code로 판정). academic-paper Deliver body에서 호출 |
+| `gate_summary()` 중간 게이트 | ✅ 템플릿이 `approval_artifact:`로 승인 대상을 선언하고 gate_summary가 3분기(진입/중간/산출)로 갈린다. 산출 게이트도 아키타입별 파일명(report/draft/paper.md) 탐색으로 일반화 |
+| `lint_template.py` 분리 | ✅ 독립 CLI(`--all` 지원). 검사 로직은 `instantiate_template`에 두고 import — **단일 진실** 유지 |
+
+**새 후속 과제** (다음 세션 이후)
+- `test_run.py`는 테스트를 **실행하지 않는다** — Tester가 남긴 `results.json`을 검사할 뿐이다. 게이트키퍼가 미션 코드를 임의 실행하면 임의 코드 실행 통로가 되기 때문. 자기보고 신뢰 구간이 남아 있으므로, CI 연동 등 **독립 실행 경로**가 생기면 교체 검토
+- `webapp-build`는 아직 **라이브 미션 미실행**(`maturity: draft`) — 실미션 1회로 `tested` 승격 필요
 
 ## 8. 다음 세션 재개 방법
 
@@ -190,8 +204,12 @@ specflow는 task별(`/backend-task <N>`)로 구현한다. 이를 `per_item`으�
 2. **변환한다**: `templates/<name>.yaml` 작성. `templates/academic-paper.yaml`을 참고본으로 삼는다(주석에 변환 판단 근거가 남아 있다)
 3. **검증한다**:
    ```bash
+   # ① 불변식 린터(가장 빠른 피드백 — 협상 중에도 반복 호출)
+   docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/lint_template.py <name>'
+   # ② DAG 미리보기(비파괴)
    docker exec hermes-solomon sh -c 'cd /work/company && \
      python3 scripts/instantiate_template.py <name> M-2026-TEST --dry-run --render mermaid'
+   # ③ 회귀
    docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/test_instantiate_template.py'
    ```
    불변식 위반 0 · 테스트 통과 · `reports/M-2026-TEST/` 미생성 · 미등록 profile 경고가 뜨면

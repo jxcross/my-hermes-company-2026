@@ -1,0 +1,8 @@
+# named 프로필은 루트 config 미상속 → provider/model 명시. OAuth는 계정 공유(hermes auth).
+model:
+  default: gpt-5.6-sol
+  provider: openai-codex
+  base_url: https://chatgpt.com/backend-api/codex
+agent:
+  max_turns: 150
+  reasoning_effort: medium

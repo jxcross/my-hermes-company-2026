@@ -148,6 +148,8 @@ def resolve(tpl: dict, mid: str) -> dict:
             g2 = dict(g)
             g2["draft"] = sub(g.get("draft"))
             s2["gate"] = g2
+        if s.get("approval_artifact"):
+            s2["approval_artifact"] = sub(s["approval_artifact"])
         stages.append(s2)
     return {**tpl, "stages": stages}
 
@@ -368,6 +370,9 @@ def build_pipeline_json(tpl: dict, mid: str, topic: str, ids: dict[int, str]) ->
         }
         if s.get("gate"):
             entry["gate"] = s["gate"]
+        if s.get("approval_artifact"):
+            # 중간 Sam 게이트가 '무엇을 보고 승인할지' — gate_keeper.gate_summary 가 읽는다.
+            entry["approval_artifact"] = s["approval_artifact"]
         ps = parallel_spec(s)
         if ps:
             entry["parallel"] = {

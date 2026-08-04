@@ -544,33 +544,65 @@ def _compact_policy(pol: dict) -> str:
     return ", ".join(parts)
 
 
+def _compact_completion(pol: dict) -> str:
+    cp = pol.get("completion_policy") or {}
+    on = [k.replace("require_", "") for k, v in cp.items() if v]
+    return ("완료조건(" + "·".join(on) + ")") if on else ""
+
+
+def approval_artifact_of(g: dict, pl: dict) -> str | None:
+    """중간 Sam 게이트가 '무엇을 보고 승인할지'. 템플릿이 stage.approval_artifact 로 선언한다."""
+    st = next((s for s in pl.get("stages", []) if s.get("task_id") == g.get("task_id")), None)
+    return (st or {}).get("approval_artifact")
+
+
 def gate_summary(g: dict, pl: dict) -> str:
-    """승인요청에 담을 게이트 핵심 내용. 진입 게이트=계획·정책, 산출 게이트=보고서 요약·검증."""
+    """승인요청에 담을 게이트 핵심 내용. 세 경우로 갈린다:
+    진입(upstream 없음)=계획·정책 · 중간(approval_artifact 선언)=그 산출물 발췌 · 산출=보고서 요약."""
     mission = g["mission"]
     root = os.path.join(COMPANY_ROOT, "reports", mission)
     L = []
     topic = pl.get("topic")
     if topic:
         L.append(f"• 주제: {topic}")
-    if not g["upstream"]:
+    artifact = approval_artifact_of(g, pl)
+    if artifact and g["upstream"]:
+        # 중간 게이트(예: 목차 승인·실행계획 승인) — 진입도 산출도 아니다.
+        # 기존 코드는 이 경우 report.md 를 찾다 실패해 산출물 목록만 나열했다.
+        body = _read_head(os.path.join(COMPANY_ROOT, artifact), 1200)
+        L.append(f"• 승인 대상: {artifact}")
+        if body:
+            L.append("• 내용 발췌:\n" + body)
+        else:
+            L.append("⚠ 승인 대상 파일을 읽지 못했다 — 산출 여부를 확인하라.")
+        L.append("• 승인 시: 이 산출물을 확정하고 다음 단계(구현·집필)로 진행한다. "
+                 "되돌리려면 이후 작업을 폐기해야 하므로 지금 검토하라.")
+    elif not g["upstream"]:
         # 진입 게이트(예: Scoping) — 무엇을 실행할지(계획·정책)
         stages = pl.get("stages", [])
         if stages:
             L.append("• 파이프라인: " + " → ".join(f"{s['id']}·{s['name']}" for s in stages))
-        pol = _compact_policy(pl.get("policy") or {})
+        pol = ", ".join(x for x in (_compact_policy(pl.get("policy") or {}),
+                                    _compact_completion(pl.get("policy") or {})) if x)
         if pol:
             L.append("• 정책: " + pol)
         scope = _read_head(os.path.join(root, "SCOPE.md"), 700)
         if scope:
             L.append("• SCOPE 발췌:\n" + scope)
     else:
-        # 산출 게이트(예: Deliver) — 무엇을 공개할지(보고서 요약·검증)
-        md = _read_head(os.path.join(root, "report.md"), 20000)
+        # 산출 게이트(예: Deliver) — 무엇을 공개할지. 아키타입마다 최종 산출 파일명이 다르다
+        # (A=report.md · B=draft.md · D=spec/·test/). 있는 것을 찾아 요약한다.
+        md, name = "", ""
+        for cand in ("report.md", "draft.md", "paper.md", "README.md"):
+            md = _read_head(os.path.join(root, cand), 20000)
+            if md:
+                name = cand
+                break
         summ = _extract_section(md, "요약", 900) if md else ""
         if summ:
-            L.append("• 보고서 요약:\n" + summ)
+            L.append(f"• 산출 요약({name}):\n" + summ)
         elif md:
-            L.append("• 보고서 발췌:\n" + md[:700] + "…")
+            L.append(f"• 산출 발췌({name}):\n" + md[:700] + "…")
         L.append("• 공개 대상: git 커밋(reports/) + Slack 게시 — 승인 시 실행.")
     try:
         arts = [f for f in sorted(os.listdir(root)) if os.path.isfile(os.path.join(root, f))]

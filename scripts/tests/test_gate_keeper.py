@@ -134,6 +134,64 @@ def test_gate_summary_entry_vs_output(tmp_path=None):
         gk.COMPANY_ROOT = orig
 
 
+def test_gate_summary_middle_gate_reads_approval_artifact():
+    """중간 Sam 게이트(진입도 산출도 아님) — 기존엔 report.md 를 찾다 실패해 산출물 목록만
+    나열했다. 템플릿이 stage.approval_artifact 로 승인 대상을 선언하면 그것을 실어 보낸다."""
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    orig = gk.COMPANY_ROOT
+    gk.COMPANY_ROOT = d
+    try:
+        mroot = _os.path.join(d, "reports", "M-TEST")
+        _os.makedirs(mroot)
+        with open(_os.path.join(mroot, "outline.md"), "w", encoding="utf-8") as f:
+            f.write("# 목차\n- 1장 서론\n- 2장 관련연구\n")
+        pl = {"mission": "M-TEST", "topic": "논문 주제",
+              "stages": [{"id": 7, "name": "Synthesis", "task_id": "t_7"},
+                         {"id": 8, "name": "Draft Sections", "task_id": "t_8",
+                          "approval_artifact": "reports/M-TEST/outline.md"}],
+              "policy": {}}
+        g = {"mission": "M-TEST", "name": "Draft Sections", "task_id": "t_8", "upstream": ["t_7"]}
+        s = gk.gate_summary(g, pl)
+        assert "승인 대상" in s and "outline.md" in s, s
+        assert "2장 관련연구" in s, s          # 내용이 실제로 실렸는가
+        assert "공개 대상" not in s, s          # 산출(Deliver) 게이트로 오분류되지 않았는가
+    finally:
+        gk.COMPANY_ROOT = orig
+
+
+def test_gate_summary_output_gate_finds_draft_md():
+    """아키타입마다 최종 산출 파일명이 다르다(A=report.md · B=draft.md)."""
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    orig = gk.COMPANY_ROOT
+    gk.COMPANY_ROOT = d
+    try:
+        mroot = _os.path.join(d, "reports", "M-TEST")
+        _os.makedirs(mroot)
+        with open(_os.path.join(mroot, "draft.md"), "w", encoding="utf-8") as f:
+            f.write("# 원고\n## 요약\n- 핵심 주장 X\n")
+        pl = {"mission": "M-TEST", "stages": [{"id": 11, "name": "Deliver", "task_id": "t_11"}]}
+        s = gk.gate_summary({"mission": "M-TEST", "name": "Deliver",
+                             "task_id": "t_11", "upstream": ["t_10"]}, pl)
+        assert "핵심 주장 X" in s and "draft.md" in s, s
+    finally:
+        gk.COMPANY_ROOT = orig
+
+
+def test_compact_completion_policy():
+    s = gk._compact_completion({"completion_policy": {"require_e2e_green": True,
+                                                      "require_task_checkboxes": True,
+                                                      "require_scenario_coverage": False}})
+    assert "e2e_green" in s and "task_checkboxes" in s and "scenario_coverage" not in s, s
+
+
+def test_approval_artifact_of_missing_returns_none():
+    pl = {"stages": [{"id": 1, "task_id": "t_1"}]}
+    assert gk.approval_artifact_of({"task_id": "t_1"}, pl) is None
+    assert gk.approval_artifact_of({"task_id": "t_x"}, pl) is None
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0
