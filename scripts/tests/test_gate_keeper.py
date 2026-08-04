@@ -97,6 +97,43 @@ def test_resolve_target_none_pending():
     assert target is None and "없음" in why
 
 
+# ── 승인요청 내용(gate_summary) ────────────────────────────────────────────
+def test_extract_section():
+    md = "# 제목\n서문\n## 1. 요약\n- 핵심 A\n- 핵심 B\n## 2. 다음\n무시"
+    s = gk._extract_section(md, "요약", 500)
+    assert "핵심 A" in s and "핵심 B" in s and "무시" not in s
+
+
+def test_compact_policy():
+    pol = {"recency_policy": {"recent_ratio": 0.6},
+           "source_balance_policy": {"min_per_category": {"academic": 2, "vendor": 2, "news": 0}}}
+    s = gk._compact_policy(pol)
+    assert "recent≥0.6" in s and "academic≥2" in s and "news" not in s  # 0 은 생략
+
+
+def test_gate_summary_entry_vs_output(tmp_path=None):
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    orig = gk.COMPANY_ROOT
+    gk.COMPANY_ROOT = d
+    try:
+        mroot = _os.path.join(d, "reports", "M-TEST")
+        _os.makedirs(mroot)
+        with open(_os.path.join(mroot, "report.md"), "w", encoding="utf-8") as f:
+            f.write("# R\n## 1. 요약\n- 온디바이스 추론은 조건부 trade-off\n## 2. 끝\n")
+        pl = {"mission": "M-TEST", "topic": "테스트 주제",
+              "stages": [{"id": 1, "name": "Scoping"}, {"id": 11, "name": "Deliver"}],
+              "policy": {"recency_policy": {"recent_ratio": 0.6}}}
+        # 진입 게이트(upstream 없음): 계획·정책
+        entry = gk.gate_summary({"mission": "M-TEST", "name": "Scoping", "upstream": []}, pl)
+        assert "파이프라인" in entry and "테스트 주제" in entry and "recent≥0.6" in entry
+        # 산출 게이트(upstream 있음): 보고서 요약 + 공개 대상
+        out = gk.gate_summary({"mission": "M-TEST", "name": "Deliver", "upstream": ["t_10"]}, pl)
+        assert "trade-off" in out and "공개 대상" in out
+    finally:
+        gk.COMPANY_ROOT = orig
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

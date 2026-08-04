@@ -507,6 +507,80 @@ def load_all_pipelines() -> list[dict]:
     return out
 
 
+def _read_head(path: str, n: int) -> str:
+    """파일 앞부분 n자(없으면 '')."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            t = f.read(n + 1)
+        return (t[:n] + "…") if len(t) > n else t
+    except OSError:
+        return ""
+
+
+def _extract_section(md: str, needle: str, n: int) -> str:
+    """마크다운에서 heading 에 needle 포함된 섹션 본문(다음 heading 전까지) 발췌."""
+    out, cap = [], False
+    for ln in md.splitlines():
+        if ln.lstrip().startswith("#"):
+            if cap:
+                break
+            cap = needle in ln
+            continue
+        if cap:
+            out.append(ln)
+    text = "\n".join(out).strip()
+    return (text[:n] + "…") if len(text) > n else text
+
+
+def _compact_policy(pol: dict) -> str:
+    parts = []
+    rp = pol.get("recency_policy") or {}
+    if rp.get("recent_ratio") is not None:
+        parts.append(f"recency(recent≥{rp.get('recent_ratio')})")
+    mp = (pol.get("source_balance_policy") or {}).get("min_per_category") or {}
+    hit = "·".join(f"{k}≥{v}" for k, v in mp.items() if v)
+    if hit:
+        parts.append("source_balance(min " + hit + ")")
+    return ", ".join(parts)
+
+
+def gate_summary(g: dict, pl: dict) -> str:
+    """승인요청에 담을 게이트 핵심 내용. 진입 게이트=계획·정책, 산출 게이트=보고서 요약·검증."""
+    mission = g["mission"]
+    root = os.path.join(COMPANY_ROOT, "reports", mission)
+    L = []
+    topic = pl.get("topic")
+    if topic:
+        L.append(f"• 주제: {topic}")
+    if not g["upstream"]:
+        # 진입 게이트(예: Scoping) — 무엇을 실행할지(계획·정책)
+        stages = pl.get("stages", [])
+        if stages:
+            L.append("• 파이프라인: " + " → ".join(f"{s['id']}·{s['name']}" for s in stages))
+        pol = _compact_policy(pl.get("policy") or {})
+        if pol:
+            L.append("• 정책: " + pol)
+        scope = _read_head(os.path.join(root, "SCOPE.md"), 700)
+        if scope:
+            L.append("• SCOPE 발췌:\n" + scope)
+    else:
+        # 산출 게이트(예: Deliver) — 무엇을 공개할지(보고서 요약·검증)
+        md = _read_head(os.path.join(root, "report.md"), 20000)
+        summ = _extract_section(md, "요약", 900) if md else ""
+        if summ:
+            L.append("• 보고서 요약:\n" + summ)
+        elif md:
+            L.append("• 보고서 발췌:\n" + md[:700] + "…")
+        L.append("• 공개 대상: git 커밋(reports/) + Slack 게시 — 승인 시 실행.")
+    try:
+        arts = [f for f in sorted(os.listdir(root)) if os.path.isfile(os.path.join(root, f))]
+        if arts:
+            L.append("• 산출물: " + ", ".join(arts[:12]))
+    except OSError:
+        pass
+    return "\n".join(L) or "(요약 없음 — reports/ 산출물 직접 확인 요망)"
+
+
 def resolve_approval_target(explicit_id: str | None, gates: list[dict]) -> tuple[str | None, str]:
     """승인 메시지 → unblock 대상 task. (target|None, 사유).
     - 명시 id: 그 id 가 현재 대기 Sam-게이트면 채택.
@@ -541,13 +615,16 @@ def approval_poll(state: dict, dry: bool) -> None:
     pipelines = load_all_pipelines()
     gates = [g for g in pending_sam_gates(pipelines) if all_upstream_done(g["upstream"])]
 
-    # ── #4: 활성(상위 done) 대기 Sam-게이트를 #approvals 에 1회 게시 ──
+    # ── #4: 활성(상위 done) 대기 Sam-게이트를 #approvals 에 1회 게시(내용 포함) ──
     posted = state["approval_posted"]
+    pl_by_mission = {pl.get("mission"): pl for pl in pipelines}
     for g in gates:
         if g["task_id"] in posted:
             continue
-        text = (f":large_yellow_circle: [승인 요청] {g['mission']} · {g['name']} (`{g['task_id']}`)\n"
-                f"승인하려면 이 채널에 `승인` (또는 `승인 {g['task_id']}`). 권한: Sam.")
+        summary = gate_summary(g, pl_by_mission.get(g["mission"]) or {})
+        text = (f":large_yellow_circle: *[승인 요청]* {g['mission']} · {g['name']}  (`{g['task_id']}`)\n"
+                f"{summary}\n"
+                f"— 승인: `승인` (또는 `승인 {g['task_id']}`) · 반려/보완은 여기서 논의(게이트 대기 유지). 권한: Sam.")
         if dry:
             log(f"[dry] 승인요청 게시: {g['task_id']} {g['mission']}·{g['name']}")
             posted.add(g["task_id"])
