@@ -41,7 +41,7 @@
       <li><b>파일럿이 발견한 gate_keeper 결함 → 근본 수정</b>: stage10 정지. 체계적 디버깅으로 <b>fail-open</b> 규명 — <code>poll_once</code>가 자식 상태 transient 조회실패(None)를 종단(done/archived)으로 오인→검증자 영구 processed→blocked downstream 고아화(fail-closed 원칙 위반). <code>classify_children</code> 추출로 None(unknown)을 종단과 분리, unknown시 defer(재시도). 단위테스트 4/4 + 라이브 재기동으로 stage10 정상 unblock 확인.</li>
     </ol>
     <div class="result"><span class="label">결과:</span>
-      <b>병렬화(3·5·8) 라이브 완전 검증</b> — 번역기 주입 프로토콜이 실제 병렬 subagent 실행을 유발, 보고서 품질은 순차본과 동등(확인25·상충0·미검증13 공개). 파일럿 <b>10/11</b>(Deliver=Sam 게이트 대기). 실미션이 아니었으면 못 봤을 <b>gate_keeper fail-open 결함 발견·수정</b>(커밋 3d25a54). 잔여 미소: 리비전 링크 간헐 -7 WARN(루프 정상). 커밋 fc9a6c0(병렬화)·3d25a54(게이트수정).
+      <b>병렬화(3·5·8) 라이브 완전 검증</b> — 번역기 주입 프로토콜이 실제 병렬 subagent 실행을 유발, 보고서 품질은 순차본과 동등(확인25·상충0·미검증13 공개). 파일럿 <b>11/11 완주</b>(Sam 승인→보고서 커밋 b585526 + Slack #mission-log; 컨테이너 자격 부재분은 호스트 폴백). 실미션이 아니었으면 못 봤을 <b>gate_keeper fail-open 결함 발견·수정</b>(커밋 3d25a54). 잔여: 컨테이너 GITHUB_TOKEN·Slack 자격(Phase 2 #2/#3), 리비전 링크 간헐 -7 WARN(루프 정상). 커밋 fc9a6c0·3d25a54·b585526.
     </div>
   </div>
 
