@@ -35,6 +35,9 @@ patent_format = _load("patent_format")
 evidence_grade = _load("evidence_grade")
 stakeholder_coverage = _load("stakeholder_coverage")
 format_consistency = _load("format_consistency")
+clause_completeness = _load("clause_completeness")
+law_citation = _load("law_citation")
+legal_safety = _load("legal_safety")
 
 
 # ── prisma_counts ────────────────────────────────────────────────────────
@@ -403,6 +406,107 @@ def test_recommended_option_parsed():
     with open(p, "w", encoding="utf-8") as f:
         f.write("# 옵션\n\nrecommended_option: O2\n")
     assert format_consistency.recommended_option(p) == "O2"
+
+
+# ── clause_completeness (아키타입 H · 원본 HARD GATE) ──────────────────────
+def test_clause_pattern_survives_fstring_quantifier():
+    """이식 중 발견한 **치명 결함**의 회귀 방어 — 원본은 raw f-string 안에 `{1,3}` 을 써서
+    수량자가 보간으로 평가됐다(정규식이 `^#(1, 3)\\s+…` 가 됨). 어떤 제목에도 맞지 않아
+    하드게이트가 **항상 FAIL** 했다(완벽한 계약서도 finalize 불가)."""
+    pats = clause_completeness.clause_patterns("해지")
+    assert not any("(1, 3)" in p.pattern for p in pats), [p.pattern for p in pats]
+    assert any(p.search("## 제9조 (해지)\n내용\n") for p in pats)
+    assert any(p.search("### 해지\n내용\n") for p in pats)
+
+
+def test_clause_requires_heading_not_passing_mention():
+    """본문에 단어가 스쳐 나오는 것은 조항이 아니다 — 그러면 게이트가 아무것도 막지 않는다."""
+    body = "갑과 을은 비밀유지 의무를 진다.\n"
+    assert clause_present_none(body, "비밀유지")
+
+
+def clause_present_none(body, label):
+    return clause_completeness.clause_present(label, {}, body) is None
+
+
+def test_clause_alias_is_accepted():
+    """'대가'를 '용역대금'으로 쓰는 것은 실무 표준이다 — 이름이 다르다고 누락이 아니다."""
+    aliases = {"대가": ["용역대금", "보수"]}
+    got = clause_completeness.clause_present("대가", aliases, "## 제5조 (용역대금)\n금액\n")
+    assert got == "용역대금"
+
+
+def test_clause_bold_line_counts_as_heading():
+    assert clause_completeness.clause_present("해지", {}, "**제9조 (해지)**\n내용\n") == "해지"
+
+
+def test_scope_field_reads_doc_types():
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    with open(_os.path.join(d, "SCOPE.md"), "w", encoding="utf-8") as f:
+        f.write("---\ndoc_types: [contract, terms]\ndomain: it_sw\n---\n")
+    assert clause_completeness.scope_field(d, "doc_types") == ["contract", "terms"]
+    assert clause_completeness.scope_field(d, "domain") == "it_sw"
+
+
+# ── law_citation (아키타입 H) ──────────────────────────────────────────────
+WL = set(law_citation.DEFAULT_WHITELIST)
+
+
+def test_law_name_does_not_swallow_preceding_sentence():
+    """원본 회귀 방어 — 탐욕적 문자 클래스(`[가-힣…\\s]+`)가 앞 문장을 삼켜 법령명이
+    '본 계약은 민법' 으로 잡혔다. 화이트리스트가 항상 빗나가 정상 문서도 FAIL 했다."""
+    t = "본 계약은 민법 제105조에 따른다"
+    assert law_citation.law_name_before(t, t.index("제105조"), WL) == "민법"
+
+
+def test_law_name_prefers_bracketed_form():
+    t = "「개인정보 보호법」 제29조"
+    assert law_citation.law_name_before(t, t.index("제29조"), WL) == "개인정보 보호법"
+
+
+def test_law_name_longest_whitelist_suffix():
+    """긴 공식 명칭을 통째로 잡아야 한다 — 마지막 어절만 취하면 '법률' 이 된다."""
+    t = "사용자는 정보통신망 이용촉진 및 정보보호 등에 관한 법률 제48조를 준수한다"
+    assert (law_citation.law_name_before(t, t.index("제48조"), WL)
+            == "정보통신망 이용촉진 및 정보보호 등에 관한 법률")
+
+
+def test_internal_article_reference_is_not_a_law_citation():
+    """계약서의 '제5조에 따라' 는 자기 조항 참조다 — 법령 인용으로 세면 오탐이 쏟아진다."""
+    t = "본 계약 제5조에 따라 해지할 수 있다"
+    assert law_citation.law_name_before(t, t.index("제5조"), WL) is None
+
+
+def test_article_regex_captures_missing_je():
+    """'민법 105조'(제 누락)를 형식 오류로 잡으려면 `제` 유무를 따로 봐야 한다."""
+    m = law_citation.ARTICLE_RE.search("민법 105조")
+    assert m and m.group("je") is None and m.group("num") == "105"
+
+
+# ── legal_safety (아키타입 H · 신설) ────────────────────────────────────────
+def test_placeholder_is_not_treated_as_pii():
+    """초안은 플레이스홀더로 쓴다 — `000-00-00000` 을 개인정보로 막으면 쓸 수가 없다."""
+    assert legal_safety.is_placeholder("000-00-00000")
+    assert legal_safety.is_placeholder("111111-1111111")
+    assert not legal_safety.is_placeholder("214-86-53075")
+
+
+def test_resident_registration_number_is_blocked():
+    """저장소가 PUBLIC 이고 Deliver 가 push 한다 — 주민등록번호는 되돌릴 수 없는 사고다."""
+    hits = legal_safety.scan_pii("대표자 850101-1234567", ["주민등록번호"], True)
+    assert [k for k, _ in hits] == ["주민등록번호"]
+
+
+def test_business_number_blocked_but_placeholder_passes():
+    kinds = ["사업자등록번호"]
+    assert legal_safety.scan_pii("사업자등록번호: 214-86-53075", kinds, True)
+    assert not legal_safety.scan_pii("사업자등록번호: 000-00-00000", kinds, True)
+
+
+def test_disclaimer_terms_include_lawyer_review():
+    """고지는 우리가 게이트로 승격한 항목 — 기본값이 비면 무의미해진다."""
+    assert any("변호사" in t for t in legal_safety.DEFAULT_DISCLAIMER_TERMS)
 
 
 if __name__ == "__main__":

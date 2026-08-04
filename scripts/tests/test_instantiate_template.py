@@ -190,8 +190,8 @@ def test_missing_profiles_dedups_and_keeps_order():
 
 def test_shipped_templates_are_all_runnable():
     """출하 템플릿 전부가 지금 바로 돌 수 있어야 한다(미등록 profile 0)."""
-    for name in ("trend-report", "academic-paper", "webapp-build",
-                 "systematic-review", "lit-monitor", "patent-spec", "policy-brief"):
+    for name in ("trend-report", "academic-paper", "webapp-build", "systematic-review",
+                 "lit-monitor", "patent-spec", "policy-brief", "legal-draft"):
         assert it.missing_profiles(it.load_template(name)) == [], name
 
 

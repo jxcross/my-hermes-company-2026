@@ -25,6 +25,25 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#30 — legalforge → 아키타입 H(법률 문서 초안) · 원본 게이트 2종이 <b>항상 FAIL</b>이었다 + 개인정보 게이트 신설</h2>
+    <div class="meta">2026-08-04 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "다음 진행"(docs/13 진행 대장 #8, legalforge).</div>
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li><b>⚠️ 이식 결함 ① 하드게이트가 통째로 고장</b>(<code>clause_completeness.py</code>): <code>rf"^#{1,3}\s+…"</code>가 <b>raw f-string</b>이라 <code>{1,3}</code>이 정규식 수량자가 아니라 <b>보간</b>으로 평가돼 튜플 <code>(1, 3)</code>이 되고, 패턴이 <code>^#(1, 3)\s+…</code>가 된다. <b>어떤 제목에도 맞지 않는다.</b> 실측: <code>## 제1조 (당사자)</code>가 명백히 있는 계약서에 <b>found=0/14</b>. 유일한 하드게이트가 항상 FAIL이라 finalize가 영원히 차단된다.</li>
+      <li><b>⚠️ 이식 결함 ② 정상 문서도 항상 FAIL</b>(<code>law_citation_check.py</code>): 법령명 문자 클래스에 <code>\s</code>가 있고 탐욕적이라 앞 문장을 삼킨다 — 실측 "본 계약은 민법 제105조"에서 법령명이 <b><code>본 계약은 민법</code></b>. 화이트리스트는 당연히 빗나가고, docstring은 "warns for unknowns; <b>doesn't fail</b>"이라 했는데 코드는 <code>return 0 if overall=="PASS" else 1</code>이라 <b>WARN도 exit 1</b>. → 법령명을 <b>조문 토큰 앞쪽에서 뒤로</b> 추출(화이트리스트 최장 접미사 매칭) + WARN을 실제 WARN으로.</li>
+      <li><b>새 함정 유형 기록</b>: 지금까지는 "느슨해서 통과시키는" 게이트가 문제였는데, 이번엔 <b>반대 방향</b>이었다. → §2④·§5에 <b>"정상 픽스처로 PASS부터 확인하라"</b>를 검증 절차로 추가(깨뜨린 픽스처로 FAIL 확인의 짝).</li>
+      <li><b>🔒 게이트 1종 신설 — <code>legal_safety.py</code></b>(고지 강제 + <b>개인정보 평문 차단</b>): 원본은 <code>_personal/</code>을 gitignore하라고 <b>지시만</b> 한다(로컬 도구니까 충분). 우리는 다르다 — <b>Deliver가 <code>reports/</code>를 커밋·push하고 이 저장소는 PUBLIC이다.</b> 계약서 초안에 당사자 주민등록번호가 남으면 그 순간 공개되고 되돌릴 수 없다. 초안은 플레이스홀더(<code>[갑의 사업자등록번호]</code>·<code>000-00-00000</code>)로 쓰고 실제 값은 저장소 밖에서 채우게 강제. <code>.gitignore</code>에 <code>_personal/</code>·<code>reports/**/_personal/</code> 추가.</li>
+      <li><b>조항 taxonomy를 정책으로 이관</b>: 원본 <code>standard_clause_lib.py</code> 하드코딩 → 템플릿 <code>clause_policy</code>(필수 조항·도메인 추가 조항·<b>조항 명칭 별칭</b>). '대가'를 '용역대금'으로 쓰는 실무 관행을 인정하지 않으면 정상 계약서가 반려된다.</li>
+      <li><b>구조 판단</b>: 법령 인용 검증(5)을 <b>구조 설계·집필 전</b>에 배치 — 틀린 법령이 문서 종류 수만큼 복제되면 재작업이 배가된다. Sam 중간 승인은 "조항 구성 확정 → 집필 개시"(<code>structure.md</code>). 문서 4종 writer·3 비평가는 같은 계약이라 워커/두 검증지점으로 흡수 → <b>신규 profile 0개.</b></li>
+      <li><b>깨뜨린 픽스처 16케이스로 E2E 검증</b>: 정상 3 PASS + 고의 결함 10건 <code>exit=1</code> + <b>원본 결함 회귀 방어 3건</b>(별칭 조항명 · 문장 중간 법령 인용 · 플레이스홀더는 개인정보 아님). 단위 테스트 14종 추가.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      <b>아키타입 H 확보 — 8/20</b>. 린터 8/8. 테스트 <b>29+21+63 = 113종 통과</b>. 객관 게이트 <b>16종</b>. <b>변환 8건 연속 결함 발견</b>. 새 교훈 2건을 docs/13 §5에 기록: <b>이식 대상이 애초에 고장나 있을 수 있다</b>(검증은 양방향) · <b>우리 운영 환경이 원본에 없던 게이트를 요구한다</b>(PUBLIC 저장소 + push = 로컬 도구와 위험의 종류가 다르다). 다음 변환 = docforge.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#29 — policyforge → 아키타입 G(정책 브리프) · 이식 결함 5건 + 게이트 1종은 policy로 흡수</h2>
     <div class="meta">2026-08-04 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "docs/13 §6 진행 대장 확인하고 policyforge 변환 진행하라."</div>
