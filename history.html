@@ -25,6 +25,26 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#35 — 2026-08-05 세션 핸드오프 (변환 12/20 · E2E 하네스 저장소 편입)</h2>
+    <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "다음 작업부터는 새로운 세션에서 이어서 하겠다. 관련 파일들 업데이트하라. 첫 질문도 알려달라."</div>
+    <div class="label">세션 성과 요약:</div>
+    <ol class="steps">
+      <li><b>아키타입 6종 추가 변환</b>(#29~#34): G 정책 브리프 · H 법률 문서 · I 코드 문서화 · J 강의 자료 · K 코드 마이그레이션 · L 보안 감사. <b>6/20 → 12/20</b>. 신규 profile <b>0개</b>(대장의 "예상 있음"이 docforge·secforge에서 연속으로 빗나갔다 — 코드를 <b>읽는</b> 것도, 패턴을 스캔하는 것도 <code>reader</code>다).</li>
+      <li><b>객관 게이트 10종 → 30종</b>. 이 중 <b>4종은 원본에 없던 신설</b>: <code>symbol_truth</code>(AST 대조) · <code>legal_safety</code>(개인정보) · <code>secret_redaction</code>(비밀값) · <code>finding_completeness</code>(판정 방향 반전).</li>
+      <li><b>변환 12건에서 12건 모두 결함 발견.</b> 이번 6건에서 새로 드러난 유형: <b>docstring은 검사한다는데 코드는 안 함</b>(권고↔등급 미검사) · <b>죽은 코드</b>(분기 본문이 <code>pass</code>) · <b>죽은 변수</b>(계획을 읽고 한 번도 참조 안 함) · <b>fail-open</b>(빈 입력에 PASS — 보안 게이트 3종 전부) · <b>항상 FAIL</b>(f-string 안의 정규식 수량자가 보간됨) · <b>분모 자기결정</b>(측정 대상이 자기 성적표의 분모를 정함) · <b>게이트가 발견을 벌함</b>(감사 도구의 "취약점 0건" 하드게이트).</li>
+      <li><b>🔒 공개 범위 규약 도입</b>: 저장소가 PUBLIC이고 Deliver가 <code>reports/</code>를 push한다는 사실이 두 아키타입의 설계를 바꿨다 — H는 초안을 플레이스홀더로 쓰고 실제 개인정보는 <code>_personal/</code>(gitignore), L은 취약점 상세를 <code>_private/</code>에 두고 공유용 요약만 커밋한다. <code>.gitignore</code> 갱신.</li>
+      <li><b>⚠️ git 병렬 커밋 제거</b>(K): 원본의 병렬 배치 실행을 그대로 옮기면 <code>.git/index.lock</code> 경합이 난다. 파일이 겹치지 않아도 <b>git 인덱스는 공유 자원</b>이다.</li>
+      <li><b>검증 위치를 앞으로 당기는 판단이 5회 반복</b>되어 §5에 기본값으로 승격 — 원본의 검증 지점을 그대로 옮기지 말고 <b>재작업 비용이 갈라지는 지점 앞</b>에 놓는다(F 관할 변환 전 · G 옵션 설계 전 · H 집필 전 · I 집필 전 · J 16주치 집필 전).</li>
+      <li><b>★ E2E 하네스를 저장소로 편입</b>(이번 세션의 마지막 작업): 세션 스크래치패드에만 있던 "깨뜨린 픽스처" 검증 하네스 6종을 <code>scripts/tests/fixtures/</code>로 옮기고 <code>run_all.py</code>·README를 붙였다. <b>103케이스 전건 통과.</b> 이 하네스는 이번 세션에 <b>내 자체 결함도 여러 번 잡았다</b>(필드형 <code>week: 1</code> 미인식 · 블록 부재 시 exit 1/2 불일치). §8.1 절차에 정식 단계로 등재.</li>
+      <li><b>Slack 간헐 재발</b>: 게이트키퍼 WARN(DNS 실패→타임아웃)이 하루 동안 산발했으나 세션 종료 시점 <b>복구 확인</b>(호스트·컨테이너 모두 <code>slack.com</code> HTTP 200, Web API <code>ok=true</code>). 네트워크성이며 토큰·설정 문제 아님.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      테스트 <b>159종</b>(29+21+109) + <b>E2E 6종 103케이스</b> · 린터 12/12 · 미커밋 0 · Kanban 54/54 done. <b>재개 지점 = <code>docs/13 §6</code> 진행 대장</b>(§8.0 스냅샷 갱신). <b>다음 작업 = agentforge 변환</b>(#13, 신규 profile 예상 있음 — 평가 실행). <b>미결</b>: SLACK_BOT_TOKEN 재발급(Sam) · 실미션은 전체 변환 후 하나씩(Sam 지시) · 매처(C)·성장 지표 대시보드·미션 진행상황 Slack 실시간 보고 · 아키타입 A~F의 E2E 하네스 소급 작성(우선순위 낮음).
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#34 — secforge → 아키타입 L(보안 감사) · 게이트 3종 <b>전부 fail-open</b> + "취약점 0건" 게이트를 뒤집다</h2>
     <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "다음 진행"(docs/13 진행 대장 #12, secforge).</div>

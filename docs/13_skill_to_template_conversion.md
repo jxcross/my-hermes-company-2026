@@ -43,7 +43,8 @@ agents는 템플릿으로 옮기는 것이 아니다. harness의 agent는 **하�
 
 이식 시 우리 CLI 규약으로 맞춘다: `--policy <pipeline.json> --sources <sources.yaml> --draft <검사대상>`
 (gate_keeper가 항상 이 셋을 넘긴다. 안 쓰는 인자도 받아만 두면 된다). 판정 대상 파일은 템플릿의
-`gate.draft`로 지정한다. **이식한 게이트는 반드시 일부러 깨뜨린 픽스처로 검증하라**(§5).
+`gate.draft`로 지정한다. **이식한 게이트는 반드시 일부러 깨뜨린 픽스처로 검증하라**(§5) —
+하네스는 `scripts/tests/fixtures/`에 아키타입별로 둔다(`run_all.py`로 일괄 실행).
 
 **이식 전에 우리가 이미 가진 게이트와 겹치지 않는지 먼저 보라.** policyforge 의 하드게이트
 3종 중 하나(`diversity_check.py` = 카테고리별 최소 건수 + 최근 5년 60%)는 우리
@@ -618,6 +619,10 @@ policy-brief stage 9(Format Write)는 **집필 개시 승인 + 포맷 4워커**�
   검사할 뿐이라 자기보고 신뢰 구간이 남는다(`test_run` 과 같은 한계 · docs/13 §7).
   `atomic_commit` 만 실제 git 과 대조한다(읽기 전용이라 안전). CI 연동 등 **독립 실행 경로**가
   생기면 교체 검토
+- **아키타입 A~F 의 게이트에는 E2E 하네스가 없다** — 이 하네스 규율은 G(policy-brief)부터
+  생겼다. `recency_check`·`source_balance`·`prisma_*`·`seen_dedup`·`digest_shape`·
+  `claim_consistency`·`patent_format`·`doc_consistency`·`test_run` 은 단위 테스트만 있다.
+  한가할 때 소급해 하네스를 만들면 좋다(우선순위 낮음 — 이미 라이브 미션으로 실증된 A 제외)
 - **보안 스캐너를 실제 도구로 교체할 때** `tester` 계열 profile 이 필요해질 수 있다
   (semgrep·trivy 등 실행 결과로 판정). 지금은 `reader` 의 패턴 검토라 불필요 — 실제 도구를
   붙이는 미션이 생기면 §3 신호(실행 판정)로 재평가
@@ -635,9 +640,9 @@ policy-brief stage 9(Format Write)는 **집필 개시 승인 + 포맷 4워커**�
 | 변환 | **12/20** · 다음 = **agentforge**(§6 대장 #13 — 신규 profile 예상 있음(평가 실행)) |
 | 미커밋 | 없음 (push 완료) |
 | 컨테이너 | `hermes-solomon` · `hermes-gatekeeper` 2개 Up |
-| Slack | **정상**(2026-08-04 오전 도달 불가 → 오후 복구) |
-| Kanban | 전부 `done` · 활성 게이트 없음 · 잔여 테스트 카드 없음 |
-| 테스트 | **159종 통과**(29 템플릿 + 21 게이트키퍼 + 109 게이트) · 린터 12/12 |
+| Slack | **현재 정상**(컨테이너 Web API `ok=true` · team=my-hermes-company). 단 **간헐 재발 중** — 게이트키퍼 WARN(DNS 실패→타임아웃)이 하루 동안 산발했고 마지막 WARN 후 복구됨. 호스트·컨테이너 모두 `slack.com` HTTP 200. **네트워크성**이며 토큰·설정 문제 아님(진단 순서 `docs/10 §4.3`) |
+| Kanban | 전부 `done`(54/54) · 활성 게이트 없음 · 잔여 테스트 카드 없음 |
+| 테스트 | **159종 통과**(29 템플릿 + 21 게이트키퍼 + 109 게이트) · 린터 12/12 · **E2E 하네스 6종 103케이스 전건 통과**(`scripts/tests/fixtures/run_all.py`) |
 | 라이브 미션 | **A(trend-report)만 실증**(M-2026-003·004). 나머지 11종은 `draft` — Sam 지시로 **전체 변환 후** 하나씩 실행 |
 | ⚠️ 신규 | 저장소가 **PUBLIC** 임을 전제한 개인정보 게이트(`legal_safety`) 도입 · `.gitignore` 에 `_personal/` |
 
@@ -645,19 +650,36 @@ policy-brief stage 9(Format Write)는 **집필 개시 승인 + 포맷 4워커**�
 
 1. **읽는다**: 이 문서 §6(다음 대상) → §2(레시피) → §5(함정) → 대상 스킬의 `SKILL.md`
 2. **변환한다**: `templates/<name>.yaml` 작성. `templates/academic-paper.yaml`을 참고본으로 삼는다(주석에 변환 판단 근거가 남아 있다)
-3. **검증한다**:
+3. **게이트를 이식한다** — 이 단계에서 결함이 나온다(12건 변환에서 12건 모두).
+   - 먼저 **이름 충돌 확인**: `ls scripts/gates/` — 같은 이름에 덮어쓰면 먼저 있던 아키타입이
+     조용히 망가진다(§5).
+   - **원본을 직접 돌려 보라.** `python3 <원본>.py <인자>` 로 정상 입력과 쓰레기 입력을 넣어
+     본다. 지금까지 나온 결함의 절반은 이 한 번으로 드러났다(fail-open · 항상 FAIL ·
+     회귀 미탐지).
+   - **docstring 과 코드를 대조**하라. "A 를 B 와 대조한다"고 쓰여 있으면 **B 를 담은 변수가
+     판정식에 등장하는지** 눈으로 확인한다(죽은 변수·`pass` 본문이 실제로 있었다).
+4. **검증한다**:
    ```bash
    # ① 불변식 린터(가장 빠른 피드백 — 협상 중에도 반복 호출)
    docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/lint_template.py <name>'
    # ② DAG 미리보기(비파괴)
    docker exec hermes-solomon sh -c 'cd /work/company && \
      python3 scripts/instantiate_template.py <name> M-2026-TEST --dry-run --render mermaid'
-   # ③ 회귀
+   # ③ 회귀(단위)
+   docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/test_gates.py'
    docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/test_instantiate_template.py'
+   # ④ ★ 깨뜨린 픽스처 E2E — 새 아키타입마다 하네스를 만든다
+   docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/fixtures/run_all.py'
    ```
-   불변식 위반 0 · 테스트 통과 · `reports/M-2026-TEST/` 미생성 · 미등록 profile 경고가 뜨면
-   템플릿의 `requires_profiles:`와 일치하는지 확인(§7에 후보로 등재)
-4. **갱신한다**: §6 대장(상태·템플릿명·신규 profile) · §3 매핑 사전에 별칭 추가 · 새 함정이 있으면 §5
-5. **커밋한다**: `feat(template): <name> 변환 — 아키타입 <X>` + `history.html` 기록
+   **④가 이 절차의 핵심이다.** `scripts/tests/fixtures/`에 아키타입별 하네스를 두고
+   **정상 픽스처(PASS 기대) + 고의로 깨뜨린 픽스처(FAIL 기대) + 원본 결함의 회귀 방어**를
+   함께 돌린다. 기존 하네스(`policy`·`legal`·`docs`·`lecture`·`migrate`·`sec`)를 본으로 삼아
+   새 파일을 만들고 `run_all.py`의 `HARNESSES`에 등록하라. 상세는
+   [`scripts/tests/fixtures/README.md`](../scripts/tests/fixtures/README.md).
+
+   불변식 위반 0 · 테스트 통과 · 하네스 전건 통과 · `reports/M-2026-TEST/` 미생성 ·
+   미등록 profile 경고가 뜨면 템플릿의 `requires_profiles:`와 일치하는지 확인(§7에 후보로 등재)
+5. **갱신한다**: §6 대장(상태·템플릿명·신규 profile) · §3 매핑 사전에 별칭 추가 · 새 함정이 있으면 §5
+6. **커밋한다**: `feat(template): <name> → 아키타입 <X>` + `history.html` 기록
 
 **한 세션에 2~3종이 적당하다.** 스킬 하나가 300줄 안팎이고, 변환 판단(§2②)은 원본을 실제로 읽어야 나온다.

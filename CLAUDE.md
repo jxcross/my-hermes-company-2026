@@ -62,9 +62,11 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 | profile | **11종** — 기존 8 + `architect`·`developer`·`tester`(아키타입 D 도입 시 신설) |
 | 객관 게이트 | **30종** `scripts/gates/` — recency·source_balance·doc_consistency·test_run·prisma_counts·prisma_checklist·seen_dedup·digest_shape·claim_consistency·patent_format·evidence_grade·stakeholder_coverage·format_consistency·clause_completeness·law_citation·legal_safety·symbol_truth·api_coverage·doc_links·objective_coverage·bloom_distribution·course_consistency·content_accessibility·atomic_commit·test_pass_rate·behavior_diff·owasp_coverage·cve_remediation·finding_completeness·secret_redaction |
 | 산출 도구 | 3종 `scripts/tools/` — bib_export·monitor_state·relevance_score |
-| 검증 | `python3 scripts/lint_template.py --all` · 테스트 **159종**(29 템플릿 + 21 게이트키퍼 + 109 게이트) |
+| 검증 | `python3 scripts/lint_template.py --all` · 테스트 **159종**(29 템플릿 + 21 게이트키퍼 + 109 게이트) · **E2E 하네스 `scripts/tests/fixtures/run_all.py`(6종 103케이스)** |
 
 **Sam 지시:** 실미션은 **전체 변환을 마친 뒤 하나씩** 돌린다(변환 중에는 dry-run만).
+
+**게이트를 고쳤으면 E2E 하네스를 다시 돌려라** — `docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/fixtures/run_all.py'`. 단위 테스트만 통과하는 수정은 판정 경로 전체를 검증하지 않는다(`scripts/tests/fixtures/README.md`).
 
 **변환의 교훈(§5 요약):** 이식은 복사가 아니다. **12건 변환에서 12건 모두 결함이 나왔다** — 게이트 겹침(불변식 우회)·검증자 부재·느슨한 체크리스트·"동작하는 척"하는 게이트(한국어 정규식 붕괴)·**docstring은 검사한다는데 코드는 안 하는 게이트**·병렬 산출물 부재 미검출 등. **이식한 게이트는 반드시 일부러 깨뜨린 픽스처로 FAIL을 확인하라.** PASS만 보면 아무것도 측정하지 않는 게이트를 발견할 수 없다. **반대 방향도 확인하라** — legalforge 게이트 2종은 **어떤 입력에도 FAIL**하는 상태였다(정상 픽스처로 PASS 확인 필수). 또한 **이식 전에 우리가 이미 가진 게이트와 겹치는지 보라** — policyforge 하드게이트 3종 중 1종은 `source_balance`+`recency_check`와 같은 일이라 policy 블록으로 흡수했다.
 
