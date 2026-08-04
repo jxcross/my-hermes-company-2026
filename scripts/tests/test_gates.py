@@ -38,6 +38,9 @@ format_consistency = _load("format_consistency")
 clause_completeness = _load("clause_completeness")
 law_citation = _load("law_citation")
 legal_safety = _load("legal_safety")
+symbol_truth = _load("symbol_truth")
+api_coverage = _load("api_coverage")
+doc_links = _load("doc_links")
 
 
 # ── prisma_counts ────────────────────────────────────────────────────────
@@ -507,6 +510,90 @@ def test_business_number_blocked_but_placeholder_passes():
 def test_disclaimer_terms_include_lawyer_review():
     """고지는 우리가 게이트로 승격한 항목 — 기본값이 비면 무의미해진다."""
     assert any("변호사" in t for t in legal_safety.DEFAULT_DISCLAIMER_TERMS)
+
+
+# ── symbol_truth (아키타입 I · 신설) ────────────────────────────────────────
+def _pysrc(code):
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    with open(_os.path.join(d, "m.py"), "w", encoding="utf-8") as f:
+        f.write(code)
+    return d
+
+
+def test_extract_python_skips_private_symbols():
+    """`_` 접두 심볼은 공개 API 가 아니다 — 분모에 넣으면 커버리지가 왜곡된다."""
+    syms, _mods = symbol_truth.extract_python(_pysrc(
+        "def pub(a):\n    pass\n\ndef _priv(b):\n    pass\n"), [])
+    assert "pub" in syms and "_priv" not in syms
+
+
+def test_extract_python_collects_methods_qualified():
+    syms, _mods = symbol_truth.extract_python(_pysrc(
+        "class E:\n    def run(self, task):\n        pass\n    def _x(self):\n        pass\n"), [])
+    assert syms["E.run"] == ["task"]          # self 는 파라미터가 아니다
+    assert "E._x" not in syms
+
+
+def test_sig_params_ignores_defaults_and_hints():
+    assert symbol_truth.sig_params("f(a, b: int = 1, *args, **kw)") == ["a", "b", "args", "kw"]
+    assert symbol_truth.sig_params("f()") == []
+    assert symbol_truth.sig_params("설명만 있고 괄호 없음") is None
+
+
+def test_sig_params_handles_nested_commas():
+    """`Dict[str, int]` 안의 쉼표로 파라미터를 쪼개면 대조가 무의미해진다."""
+    assert symbol_truth.sig_params("f(a: Dict[str, int], b=(1, 2))") == ["a", "b"]
+
+
+def test_parse_declared_binds_signature_to_its_entry():
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    p2 = _os.path.join(d, "symbols.md")
+    with open(p2, "w", encoding="utf-8") as f:
+        f.write("```functions\n- name: a\n  signature: a(x)\n- name: b\n  signature: b(y)\n```\n")
+    got = symbol_truth.parse_declared(p2)
+    assert [(g["name"], g["signature"]) for g in got] == [("a", "a(x)"), ("b", "b(y)")]
+
+
+# ── api_coverage (아키타입 I) ──────────────────────────────────────────────
+def test_substring_brush_is_not_documentation():
+    """이식 중 발견한 결함의 회귀 방어 — 원본은 `keyword in api_text` 부분 문자열 검사라
+    'running'·'get_configuration' 만 있어도 run·get_config 가 문서화된 것으로 셌다.
+    실측: 아무것도 문서화하지 않은 문서에 3/3 = 100% PASS."""
+    text = ("# API\n\n## 개요\n현재 running 상태에서 get_configuration 을 "
+            "parse_tree_node 로 넘긴다. 자세한 것은 추후 작성 예정이다.\n")
+    entries = api_coverage.documented_entries(text, 40)
+    assert "run" not in entries and "get_config" not in entries and "parse_tree" not in entries
+
+
+def test_documented_entry_requires_body():
+    """제목만 있고 본문이 없으면 문서가 아니다(목차 나열·TODO 를 커버리지로 세지 않는다)."""
+    assert api_coverage.documented_entries("### parse_tree(node)\nTODO\n", 40) == {}
+    got = api_coverage.documented_entries(
+        "### parse_tree(node)\n" + "설명이 충분히 길게 이어진다. " * 4 + "\n", 40)
+    assert "parse_tree" in got
+
+
+def test_documented_entry_name_strips_signature():
+    got = api_coverage.documented_entries(
+        "### `Engine.run(task)`\n" + "가" * 60 + "\n", 40)
+    assert "Engine.run" in got and "run" in got     # 마지막 조각도 인정
+
+
+# ── doc_links (아키타입 I) ─────────────────────────────────────────────────
+def test_slug_follows_github_rules():
+    """원본은 구두점을 하이픈으로 **바꿔** `parse(x)` → `parse-x-` 로 만들어 정상 앵커를
+    깨진 것으로 판정했다. GitHub 은 구두점을 **삭제**한다."""
+    assert doc_links.slug("parse_tree(node, depth=0)") == "parse_treenode-depth0"
+    assert doc_links.slug("## 구조 개요") == "-구조-개요".lstrip("-")
+
+
+def test_link_regex_ignores_images():
+    """`![alt](x.png)` 는 문서 간 링크가 아니다 — 원본은 이것도 깨진 링크로 셌다."""
+    found = [m.group(2) for m in doc_links.LINK_RE.finditer("![그림](a.png) 와 [문서](b.md)")]
+    assert found == ["b.md"]
+
 
 
 if __name__ == "__main__":

@@ -1,0 +1,135 @@
+# 아키타입 I — 코드베이스 문서화 (10단계)
+# 출처: other_projects/harness-templates/domain-harnesses/project_docforge
+#       (.claude/skills/docforge/SKILL.md 8-stage + agents 13종). 변환 절차: docs/13
+#
+# 이 아키타입은 다른 것들과 근거의 성격이 다르다. **근거가 웹 출처가 아니라 코드다.**
+# 그래서 `source_balance`·`recency_check` 는 의미가 없고, 대신 **AST 대조**(`symbol_truth`)가
+# 사실성의 바닥을 받친다 — 사람이 읽고 판단하기 전에 기계가 코드와 맞춰볼 수 있는,
+# 지금까지 변환한 아키타입 중 **검증이 가장 강한** 도메인이다.
+#
+# 변환 판단(요약 — 상세·근거는 docs/13 §2·§5):
+#  - **신규 profile 0개** — 대장의 "예상 있음(코드 읽기)" 은 빗나갔다. 코드를 **읽는** 것은
+#    여전히 `reader` 다(§3 신규 후보 신호는 `Edit`·`playwright` 인데 docforge 에는 없다).
+#    문서를 위해 코드를 고치지 않으므로 `developer` 도 필요 없다.
+#  - `dependency-graph-builder` 는 `architect`(§3 의 `diagrammer` 별칭이 이미 architect).
+#    반면 `architecture-writer` 는 **`writer`** 다 — 구조를 **결정**하는 것과 이미 있는 구조를
+#    **서술**하는 것은 다르다(specflow 의 architect 와 헷갈리기 쉬운 지점 — §5).
+#  - `cross-linker` 는 `curator` 에 정확히 들어맞는다(§3 동사 신호에 `cross-link` 가 이미 있다).
+#  - stage 5 의 4 writer(api-ref/architecture/adr/tutorial)는 "코드 사실을 문서로 쓴다"는
+#    같은 계약이라 `parallel: workers` → writer 1개.
+#  - stage 7 의 3 비평가를 우리 두 검증 지점으로 재배치:
+#      accuracy-check(시그니처 ↔ 코드)      → 4 Symbol Verify(fact-checker)
+#      api-coverage-check + clarity-check   → 8 Doc Review(reviewer)
+#  - **게이트 3종 중 1종은 신설**이다. `symbol_truth` 는 원본에 없다 — 원본은 "환각 금지" 를
+#    지시만 하고 검사하지 않았고, 커버리지의 **분모를 파이프라인이 스스로 정하는** 구조적
+#    허점이 있었다(§5). `api_coverage` 와 `symbol_truth` 는 **짝으로만 의미가 있다.**
+#  - `bundle_export.py`·`runs_state.py` 는 미이식(번들 조립 = Deliver · 상태머신 = Kanban).
+#
+# 스키마 규약은 templates/trend-report.yaml 머리말 참조.
+
+name: code-docs
+category: engineering
+display_name: 코드베이스 문서화(API·아키텍처·ADR·튜토리얼)
+maturity: draft
+goal_kr: 코드베이스를 읽어 공개 API·모듈 구조·설계 결정을 추출하고, 코드와 대조 검증된 문서 묶음(API 레퍼런스·아키텍처·ADR·튜토리얼)을 산출한다.
+invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop]
+# ⚠️ `sources_cited` 를 선언하지 않는다 — 이 아키타입의 출처는 sources.yaml 이 아니라
+#    **코드 그 자체**이고, 그 대조는 symbol_truth 게이트가 sources.yaml 보다 강하게 한다.
+
+policy:
+  symbol_policy:
+    ast_languages: [python]      # 실제 파싱해 대조할 언어. 그 외는 검증자가 읽어야 한다
+    min_declared_ratio: 0.8      # AST 공개 심볼 대비 선언 비율 하한 — **과소 선언 방지**
+    check_signatures: true
+    exclude_dirs: [.git, __pycache__, node_modules, .venv, venv, build, dist, tests, test]
+
+  api_policy:
+    threshold: 0.9               # 원본 기본값 유지
+    symbols_file: symbols.md
+    api_ref: api-ref.md
+    check_reverse: true          # 심볼 목록에 없는 항목을 문서화하면 경고
+    min_body_chars: 40           # 제목만 있고 설명이 없으면 문서화로 세지 않는다
+
+  link_policy:
+    min_cross_links: 3           # 상호 참조 없는 묶음은 조각난 문서다(Cross-Link 단계의 목적)
+    check_anchors: true
+    allow_external: true
+
+  doc_policy:
+    doc_types: [api-ref, architecture, adr, tutorial]   # SCOPE.md 의 doc_types 가 우선
+    adr_format: nygard
+    tutorial_words: 1000
+
+stages:
+  - id: 1
+    name: Scoping
+    profile: default          # Solomon
+    sam_gate: true
+    upstream: []
+    body: "문서화 범위를 확정해 reports/<MID>/SCOPE.md 에 작성 — 대상 코드베이스 · 독자(신규 개발자/외부 이용자/유지보수자 중 택1, 문서 깊이가 여기서 갈린다) · 산출 문서 종류 · 다루지 않을 것 · 완료조건. ⚠️ **frontmatter 에 다음을 반드시 선언**하라(객관 게이트가 이 값으로 코드와 대조한다):\n`codebase: <경로>`(컨테이너에서 접근 가능한 절대경로 또는 미션 디렉터리 기준 상대경로) · `languages: [python, ...]` · `doc_types: [api-ref, architecture, adr, tutorial]`. ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라. 오직 SCOPE.md 산출과 이 task 완료만."
+  - id: 2
+    name: Codebase Ingest
+    profile: reader
+    upstream: [1]
+    body: "코드베이스를 훑어 codebase.md 에 정리 — 언어·프레임워크 · 디렉터리 구조와 각 디렉터리의 역할 · 진입점(엔트리포인트·CLI·서버 기동) · 빌드/테스트 방법 · 외부 의존성 · **공개 표면**(외부에서 import 하거나 호출하는 것이 무엇인가). ⚠️ 코드를 **고치지 마라** — 이 파이프라인은 문서만 만든다. ⚠️ 추측하지 말고 실제로 읽어라(README 가 코드와 다른 경우가 흔하다 — 다르면 그 사실을 기록한다)."
+  - id: 3
+    name: Symbol Parse
+    profile: reader
+    upstream: [2]
+    body: "공개 심볼을 추출해 symbols.md 에 기록한다. **블록 형식을 정확히 지켜라**(객관 게이트가 파싱해 AST 와 대조한다):\n```functions\n- name: parse_symbols\n  signature: parse_symbols(path)\n  module: scripts/gates/symbol_truth.py\n  docstring: 기존 docstring 요약(없으면 빈칸)\n```\n같은 형식으로 ```classes```(메서드는 `Class.method`) · ```modules```(`- path:`) 블록도 만든다. ⚠️ **`_` 로 시작하는 비공개 심볼은 제외**한다. ⚠️ **빠뜨리지 마라** — 객관 게이트가 AST 로 센 공개 심볼 대비 **선언 비율 80% 이상**을 요구한다(적게 적어 내면 커버리지가 실제보다 높게 나오므로 막는다). ⚠️ **지어내지 마라** — 코드에 없는 심볼은 게이트가 환각으로 잡는다."
+  - id: 4
+    name: Symbol Verify
+    profile: fact-checker      # ≠ reader
+    verifier: true
+    upstream: [3]
+    gate:
+      objective: [symbol_truth]
+      llm: fact_checker_verdict
+      draft: "reports/<MID>/symbols.md"
+    body: "① 시그니처가 코드와 일치하는가(객관 게이트가 Python 은 AST 로 대조한다 — **그 외 언어는 네가 직접 읽어야 한다**). ② 추출된 docstring 요약이 원문을 왜곡하지 않았는가. ③ **공개/비공개 판정이 맞는가** — `_` 접두사만이 기준은 아니다(`__all__` 선언, 내부 전용 모듈, 실험적 API 를 공개로 올리면 문서가 잘못된 약속을 한다). ④ 모듈 경로가 실재하는가. 끝에 VERDICT: PASS|FAIL. ⚠️ 여기서 잡지 못하면 존재하지 않는 API 를 4개 문서가 함께 설명하게 된다."
+  - id: 5
+    name: Dependency Graph
+    profile: architect
+    upstream: [4]              # 게이트: 4 PASS 시 게이트키퍼가 unblock
+    body: "import 관계를 분석해 graph.md 에 **mermaid 의존성 그래프**를 그린다 — 모듈 간 의존 방향 · 계층(진입점→도메인→인프라) · **순환 의존**(있으면 명시하라, 아키텍처 문서의 핵심 소재다) · 외부 의존성 경계. 그래프와 함께 **읽는 법**을 3~5문장으로 적어라(그림만 있는 문서는 읽히지 않는다). ⚠️ 실제 import 문에 근거해 그려라 — 디렉터리 이름에서 추측하지 마라."
+  - id: 6
+    name: Doc Write
+    profile: writer
+    sam_gate: true             # 문서 4종을 다시 쓰는 비용이 크다 — 구조 파악 확정 후 집필 개시
+    approval_artifact: "reports/<MID>/graph.md"
+    upstream: [5]
+    parallel:
+      mode: workers
+      # 문서 종류마다 같은 계약(코드 사실을 문서로 쓴다) = profile 아님, 워커다.
+      workers: [api-ref, architecture, adr, tutorial]
+      batch_size: 3            # 4워커 = 3 + 1, 2라운드
+      shard: "docs/<worker>.md"
+      merge_to: null           # 문서는 병합 대상이 아니다 — 각자 독립 산출물
+    body: "SCOPE.md 의 `doc_types` 에 **선언된 종류만** 작성한다. 공통 규칙: 모든 서술은 **코드에 근거**할 것(추측을 사실처럼 쓰지 마라 — 불확실하면 '확인 필요'로 표시) · 예제 코드는 **실제로 동작하는 형태**로. 종류별: **api-ref**=심볼마다 `### name(signature)` 제목 + 설명·파라미터·반환·예외·예제(⚠️ 제목만 있고 본문이 40자 미만이면 게이트가 문서화로 세지 않는다. 심볼의 90% 이상을 이 형태로 다뤄야 한다) · **architecture**=graph.md 를 근거로 한 시스템 설계 서술(계층·경계·핵심 패턴·트레이드오프. **설계를 새로 하지 말고 있는 것을 서술하라**) · **adr**=git 이력에서 의미 있는 결정을 캐내 Nygard 형식(맥락·결정·상태·결과)으로. 추론한 결정은 '추정'임을 밝혀라 · **tutorial**=신규 개발자용 시작 안내 약 1000단어(설치→첫 실행→첫 수정)."
+  - id: 7
+    name: Cross-Link
+    profile: curator
+    upstream: [6]
+    body: "문서 사이를 상호 참조로 엮는다 — api-ref 항목 ↔ tutorial 예제, architecture ↔ adr 결정, architecture ↔ api-ref 모듈. 마크다운 상대 링크와 앵커(`[파서](api-ref.md#parse_symbols)`)를 쓰고 links.md 에 링크 지도를 남긴다. ⚠️ **앵커는 GitHub 규칙**(소문자·구두점 제거·공백은 하이픈)을 따라야 게이트를 통과한다. ⚠️ 상호 링크가 3개 미만이면 게이트가 반려한다 — 조각난 문서 묶음은 문서가 아니다. ⚠️ 없는 제목을 가리키는 링크를 만들지 마라."
+  - id: 8
+    name: Doc Review
+    profile: reviewer          # ≠ writer
+    verifier: true
+    upstream: [7]
+    gate:
+      objective: [api_coverage, doc_links]
+      llm: reviewer_verdict
+      draft: "reports/<MID>/docs"
+    body: "독립 검토: ① **커버리지의 실질**(객관 게이트는 제목과 본문 길이만 본다 — **설명이 실제로 그 심볼을 설명하는지**는 네가 읽는다. 시그니처만 복사한 항목은 문서가 아니다). ② **정확성** — 예제가 실제 API 와 맞는가, 파라미터 설명이 시그니처와 어긋나지 않는가. ③ **명료성** — 독자(SCOPE.md 의 대상)가 이 문서만 보고 시작할 수 있는가, 튜토리얼의 첫 실행이 실제로 되는가. ④ **문서 간 일관성** — architecture 가 말하는 구조와 api-ref 의 모듈 구성이 어긋나지 않는가. ⑤ ADR 의 '추정' 표시가 정직한가(git 이력에 없는 결정을 단정하지 않았는가). 끝에 VERDICT: PASS|FAIL."
+  - id: 9
+    name: Wiki Update
+    profile: curator
+    upstream: [8]             # 게이트: 8 PASS 시 unblock
+    body: "코드베이스 지형(모듈 구조·설계 패턴·의존성 특징·문서화 판단 사례)을 llm-wiki 에 반영(entities/concepts) + reflection + 재사용률 갱신. 같은 코드베이스의 다음 미션(기능 추가·마이그레이션)에서 구조 파악을 재사용할 수 있게 정리한다."
+  - id: 10
+    name: Deliver
+    profile: default          # Solomon
+    sam_gate: true
+    approval_artifact: "reports/<MID>/docs/api-ref.md"
+    upstream: [9]
+    body: "① 번들 조립 `reports/<MID>/docs-bundle/`: docs/*.md 전부 · graph.md · symbols.md · coverage-report.md(커버리지·미문서화 심볼 목록) · README.md(묶음 안내와 읽는 순서). ② 커밋 + git push(컨테이너 GITHUB_TOKEN 자격) + Slack 요약. ⚠️ Slack 요약에 **커버리지 수치 · 미문서화 심볼 수 · 문서 종류별 분량**을 포함하라. ⚠️ Slack 게시는 반드시 `hermes send --to slack:#mission-log \"<요약+커밋링크>\"`(Web API)로 하라 — 에이전트 slack 도구는 인바운드 Socket Mode 어댑터에 의존해 실패할 수 있다(현재 flapping)."

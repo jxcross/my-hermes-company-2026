@@ -25,6 +25,26 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#31 — docforge → 아키타입 I(코드베이스 문서화) · 커버리지 게이트의 <b>분모 자기결정</b> 문제 + AST 대조 게이트 신설</h2>
+    <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "순서대로 진행해"(docs/13 진행 대장 #9, docforge).</div>
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li><b>⚠️ 이식 결함 ① 부분 문자열 검사로 100% PASS</b>: 원본 하드게이트 <code>api_coverage.py</code>는 <code>keyword in api_text</code> — 문서 <b>전체에 대한 부분 문자열</b> 검사였다. 실측: 심볼 <code>run</code>·<code>get_config</code>·<code>parse_tree</code>를 선언하고 본문에 "<b>running</b> 상태에서 <b>get_configuration</b>을 <b>parse_tree_node</b>로 넘긴다. 추후 작성 예정"만 써도 <b>3/3 = 100.0% PASS</b>. 아무것도 문서화하지 않았는데 하드게이트가 통과한다. → 심볼이 <b>제목으로 등장하고 본문 40자 이상</b>이어야 문서화로 인정.</li>
+      <li><b>⚠️ 이식 결함 ② 커버리지의 분모를 파이프라인이 스스로 정한다</b>(구조적): 분모인 공개 심볼 목록은 <b>같은 파이프라인의 앞 단계가 만든 것</b>이다. 심볼 추출이 공개 함수 100개 중 3개만 적어 내면 3개만 문서화해도 커버리지 100%다. <b>측정 대상이 자기 성적표의 분모를 정하는 구조</b>라 게이트가 성립하지 않는다.</li>
+      <li><b>🔬 게이트 신설 — <code>symbol_truth.py</code></b>(원본에 없음): Python <code>ast</code>로 코드베이스를 <b>실제 파싱</b>해 ① 선언한 심볼이 코드에 있는지(환각) ② 시그니처 파라미터가 맞는지 ③ <b>AST가 찾은 공개 심볼 대비 선언 비율 80% 이상</b>(과소 선언 방지)을 본다. 원본 CLAUDE.md는 "환각 금지"를 <b>선언만</b> 하고 검사 코드가 없었다. <code>api_coverage</code>와 <code>symbol_truth</code>는 <b>짝으로만 의미가 있다.</b></li>
+      <li><b>⚠️ 이식 결함 ③·④ 링크 검사</b>(<code>doc_link_validator.py</code>): <code>![alt](x.png)</code> 이미지도 링크로 세어 <b>깨진 링크로 오판</b> · 앵커 slug가 구두점을 하이픈으로 <b>바꿔</b>(<code>parse(x)</code>→<code>parse-x-</code>) GitHub 규칙(<code>parsex</code>)과 달라 정상 앵커를 반려. → 이미지·코드블록 내 링크 제외 + GitHub slug 규칙 + 실제 경로 확인(원본은 basename만 봐서 <code>../없는곳/api-ref.md</code>도 통과) + 상호 링크 하한.</li>
+      <li><b>신규 profile 0개 — 대장의 "예상 있음(코드 읽기)"은 빗나갔다</b>: 코드를 <b>읽는</b> 것은 여전히 <code>reader</code>다(§3 신규 후보 신호는 <code>Edit</code>·<code>playwright</code>인데 docforge에는 없다). 문서를 위해 코드를 고치지 않으므로 <code>developer</code>도 불필요. §3 사전에 판정 근거를 명시.</li>
+      <li><b>매핑 판단 — 결정 vs 서술</b>: <code>architecture-writer</code>를 <code>architect</code>로 보낼 뻔했다(이름이 같아서). specflow의 architect는 <b>없던 구조를 결정</b>하고 docforge의 그것은 <b>있는 구조를 서술</b>한다 → <code>writer</code>. 반면 <code>dependency-graph-builder</code>는 구조를 추출해 그리므로 <code>architect</code>(§3의 <code>diagrammer</code> 별칭). <code>cross-linker</code>는 <code>curator</code> 동사 신호에 <code>cross-link</code>가 이미 있었다.</li>
+      <li><b>이 아키타입만의 성질</b>: 근거가 웹 출처가 아니라 <b>코드</b>라 <code>sources_cited</code> 불변식과 <code>source_balance</code>·<code>recency_check</code>를 쓰지 않는다. 대신 AST 대조가 그보다 강하게 받친다 — <b>지금까지 변환한 것 중 사실성 검증이 가장 단단한 도메인.</b></li>
+      <li><b>깨뜨린 픽스처 14케이스로 E2E 검증</b>: 정상 3 PASS + 고의 결함 9건 <code>exit=1</code> + 원본 결함 회귀 방어 2건(부분 문자열 스침을 문서화로 세지 않음 · 이미지/코드블록 링크 제외). 단위 테스트 10종 추가.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      <b>아키타입 I 확보 — 9/20</b>. 린터 9/9. 테스트 <b>29+21+73 = 123종 통과</b>. 객관 게이트 <b>19종</b>. <b>변환 9건 연속 결함 발견</b>. 새 교훈 3건을 docs/13 §5에 기록: <b>비율 게이트는 분모가 어디서 오는지 물어라</b>(분모가 검사 대상 쪽에서 오면 분모를 고정하는 게이트가 하나 더 필요) · 부분 문자열 검사는 커버리지를 100%로 만든다 · <b>agent 이름의 명사가 아니라 산출물에 대한 판단의 성격으로 profile을 가른다</b>. 다음 변환 = lectureforge.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#30 — legalforge → 아키타입 H(법률 문서 초안) · 원본 게이트 2종이 <b>항상 FAIL</b>이었다 + 개인정보 게이트 신설</h2>
     <div class="meta">2026-08-04 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "다음 진행"(docs/13 진행 대장 #8, legalforge).</div>
