@@ -1,0 +1,138 @@
+# 아키타입 B' — PRISMA 체계적 문헌고찰 (11단계)
+# 출처: other_projects/harness-templates/research-harnesses/project_reviewforge
+#       (.claude/skills/reviewforge/SKILL.md 9-stage + agents 12종). 변환 절차: docs/13
+#
+# 변환 판단(요약 — 상세·근거는 docs/13 §2·§5):
+#  - reviewforge 는 **객관 게이트를 이미 갖고 있던 유일한 스킬**이다(prisma_count_tracker.py·
+#    prisma_audit.py). 두 개 다 우리 규약(--policy --sources --draft)으로 이식했다:
+#    scripts/gates/prisma_counts.py · scripts/gates/prisma_checklist.py.
+#  - stage 8 의 4비평가를 우리 두 검증 지점으로 재배치:
+#      evidence-coverage + PRISMA 카운트 → 6 Cross-Verify(fact-checker)
+#      prisma-compliance(27항목) + bias-balance + clarity → 9 Independent Review(reviewer)
+#  - reviewforge stage 5(데이터 추출)와 6(질 평가)은 **둘 다 '논문 1편을 읽고 구조화'**로 계약이
+#    같고 원본도 같은 queue 를 쓴다 → 우리 stage 5 하나로 합치고 shard 안에 두 절을 둔다.
+#  - 수집 워커는 **데이터베이스별**로 나눈다(원본과 동일) — 여기선 검색 전략 분할이 곧 산출
+#    taxonomy 다(각 DB 가 서로 다른 문헌 모집단). trend-report 의 source_type 분할과 다른 이유.
+#  - `meta_analysis.py`·`latex_export.py`·`papers_state.py` 는 미이식(docs/13 §7):
+#    상태머신은 Kanban 이 대체 · 메타분석/LaTeX 은 판정이 아니라 산출.
+#  - 신규 profile 0개.
+#
+# 스키마 규약은 templates/trend-report.yaml 머리말 참조.
+
+name: systematic-review
+category: research
+display_name: PRISMA 체계적 문헌고찰
+maturity: draft
+goal_kr: 연구질문(PICO)에서 출발해 PRISMA 2020을 준수하는 체계적 문헌고찰 원고를 산출한다.
+invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop, sources_cited]
+
+policy:
+  recency_policy:
+    # 체계적 문헌고찰은 시간축이 가장 넓다 — 오래된 연구를 배제하면 그 자체가 선택 비뚤림이다.
+    cutoff_year_offset: -5
+    recent_ratio: 0.3            # 최신 비중 하한을 낮게(고전 포함이 정상)
+    hard_block_year_offset: -30
+    seminal_exceptions: true
+  source_balance_policy:
+    # 여기서 source_type 은 '출처 종류'가 아니라 **연구 설계**다(문헌고찰의 근거 수준 축).
+    categories: [rct, observational, qualitative, review, grey]
+    min_per_category:
+      rct: 0                     # 분야에 따라 RCT 가 없을 수 있다 — Scoping 에서 미션별 조정
+      observational: 0
+      qualitative: 0
+      review: 0
+      grey: 0                    # 회색문헌(학위논문·보고서) — 출판 비뚤림 완화용
+    hard_block_if_missing: false
+  prisma_policy:
+    strict_exclusion_reasons: true   # 배제 사유 블록 필수(flow diagram 근거)
+    checklist_strict: false          # PARTIAL 은 경고(LLM 검증자가 충분성 판단)
+    checklist_min_yes: 20            # 27항목 중 YES 최소치
+
+stages:
+  - id: 1
+    name: Scoping
+    profile: default          # Solomon
+    sam_gate: true
+    upstream: []
+    body: "연구질문을 PICO/PICOC로 정식화하고 포함·배제 기준, 검색 대상 데이터베이스, 기간, 연구설계 taxonomy(source_balance 카테고리)와 PRISMA 정책을 reports/<MID>/SCOPE.md에 작성. ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라(중복 방지). 오직 SCOPE.md 산출과 이 task 완료만."
+  - id: 2
+    name: Search Protocol
+    profile: scout
+    upstream: [1]
+    body: "데이터베이스별 검색식(불리언·필드 한정·기간·언어 필터)을 protocol.md에 명시. ⚠️ 검색식은 재현 가능해야 한다 — 그대로 다시 돌려 같은 결과가 나오도록 적는다(PRISMA 항목 7)."
+  - id: 3
+    name: Database Search
+    profile: scout
+    upstream: [2]
+    parallel:
+      mode: workers
+      # 원본과 동일하게 **데이터베이스별** 분할. 여기선 각 DB 가 서로 다른 문헌 모집단이라
+      # 검색 전략 분할이 곧 산출 분할이다(trend-report 의 source_type 분할과 다른 지점).
+      workers: [pubmed, scopus, web_of_science, acm_ieee, grey_lit]
+      batch_size: 3          # 5워커 = 3 + 2, 2라운드
+      shard: "raw/candidates.<worker>.yaml"
+      merge_to: "raw/sources.yaml"
+    body: "protocol.md의 자기 DB 검색식을 실행해 후보를 수집한다. 각 항목 id(bibkey)·title·authors·published_year·venue·doi/url·database·study_design(=source_type)·status 기록. ⚠️ 검색일과 히트 수를 반드시 남겨라(PRISMA 항목 6·16의 identified 카운트 근거)."
+  - id: 4
+    name: PRISMA Screening
+    profile: curator
+    upstream: [3]
+    body: "PRISMA 4단계 선별(identification→screening→eligibility→included)을 수행해 screening.md에 기록한다. ⚠️ 반드시 세 블록을 방출하라 — ```prisma_counts```(identified·duplicates_removed·after_dedup·excluded_screen·eligibility_assessed·excluded_eligibility·included) · ```included```(`- bibkey: <id>` 목록) · ```exclusion_reasons```(`- reason: \"...\"  count: N`). 객관 게이트가 이 숫자들의 항등식을 검사하며, 합이 맞지 않으면 자동 반려된다."
+  - id: 5
+    name: Extraction & Appraisal
+    profile: reader
+    upstream: [4]
+    parallel:
+      mode: per_item
+      over: "screening.md 의 ```included``` 블록에 있는 논문 각각"
+      batch_size: 3
+      shard: "analysis/<id>.md"
+      merge_to: "analysis/_index.md"
+    body: "논문 1편당 두 절을 작성한다 — ① 데이터 추출(연구설계·표본·개입·비교·결과지표·효과크기·맥락) ② 질 평가/비뚤림 위험(도구명 명시: CASP·MMAT·JBI·RoB2 중 택1, 항목별 판정과 근거). 인용 가능한 수치는 표·페이지까지 특정한다."
+  - id: 6
+    name: Cross-Verify
+    profile: fact-checker      # ≠ reader
+    verifier: true
+    upstream: [5]
+    gate:
+      objective: [prisma_counts, recency_check]
+      llm: fact_checker_verdict
+      draft: "reports/<MID>/screening.md"   # 카운트 항등식 검사 대상
+    body: "① 추출 정확성 교차검증 — 노트의 수치·주장이 원문에 실제로 있는가, 인용이 included 목록의 실재 항목을 가리키는가. ② 근거 커버리지 — 포함된 논문이 연구질문의 각 축(PICO)을 실제로 덮는가. 상충·미검증을 분리 보고. 끝에 VERDICT: PASS|FAIL."
+  - id: 7
+    name: Synthesis
+    profile: synthesizer
+    upstream: [6]              # 게이트: 6 PASS 시 게이트키퍼가 unblock
+    body: "서사적 종합 + 연구 특성 표 + (가능하면) 효과크기 비교 표 + **PRISMA flow diagram**(screening.md의 카운트를 그대로 반영한 mermaid)을 synthesis.md에 작성. 이질성이 커 통계적 통합이 부적절하면 그렇게 판단한 근거를 적고 서사 종합으로 간다."
+  - id: 8
+    name: Draft Manuscript
+    profile: writer
+    upstream: [7]
+    parallel:
+      mode: per_item
+      over: "PRISMA 2020 보고 구조의 섹션(Abstract·Introduction·Methods(적격기준·정보원·검색식·선별·추출·비뚤림·종합방법)·Results(선별흐름·연구특성·비뚤림·개별결과·종합결과)·Discussion(해석·한계·시사점)·Other(등록·연구비·이해상충·데이터공개))"
+      batch_size: 3
+      shard: "report.<section>.md"
+      merge_to: "report.md"
+    body: "섹션별 집필. ⚠️ PRISMA 2020 27항목이 원고 어딘가에 반드시 나타나야 한다 — 특히 자주 누락되는 항목: 프로토콜 등록(PROSPERO), 출판 비뚤림 평가, 근거 확실성(GRADE), 연구비·이해상충·데이터 공개. 객관 게이트가 27항목 커버리지를 검사한다. 모든 주장에 인용(bibkey)을 단다."
+  - id: 9
+    name: Independent Review
+    profile: reviewer          # ≠ writer
+    verifier: true
+    upstream: [8]
+    gate:
+      objective: [prisma_checklist]
+      llm: reviewer_verdict
+      draft: "reports/<MID>/report.md"
+    body: "독립 검토(reviewforge 4비평가 중 3축 통합): ① PRISMA 준수 충분성 — 객관 게이트는 '언급됐는가'만 보므로 **충분한가**는 네가 판단한다. ② 비뚤림 균형 — 상반된 근거를 공정하게 다뤘는가, 포함 기준이 사후에 유리하게 조정되지 않았는가, 회색문헌 배제가 출판 비뚤림을 키우지 않았는가. ③ 명료성 — 연구질문·방법·결론의 논리적 연결. 끝에 VERDICT: PASS|FAIL."
+  - id: 10
+    name: Wiki Update
+    profile: curator
+    upstream: [9]             # 게이트: 9 PASS 시 unblock
+    body: "raw→llm-wiki 반영(entities/concepts) + reflection + 재사용률 갱신. 검색식·선별 기준처럼 재사용 가치가 큰 산출을 우선 적재한다."
+  - id: 11
+    name: Deliver
+    profile: default          # Solomon
+    sam_gate: true
+    upstream: [10]
+    body: "① BibTeX 생성: `python3 /work/company/scripts/tools/bib_export.py --sources reports/<MID>/raw/sources.yaml --draft reports/<MID>/report.md --out reports/<MID>/references.bib`. ② 원고·flow diagram·체크리스트 커밋 + git push(컨테이너 GITHUB_TOKEN 자격으로 origin) + Slack 요약. ⚠️ Slack 게시는 반드시 `hermes send --to slack:#mission-log \"<요약+커밋링크>\"`(Web API)로 하라 — 에이전트 slack 도구는 인바운드 Socket Mode 어댑터에 의존해 실패할 수 있다(현재 flapping)."

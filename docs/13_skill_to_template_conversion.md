@@ -1,6 +1,6 @@
 # 13. harness 스킬 → 템플릿 YAML 변환 — 작업 절차서
 
-> 작성일: 2026-08-04 · 상태: **작업 중(3/20 — A·B·D 전부 실행가능)** · 성격: working doc(재개 가능)
+> 작성일: 2026-08-04 · 상태: **작업 중(4/20 — A·B·B'·D 전부 실행가능, 라이브 미션은 A만)** · 성격: working doc(재개 가능)
 > 관련: [`12_pipeline_negotiation.md`](./12_pipeline_negotiation.md)(§8 phasing 2b) · [`11_template_driven_missions.md`](./11_template_driven_missions.md)(템플릿 스키마 §3.A·§3.B) · 소스: 형제 repo `other_projects/harness-templates`
 >
 > **⚠️ 이 문서는 여러 세션에 걸쳐 이어서 작업하기 위한 것이다.** 새 세션은 **§6 진행 대장**에서 다음 대상을 고르고 → **§2 레시피**대로 변환하고 → **§6 갱신 + 커밋**하면 된다. 재개 방법은 §8.
@@ -41,6 +41,13 @@ agents는 템플릿으로 옮기는 것이 아니다. harness의 agent는 **하�
 `SKILL.md`가 실행하는 `scripts/*.py` 중 **exit code로 통과/불통을 판정하는 것만** `gate.objective`다.
 **산출 도구는 게이트가 아니다** — `bib_export.py`(BibTeX 생성)는 판정하지 않으므로 게이트가 아니라 산출 단계의 도구다.
 
+이식 시 우리 CLI 규약으로 맞춘다: `--policy <pipeline.json> --sources <sources.yaml> --draft <검사대상>`
+(gate_keeper가 항상 이 셋을 넘긴다. 안 쓰는 인자도 받아만 두면 된다). 판정 대상 파일은 템플릿의
+`gate.draft`로 지정한다. **이식한 게이트는 반드시 일부러 깨뜨린 픽스처로 검증하라**(§5).
+
+현재 보유 게이트: `recency_check` · `source_balance` · `doc_consistency` · `test_run` ·
+`prisma_counts` · `prisma_checklist`. 회귀 테스트는 `scripts/tests/test_gates.py`.
+
 ### ⑤ 불변식을 보강한다 (§4 체크리스트)
 원본에는 우리 불변식이 대개 없다. 빠진 단계를 채운다.
 
@@ -52,6 +59,7 @@ agents는 템플릿으로 옮기는 것이 아니다. harness의 agent는 **하�
 
 ### ⑧ 검증하고 대장을 갱신한다
 ```bash
+docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/lint_template.py <name>'
 docker exec hermes-solomon sh -c 'cd /work/company && \
   python3 scripts/instantiate_template.py <name> M-2026-TEST --dry-run --render mermaid'
 ```
@@ -63,14 +71,14 @@ docker exec hermes-solomon sh -c 'cd /work/company && \
 
 | 우리 profile | 동사 신호 | tools 신호 | 확인된 별칭 |
 |---|---|---|---|
-| `default` (Solomon) | clarify · scope-interview · finalize · deliver · orchestrate | `AskUserQuestion` | `paperforge-clarify-topic` · `paperforge-finalize` · `trendforge-clarify-scope` · `trendforge-finalize` |
-| `scout` | gather · ingest · collect · scan · search · survey | `WebSearch` `WebFetch` | `paperforge-scope-survey` · `paperforge-gather-{arxiv,web,recent}` · `trendforge-landscape-survey` · `trendforge-gather-{academic,industry,patents,news}` |
-| `reader` | read-extract · analyze · classify · appraise | — | `paperforge-read-extract` · `trendforge-read-extract` |
-| `curator` | dedup · filter · screen · normalize · cite-pack · cross-link | — | *(원본에 대개 없음 — 우리가 보강)* |
-| `synthesizer` | synthesize · outline · structure · summarize | — | `paperforge-synthesize-outline` · `trendforge-synthesize-trends` |
+| `default` (Solomon) | clarify · scope-interview · finalize · deliver · orchestrate | `AskUserQuestion` | `paperforge-clarify-topic` · `paperforge-finalize` · `trendforge-clarify-scope` · `trendforge-finalize` · `reviewforge-{clarify-question,finalize}` |
+| `scout` | gather · ingest · collect · scan · search · survey | `WebSearch` `WebFetch` | `paperforge-scope-survey` · `paperforge-gather-{arxiv,web,recent}` · `trendforge-landscape-survey` · `trendforge-gather-{academic,industry,patents,news}` · `reviewforge-{search-protocol,search-database}` |
+| `reader` | read-extract · analyze · classify · appraise | — | `paperforge-read-extract` · `trendforge-read-extract` · `reviewforge-{data-extract,quality-appraise}` |
+| `curator` | dedup · filter · screen · normalize · cite-pack · cross-link | — | `reviewforge-prisma-screening` · *(다른 스킬엔 대개 없어 우리가 보강)* |
+| `synthesizer` | synthesize · outline · structure · summarize | — | `paperforge-synthesize-outline` · `trendforge-synthesize-trends` · `reviewforge-synthesize` |
 | `writer` | draft · write · compose · section | — | `paperforge-draft-section` · `trendforge-draft-section` |
-| `fact-checker` | fact-check · verify · evidence · recency · citation | `Bash`(게이트 스크립트 실행) | `paperforge-fact-check` · `trendforge-{evidence-critic,recency-check}` |
-| `reviewer` | review · critic · clarity · logic · style · bias | — | `paperforge-{logic-critic,style-edit}` · `trendforge-{clarity-check,bias-check}` · `specflow` **Design Review(신설)** |
+| `fact-checker` | fact-check · verify · evidence · recency · citation | `Bash`(게이트 스크립트 실행) | `paperforge-fact-check` · `trendforge-{evidence-critic,recency-check}` · `reviewforge-evidence-coverage-check` |
+| `reviewer` | review · critic · clarity · logic · style · bias | — | `paperforge-{logic-critic,style-edit}` · `trendforge-{clarity-check,bias-check}` · `reviewforge-{prisma-compliance-check,bias-balance-check,clarity-check}` · `specflow` **Design Review(신설)** |
 | `architect` ⚠신규 | architect · erd · diagram · wireframe · style-design | `Read,Write,Grep,Glob`(쓰기만·실행 없음) | `specflow-{architect,erd-designer,diagrammer,wireframer,style-designer}` |
 | `developer` ⚠신규 | backend-dev · frontend-dev · implement · build | **`Edit`** + `Bash` | `specflow-{backend-dev,frontend-dev}` |
 | `tester` ⚠신규 | e2e-test · run · regression · verify-by-execution | **`mcp__playwright__*`** + `Bash` | `specflow-e2e-tester` |
@@ -136,6 +144,16 @@ specflow는 task별(`/backend-task <N>`)로 구현한다. 이를 `per_item`으�
 ### ⚠️ 도메인이 다르면 policy 블록도 갈아끼운다
 `recency_policy`·`source_balance_policy`는 조사·집필 아키타입(A·B)의 정책이다. 웹개발에는 의미가 없어 `completion_policy`(체크박스 강제·E2E green·시나리오 커버리지)로 대체했다. **정책은 템플릿 소유**이므로 도메인마다 새로 정의하면 된다.
 
+### ⚠️ 이식한 게이트의 휴리스틱을 그대로 믿지 마라 — 픽스처로 때려봐야 안다
+**[발견: systematic-review 변환, 2026-08-04]** reviewforge의 `prisma_audit.py`는 27항목 각각에 대해 `키워드 or 절힌트`가 맞으면 **PARTIAL**을 줬다. 그런데 절 힌트는 대부분 `methods`·`results` 같은 흔한 제목이라 **어느 원고에나 맞는다.** 결과적으로 PROSPERO 등록·연구비·이해상충·근거 확실성처럼 **가장 자주 누락되는 항목**이 키워드가 통째로 없는데도 PARTIAL로 살아남아 게이트를 통과했다(픽스처로 해당 문구를 전부 지웠는데 `exit=0`).
+
+**해결**: `키워드가 없으면 NO`로 바꾸고, 절 힌트는 PARTIAL→YES로 **올리기만** 하게 했다. 같은 픽스처가 이제 `NO 6건 · exit=1`로 잡힌다.
+
+**교훈**: 이식은 복사가 아니다. **원본이 통과시키던 것을 통과시켜선 안 되는 경우**가 있으므로, 게이트는 반드시 **일부러 깨뜨린 픽스처**로 검증하라 — PASS 케이스만 보면 느슨한 게이트를 발견할 수 없다.
+
+### ⚠️ 수집 워커 분할 기준은 아키타입마다 다르다
+trend-report는 **산출 taxonomy**(source_type)로 나눴고(§5 위), systematic-review는 **데이터베이스별**로 나눴다. 후자는 각 DB가 서로 다른 문헌 모집단이라 검색 전략 분할이 곧 산출 분할이기 때문이다. 원칙은 하나다 — **게이트가 워커 산출을 그대로 검사할 수 있게 나눈다.**
+
 ### ⚠️ 중간 Sam 게이트의 승인 요약이 부실하다 → **[2026-08-04 해소]**
 `gate_keeper.gate_summary()`는 `upstream` 유무로 **진입/산출** 두 갈래만 나눴고, 산출 갈래는 `report.md`를 찾았다. 그래서 academic-paper의 중간 승인(stage 8, 대상=`outline.md`)은 산출 게이트로 오분류돼 요약이 파일 목록 나열로 떨어졌다.
 
@@ -148,8 +166,8 @@ specflow는 task별(`/backend-task <N>`)로 구현한다. 이를 `per_item`으�
 | 1 | trendforge | domain | 8-stage · agents 14 | ✅ **proven** (A) | `trend-report.yaml` | 0 |
 | 2 | paperforge | research | 8-stage · agents 12 | ✅ **draft** (B) | `academic-paper.yaml` | 0 |
 | 3 | specflow | domain | 12-step · agents 12 | ✅ **draft (D) · 실행가능** | `webapp-build.yaml` | **3 생성완료**(architect·developer·tester) |
-| 4 | reviewforge | research | 9-stage · agents 12 | ⬜ **다음** | — | 0 예상 |
-| 5 | litmonitor | research | 5-stage · agents 7 | ⬜ | — | 0 예상 |
+| 4 | reviewforge | research | 9-stage · agents 12 | ✅ **draft (B')** | `systematic-review.yaml` | 0 |
+| 5 | litmonitor | research | 5-stage · agents 7 | ⬜ **다음** | — | 0 예상 |
 | 6 | patentforge | domain | 8-stage · agents 11 | ⬜ | — | ? |
 | 7 | policyforge | domain | 9-stage · agents 14 | ⬜ | — | 0 예상 |
 | 8 | legalforge | domain | 8-stage · agents 13 | ⬜ | — | ? |
@@ -193,6 +211,13 @@ specflow는 task별(`/backend-task <N>`)로 구현한다. 이를 `per_item`으�
 | `bib_export.py` 이식 | ✅ `scripts/tools/bib_export.py` — **게이트가 아니라 산출 도구**라 `gates/`가 아닌 `tools/`에 뒀다(gate_keeper는 `gates/*.py`만 exit code로 판정). academic-paper Deliver body에서 호출 |
 | `gate_summary()` 중간 게이트 | ✅ 템플릿이 `approval_artifact:`로 승인 대상을 선언하고 gate_summary가 3분기(진입/중간/산출)로 갈린다. 산출 게이트도 아키타입별 파일명(report/draft/paper.md) 탐색으로 일반화 |
 | `lint_template.py` 분리 | ✅ 독립 CLI(`--all` 지원). 검사 로직은 `instantiate_template`에 두고 import — **단일 진실** 유지 |
+
+**systematic-review 변환에서 나온 것 (2026-08-04)**
+- ✅ `gates/prisma_counts.py`(PRISMA flow 카운트 항등식 + included 블록 수 + 배제사유 합계) ·
+  `gates/prisma_checklist.py`(PRISMA 2020 27항목 커버리지, **국문 키워드 추가**) 이식
+- ✅ `scripts/tests/test_gates.py` 신설(15종) — 게이트 판정이 조용히 느슨해지는 것을 막는다
+- **미이식**: `meta_analysis.py`(효과크기 통합 — 판정 아닌 산출) · `latex_export.py`(LaTeX 변환) ·
+  `papers_state.py`(큐 상태머신 — Kanban 이 대체). 메타분석은 필요해지면 `tools/`로 이식 검토
 
 **새 후속 과제** (다음 세션 이후)
 - `test_run.py`는 테스트를 **실행하지 않는다** — Tester가 남긴 `results.json`을 검사할 뿐이다. 게이트키퍼가 미션 코드를 임의 실행하면 임의 코드 실행 통로가 되기 때문. 자기보고 신뢰 구간이 남아 있으므로, CI 연동 등 **독립 실행 경로**가 생기면 교체 검토

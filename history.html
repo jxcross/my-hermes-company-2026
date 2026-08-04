@@ -25,6 +25,24 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#25 — reviewforge → 아키타입 B'(PRISMA 체계적 문헌고찰) · 이식 게이트의 느슨함 발견·수정</h2>
+    <div class="meta">2026-08-04 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "실미션은 전체 변환 후에 하나씩 해볼 것이다. reviewforge 변환하라."</div>
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li><b>reviewforge = 객관 게이트를 원래부터 갖고 있던 유일한 스킬</b>(<code>prisma_count_tracker.py</code>·<code>prisma_audit.py</code>). 둘 다 우리 규약(<code>--policy --sources --draft</code>)으로 이식 → <code>gates/prisma_counts.py</code>(PRISMA flow 항등식 3개 + included 블록 수 + 배제사유 합계) · <code>gates/prisma_checklist.py</code>(PRISMA 2020 27항목, <b>국문 키워드 추가</b>).</li>
+      <li><b>⚠️ 이식 게이트의 느슨함 발견·수정</b>: 원본 <code>prisma_audit.py</code>는 <code>키워드 or 절힌트</code>면 PARTIAL을 줬는데, 절 힌트가 대부분 'methods'·'results' 같은 흔한 제목이라 <b>어느 원고에나 맞는다</b>. 픽스처로 PROSPERO 등록·연구비·이해상충·근거확실성을 <b>전부 지웠는데도 exit=0</b>(통과)이었다. → <b>키워드 없으면 NO</b>로 바꾸고 절 힌트는 PARTIAL→YES로 올리기만 하게 수정. 같은 픽스처가 이제 NO 6건·exit=1로 잡힌다. <b>교훈: 이식은 복사가 아니다 — 원본이 통과시키던 것을 통과시키면 안 되는 경우가 있다.</b></li>
+      <li><b>4비평가 → 두 검증 지점 재배치</b>: evidence-coverage + PRISMA 카운트 → 6 Cross-Verify(fact-checker) · prisma-compliance(27항목) + bias-balance + clarity → 9 Independent Review(reviewer).</li>
+      <li><b>변환 판단</b>: reviewforge stage 5(데이터 추출)·6(질 평가)은 <b>둘 다 '논문 1편을 읽고 구조화'로 계약이 같고 원본도 같은 queue</b>를 쓴다 → 우리 stage 5 하나로 병합(shard 안 두 절) · 수집 워커는 <b>DB별</b> 분할(각 DB가 서로 다른 문헌 모집단이라 검색 분할이 곧 산출 분할 — trend-report의 source_type 분할과 다른 지점) · <code>source_type</code>을 <b>연구설계</b>(rct·observational·qualitative·review·grey)로 재정의 · recency 정책 대폭 완화(고전 배제는 그 자체가 선택 비뚤림).</li>
+      <li><b>미이식</b>: <code>meta_analysis.py</code>·<code>latex_export.py</code>(판정 아닌 산출) · <code>papers_state.py</code>(Kanban이 대체). <b>신규 profile 0개.</b></li>
+      <li><code>scripts/tests/test_gates.py</code> 신설(15종) — 게이트 판정이 조용히 느슨해지는 것을 막는 회귀 방어. docs/13 §2④·§3 매핑사전·§5 함정 2건·§6 대장·§7 갱신.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      <b>아키타입 B' 확보 — 4/20</b>(A·B·B'·D 전부 실행가능). 린터 4/4 통과. 테스트 <b>27+21+15 = 63종 통과</b>. 객관 게이트 <b>6종</b> 보유. 변환 1건이 또 결함을 잡았다(4연속). 다음 변환 = litmonitor(5-stage·agents 7). <b>라이브 미션은 전체 변환 후 하나씩</b>(Sam 지시).
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#24 — profile 3종 신설(11종) + 후속 과제 5건 완료(객관게이트 2종·중간승인·bib·린터 분리)</h2>
     <div class="meta">2026-08-04 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "3종 profile 추가하고, 후속 과제까지 수행하라"(docs/13 §7).</div>
