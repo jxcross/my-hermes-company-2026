@@ -190,7 +190,8 @@ def test_missing_profiles_dedups_and_keeps_order():
 
 def test_shipped_templates_are_all_runnable():
     """출하 템플릿 전부가 지금 바로 돌 수 있어야 한다(미등록 profile 0)."""
-    for name in ("trend-report", "academic-paper", "webapp-build"):
+    for name in ("trend-report", "academic-paper", "webapp-build",
+                 "systematic-review", "lit-monitor", "patent-spec", "policy-brief"):
         assert it.missing_profiles(it.load_template(name)) == [], name
 
 
@@ -204,6 +205,23 @@ def test_webapp_build_required_profiles_are_registered():
 def test_webapp_build_invariants_pass():
     """profile 이 없다는 것과 불변식 위반은 별개 — 구조 자체는 유효해야 한다."""
     assert it.check_invariants(it.load_template("webapp-build")) == []
+
+
+def test_sam_gate_and_fanout_marks_are_cumulative():
+    """policy-brief stage 9 는 Sam 게이트이면서 4워커 팬아웃이다. 표식을 elif 로 묶으면
+    협상 중 Sam 이 보는 DAG 에서 병렬이 사라진다(본문 주입은 되는데 그림에만 없다)."""
+    mm = it.render_mermaid(it.load_template("policy-brief"), "M-TEST")
+    s9 = next(l for l in mm.splitlines() if l.strip().startswith("s9["))
+    assert "🚦Sam" in s9 and "⇉4워커" in s9
+
+
+def test_policy_brief_double_gate_is_complete():
+    """이중 게이트 = 객관(Python) + LLM. 검증 stage 마다 둘 다 선언돼야 반쪽이 아니다."""
+    tpl = it.load_template("policy-brief")
+    verifiers = [s for s in tpl["stages"] if s.get("verifier")]
+    assert len(verifiers) == 2
+    for v in verifiers:
+        assert v["gate"]["objective"] and v["gate"]["llm"], v["id"]
 
 
 if __name__ == "__main__":

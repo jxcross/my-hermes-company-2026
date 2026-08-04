@@ -57,17 +57,17 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 
 | | 상태 |
 |---|---|
-| 변환 | **6/20** — A `trend-report`(**proven**) · B `academic-paper` · B' `systematic-review`(PRISMA) · D `webapp-build` · E `lit-monitor`(주기 실행 — 미션 간 지속 상태 `monitors/`) · F `patent-spec`(고지 강제). **A 외 전부 `draft`** |
-| **다음 변환 대상** | **policyforge**(9-stage · agents 14 · 신규 profile 0 예상) |
+| 변환 | **7/20** — A `trend-report`(**proven**) · B `academic-paper` · B' `systematic-review`(PRISMA) · D `webapp-build` · E `lit-monitor`(주기 실행 — 미션 간 지속 상태 `monitors/`) · F `patent-spec`(고지 강제) · G `policy-brief`(4포맷 동시 산출 + 3게이트). **A 외 전부 `draft`** |
+| **다음 변환 대상** | **legalforge**(8-stage · agents 13) |
 | profile | **11종** — 기존 8 + `architect`·`developer`·`tester`(아키타입 D 도입 시 신설) |
-| 객관 게이트 | **10종** `scripts/gates/` — recency·source_balance·doc_consistency·test_run·prisma_counts·prisma_checklist·seen_dedup·digest_shape·claim_consistency·patent_format |
+| 객관 게이트 | **13종** `scripts/gates/` — recency·source_balance·doc_consistency·test_run·prisma_counts·prisma_checklist·seen_dedup·digest_shape·claim_consistency·patent_format·evidence_grade·stakeholder_coverage·format_consistency |
 | 산출 도구 | 3종 `scripts/tools/` — bib_export·monitor_state·relevance_score |
-| 검증 | `python3 scripts/lint_template.py --all` · 테스트 83종(27 템플릿 + 21 게이트키퍼 + 35 게이트) |
+| 검증 | `python3 scripts/lint_template.py --all` · 테스트 **99종**(29 템플릿 + 21 게이트키퍼 + 49 게이트) |
 
 **Sam 지시:** 실미션은 **전체 변환을 마친 뒤 하나씩** 돌린다(변환 중에는 dry-run만).
 
-**변환의 교훈(§5 요약):** 이식은 복사가 아니다. **6건 변환에서 6건 모두 결함이 나왔다** — 게이트 겹침(불변식 우회)·검증자 부재·느슨한 체크리스트·"동작하는 척"하는 게이트(한국어 정규식 붕괴) 등. **이식한 게이트는 반드시 일부러 깨뜨린 픽스처로 FAIL을 확인하라.** PASS만 보면 아무것도 측정하지 않는 게이트를 발견할 수 없다.
+**변환의 교훈(§5 요약):** 이식은 복사가 아니다. **7건 변환에서 7건 모두 결함이 나왔다** — 게이트 겹침(불변식 우회)·검증자 부재·느슨한 체크리스트·"동작하는 척"하는 게이트(한국어 정규식 붕괴)·**docstring은 검사한다는데 코드는 안 하는 게이트**·병렬 산출물 부재 미검출 등. **이식한 게이트는 반드시 일부러 깨뜨린 픽스처로 FAIL을 확인하라.** PASS만 보면 아무것도 측정하지 않는 게이트를 발견할 수 없다. 또한 **이식 전에 우리가 이미 가진 게이트와 겹치는지 보라** — policyforge 하드게이트 3종 중 1종은 `source_balance`+`recency_check`와 같은 일이라 policy 블록으로 흡수했다.
 
 **⚠️ 보안 미결(변함없음)**: 진단 중 `SLACK_BOT_TOKEN` 값이 세션 로그에 노출됨 → **재발급(rotate) 권장**(Slack 앱 Regenerate → `.env` 갱신 → `docker compose up -d --force-recreate hermes-solomon hermes-gatekeeper`).
 
-**새 세션 시작 시:** `git log --oneline -6`(HEAD 근처: paperforge→specflow→profile3종→reviewforge→litmonitor→patentforge)과 `docker compose ps`(2개 Up)·`python3 scripts/lint_template.py --all` 로 상태 확인 → **`docs/13 §6` 대장**을 읽고 → 다음 대상(policyforge)부터 §2 레시피대로 진행.
+**새 세션 시작 시:** `git log --oneline -6`(HEAD 근처: specflow→profile3종→reviewforge→litmonitor→patentforge→policyforge)과 `docker compose ps`(2개 Up)·`python3 scripts/lint_template.py --all` 로 상태 확인 → **`docs/13 §6` 대장**을 읽고 → 다음 대상(legalforge)부터 §2 레시피대로 진행.

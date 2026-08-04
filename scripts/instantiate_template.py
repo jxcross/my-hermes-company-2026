@@ -271,13 +271,17 @@ def render_mermaid(tpl: dict, mid: str) -> str:
     stages = tpl["stages"]
     out = ["```mermaid", "graph TD"]
     for s in stages:
-        mark = ""
+        # 표식은 **누적**한다 — 한 stage 가 Sam 게이트이면서 팬아웃일 수 있다
+        # (policy-brief stage 9: 집필 개시 승인 + 포맷 4워커). elif 로 묶으면 협상 중
+        # Sam 이 보는 DAG 에서 병렬이 사라진다.
+        marks = []
         if s.get("sam_gate"):
-            mark = " 🚦Sam"
-        elif s.get("verifier"):
-            mark = " 🔍검증"
-        elif s.get("parallel"):
-            mark = f" {fanout_label(s)}"
+            marks.append("🚦Sam")
+        if s.get("verifier"):
+            marks.append("🔍검증")
+        if s.get("parallel"):
+            marks.append(fanout_label(s))
+        mark = (" " + " ".join(m for m in marks if m)) if marks else ""
         out.append(f'  s{s["id"]}["{s["id"]} {s["name"]}{mark}<br/>{s.get("profile","")}"]')
     for s in stages:
         for uid in s.get("upstream") or []:
@@ -291,9 +295,10 @@ def render_mermaid(tpl: dict, mid: str) -> str:
 def render_ascii(tpl: dict, mid: str) -> str:
     lines = [f"# {mid} — {tpl.get('display_name', tpl['name'])}"]
     for s in tpl["stages"]:
-        flag = "🚦Sam" if s.get("sam_gate") else ("🔍검증" if s.get("verifier") else "")
-        if not flag and s.get("parallel"):
-            flag = fanout_label(s)
+        flags = ["🚦Sam" if s.get("sam_gate") else ("🔍검증" if s.get("verifier") else "")]
+        if s.get("parallel"):
+            flags.append(fanout_label(s))   # 누적 — Sam 게이트 + 팬아웃 동시 가능
+        flag = " ".join(f for f in flags if f)
         ups = ",".join(str(u) for u in (s.get("upstream") or [])) or "-"
         gate = ""
         if s.get("gate"):

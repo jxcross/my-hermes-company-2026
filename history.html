@@ -25,6 +25,28 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#29 — policyforge → 아키타입 G(정책 브리프) · 이식 결함 5건 + 게이트 1종은 policy로 흡수</h2>
+    <div class="meta">2026-08-04 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "docs/13 §6 진행 대장 확인하고 policyforge 변환 진행하라."</div>
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li><b>원본 하드게이트 3종 중 1종은 이식하지 않았다</b>: <code>diversity_check.py</code>(카테고리별 최소 건수 + 최근 5년 60%)는 우리 <code>source_balance</code>+<code>recency_check</code>와 <b>하는 일이 같다</b>. 스크립트를 늘리는 대신 템플릿 <code>policy</code> 블록으로 흡수했다 — 게이트를 정책 주도로 만들어 둔 보상. <b>이식 전 중복 확인을 §2④ 절차에 추가.</b></li>
+      <li><b>객관 게이트 3종 신설</b>: <code>gates/evidence_grade.py</code>(GRADE 등급↔권고 정합) · <code>gates/stakeholder_coverage.py</code>(이해관계자 커버리지) · <code>gates/format_consistency.py</code>(포맷 간 권고 일치 + 분량).</li>
+      <li><b>⚠️ 이식 결함 ① 선언만 있고 코드엔 없는 검사</b>: 원본 docstring과 CLAUDE.md 모두 "모든 핵심 권고가 GRADE high/moderate 근거에서 유래"를 검증한다고 <b>선언</b>하지만, 코드는 "인용이 0건인가"만 본다. low 근거 하나로 쓴 권고가 통과한다. → 권고 절에 강근거 인용 1건 이상 요구.</li>
+      <li><b>⚠️ 이식 결함 ② 환각 인용 통과</b>: <code>grades.get(eid)</code>가 None(근거 목록에 없는 id)이면 low도 very-low도 아니라 조용히 넘어간다 — <b><code>e99</code>를 지어내도 PASS</b>. → 미상 id 인용을 FAIL로.</li>
+      <li><b>⚠️ 이식 결함 ③ 한국어 함정의 반대 얼굴</b>: <code>\b(e\d+)\b</code>·<code>\bO\d+\b</code>·<code>\bs1\b</code>이 조사 붙은 <code>e1을</code>·<code>O2를</code>·<code>s1의</code>에서 전부 실패 — 실측 <b>국문 문장에서 인용을 한 건도 못 읽는다</b>. patentforge에서는 거짓 PASS였는데 여기선 <b>거짓 FAIL까지 동시에</b> 난다(caveat·환각 검사 무력화 + "인용 0건" 오탐). → lookaround로 교체.</li>
+      <li><b>⚠️ 이식 결함 ④ 영문 기준 분량 규격</b>: 원본 <code>brief 1200~2400 words = 2~4쪽</code>은 영문 계산이다. 국문 A4 1쪽 ≈ 500~700 어절이라 <b>규격에 맞는 국문 브리프가 분량 미달로 반려</b>된다. → 국문 어절로 재보정 + 기준을 템플릿 policy로 이동.</li>
+      <li><b>⚠️ 이식 결함 ⑤ 병렬 산출물 부재 미검출</b>: glob 기반 검사라 워커가 죽어 <code>memo.md</code>가 없으면 <b>검사 대상에서 빠져 통과</b>한다. → SCOPE.md의 <code>formats:</code> 선언과 대조해 부재를 FAIL로(patent_format의 jurisdictions와 같은 패턴).</li>
+      <li><b>자체 도구 결함 1건 수정</b>: policy-brief stage 9는 <b>Sam 게이트이면서 4워커 팬아웃</b>인 첫 stage인데, 렌더러가 표식을 <code>if/elif</code>로 묶어 <b>DAG에서 병렬이 사라졌다</b>(본문 주입은 정상 — 협상 중 Sam이 보는 그림만 틀림). 표식 누적으로 수정 + 회귀 테스트.</li>
+      <li><b>구조 판단</b>: 원본에 없는 <b>수집 단계를 신설</b>(policyforge는 사용자가 문헌 지참 전제 / 우리는 <code>sources_cited</code> 불변식·균형 게이트가 있다). <b>근거 검증(7)을 옵션 설계(8) 전에</b> 배치 — 틀린 근거 위에 옵션을 세우면 4개 포맷을 통째로 다시 쓴다. 4 포맷 writer·4 비평가는 같은 계약이라 워커/두 검증지점으로 흡수 → <b>신규 profile 0개.</b></li>
+      <li><b>깨뜨린 픽스처 14케이스로 E2E 검증</b>(§5 원칙): 정상 3건 PASS + 고의 결함 11건 전부 <code>exit=1</code>. 단위 테스트 14종 추가.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      <b>아키타입 G 확보 — 7/20</b>. 린터 7/7. 테스트 <b>29+21+49 = 99종 통과</b>. 객관 게이트 <b>13종</b>. <b>변환 7건 연속 결함 발견</b>. 새 교훈 2건을 docs/13 §5에 기록: <b>docstring이 아니라 코드가 무엇을 세는지 읽어라</b> · <b>한국어에서는 문자 단위 가정(경계·토큰·분량)을 전부 다시 계산하라</b>(느슨해지는 쪽만이 아니라 빡빡해지는 쪽으로도 무너진다). 다음 변환 = legalforge.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#28 — 2026-08-04 세션 핸드오프 (변환 6/20 · Slack 복구 확인)</h2>
     <div class="meta">2026-08-04 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "이후 작업은 새로운 세션에서 이어서 할 것이다. 관련 파일들을 업데이트하라."</div>

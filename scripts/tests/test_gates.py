@@ -32,6 +32,9 @@ digest_shape = _load("digest_shape")
 seen_dedup = _load("seen_dedup")
 claim_consistency = _load("claim_consistency")
 patent_format = _load("patent_format")
+evidence_grade = _load("evidence_grade")
+stakeholder_coverage = _load("stakeholder_coverage")
+format_consistency = _load("format_consistency")
 
 
 # ── prisma_counts ────────────────────────────────────────────────────────
@@ -293,6 +296,113 @@ def test_scope_jurisdictions_from_frontmatter():
     with open(_os.path.join(d, "SCOPE.md"), "w", encoding="utf-8") as f:
         f.write("---\njurisdictions: [kipo, USPTO]\n---\n")
     assert patent_format.scope_jurisdictions(d) == ["kipo", "uspto"]
+
+
+# ── evidence_grade (아키타입 G · 원본 GATE 1) ─────────────────────────────
+def test_evidence_ref_survives_korean_particles():
+    """이식 중 발견한 결함의 회귀 방어 — 원본 `\\b(e\\d+)\\b` 는 조사가 붙은 `e1을`·`e2에서`
+    에서 무너져 **인용을 한 건도 못 읽었다**(caveat·환각 검사가 통째로 무력화된다)."""
+    t = "e1을 근거로 한다. e2에서 확인됐다. [e3]도 보라."
+    assert evidence_grade.EVIDENCE_REF_RE.findall(t) == ["e1", "e2", "e3"]
+
+
+def test_evidence_ref_does_not_match_inside_words():
+    """`phase1`·`stage12` 를 근거 인용으로 오인하면 환각 검사가 거짓 경보를 낸다."""
+    assert evidence_grade.EVIDENCE_REF_RE.findall("phase1 stage12 releve4") == []
+
+
+def test_grade_aliases_accept_korean():
+    assert evidence_grade.normalize_grade("높음") == "high"
+    assert evidence_grade.normalize_grade("Very-Low") == "very_low"
+    assert evidence_grade.normalize_grade("매우낮음") == "very_low"
+
+
+def test_parse_grades_reads_evidence_block(tmp=None):
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    p = _os.path.join(d, "evidence.md")
+    with open(p, "w", encoding="utf-8") as f:
+        f.write("# x\n\n```evidence\n- id: e1\n  grade: high\n- id: e2\n  grade: 낮음\n```\n")
+    assert evidence_grade.parse_grades(p) == {"e1": "high", "e2": "low"}
+
+
+def test_recommendation_scope_stops_at_next_heading():
+    """권고 절 밖의 강근거 인용이 권고를 대신 통과시켜선 안 된다."""
+    text = "## 배경\ne1 을 소개한다\n\n## 정책 권고\nO2 를 권고한다 e4\n\n## 부록\ne1 재인용\n"
+    scope = evidence_grade.recommendation_scope(text, ["권고"])
+    assert "e4" in scope and "e1" not in scope
+
+
+def test_caveat_scope_does_not_reach_other_paragraph():
+    """다른 문단 어딘가의 '잠정' 이 저근거 인용을 면제해 주면 게이트가 무의미해진다."""
+    text = "이것은 잠정 판단이다.\n\ne4 에 따라 즉시 도입한다.\n"
+    pos = text.index("e4")
+    scope = evidence_grade.caveat_scope(text, pos, pos + 2)
+    assert not evidence_grade.has_caveat(scope, evidence_grade.DEFAULT_CAVEAT_TERMS)
+
+
+# ── stakeholder_coverage (아키타입 G · 원본 GATE 3) ────────────────────────
+def test_stakeholder_id_ref_survives_korean_particles():
+    """원본 `\\b{sid}\\b` 는 `s1의` 에서 실패 — id 로만 지칭된 이해관계자가 미커버로 오판된다."""
+    assert stakeholder_coverage.id_ref_re("s1").search("s1의 이해는 비용이다")
+    assert not stakeholder_coverage.id_ref_re("s1").search("us12 는 무관하다")
+
+
+def test_parse_stakeholders_collects_fields():
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    p = _os.path.join(d, "context.md")
+    with open(p, "w", encoding="utf-8") as f:
+        f.write("```stakeholders\n- id: s1\n  name: 노동조합\n  interest: 안전\n"
+                "  position: 즉시 시행\n- id: s2\n  name: 협회\n```\n")
+    got = stakeholder_coverage.parse_stakeholders(p)
+    assert [s["id"] for s in got] == ["s1", "s2"]
+    assert got[0]["position"] == "즉시 시행"
+    assert "position" not in got[1]      # 공란은 게이트가 FAIL 로 잡는다
+
+
+def test_covered_in_matches_by_name_when_id_absent():
+    s = {"id": "s9", "name": "노동조합"}
+    assert stakeholder_coverage.covered_in(s, "노동조합의 입장을 반영했다", 2)
+    assert not stakeholder_coverage.covered_in(s, "관계 부처와 협의했다", 2)
+
+
+# ── format_consistency (아키타입 G) ────────────────────────────────────────
+def test_option_token_survives_korean_particles():
+    """원본 `\\bO\\d+\\b` 는 `O2를` 에서 무너져 **권고 일치 검사가 항상 FAIL** 이 된다."""
+    rx = format_consistency.re.compile(format_consistency.OPTION_RE_TMPL.format("O2"))
+    assert rx.search("O2를 권고한다")
+    assert not rx.search("O21 은 다른 옵션이다")
+
+
+def test_count_words_strips_frontmatter_and_code():
+    text = "---\na: 1\n---\n\n본문 어절 셋\n\n```\n코드 는 세지 않는다\n```\n"
+    assert format_consistency.count_words(text) == 3
+
+
+def test_default_word_ranges_are_korean_calibrated():
+    """원본은 영문 word 기준(brief 1200~2400 · report 9000~18000)이라 규격에 맞는
+    국문 문서를 분량 미달로 반려한다. 국문 어절 기준으로 되돌려 놓은 것의 회귀 방어."""
+    assert format_consistency.DEFAULT_WORD_RANGES["brief"][0] < 1200
+    assert format_consistency.DEFAULT_WORD_RANGES["report"][0] < 9000
+    assert format_consistency.DEFAULT_WORD_RANGES["memo"] == [350, 900]
+
+
+def test_scope_formats_from_frontmatter():
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    with open(_os.path.join(d, "SCOPE.md"), "w", encoding="utf-8") as f:
+        f.write("---\nformats: [brief, MEMO]\n---\n")
+    assert format_consistency.scope_formats(d) == ["brief", "memo"]
+
+
+def test_recommended_option_parsed():
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    p = _os.path.join(d, "options.md")
+    with open(p, "w", encoding="utf-8") as f:
+        f.write("# 옵션\n\nrecommended_option: O2\n")
+    assert format_consistency.recommended_option(p) == "O2"
 
 
 if __name__ == "__main__":

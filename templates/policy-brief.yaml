@@ -1,0 +1,181 @@
+# 아키타입 G — 정책 브리프(다중 포맷 정책 자료) (12단계)
+# 출처: other_projects/harness-templates/domain-harnesses/project_policyforge
+#       (.claude/skills/policyforge/SKILL.md 9-stage + agents 14종). 변환 절차: docs/13
+#
+# 이 아키타입의 특징은 **하나의 정책안을 4개 포맷으로 동시에 내보낸다**는 것이다
+# (브리프 2~4쪽 · 보고서 15~30쪽 · 메모 1쪽 · 인포그래픽). 그래서 다른 아키타입에 없는
+# 위험이 하나 있다 — **포맷마다 권고가 엇갈리는 것**. 병렬 워커가 각자 쓰므로 조용히 벌어진다.
+# `format_consistency` 게이트가 이것을 기계로 잡는다.
+#
+# 변환 판단(요약 — 상세·근거는 docs/13 §2·§5):
+#  - 원본의 **하드게이트 3종 중 2종만 이식**했다. Gate 2(diversity_check.py = 카테고리별
+#    최소 건수 + 최근 5년 60%)는 우리 `source_balance` + `recency_check` 와 **하는 일이 같다**.
+#    새 스크립트를 만들지 않고 `policy` 블록으로 흡수했다 — 정책 주도 게이트를 만들어 둔
+#    보상이다(docs/13 §2⑦).
+#  - 이식한 2종은 원본 코드에 **구멍이 있어 고쳤다**(§5): 환각 인용 통과 · 권고↔등급 미검사 ·
+#    한국어 조사에서 id 매칭 붕괴 · 영문 기준 분량 규격. `format_consistency` 는 추가 이식.
+#  - stage 6 의 4 워커(brief/report/memo/infographic)는 "같은 정책안을 포맷별로 쓴다"는
+#    **같은 계약**이라 profile 이 아니라 `parallel: workers` 로 흡수 → writer 1개.
+#  - stage 7 의 4 비평가를 우리 두 검증 지점으로 재배치:
+#      evidence-grade + source-diversity  → 10 Policy Review(reviewer) / 7 Evidence Verify
+#      stakeholder-coverage + format-consistency → 10 Policy Review(reviewer)
+#    신규 profile 0개.
+#  - **원본에 없던 수집 단계를 신설**했다. policyforge 는 사용자가 문헌을 들고 오는 전제라
+#    stage 2 가 곧바로 ingest 다. 우리는 `sources_cited` 불변식과 카테고리 균형 게이트가
+#    있으므로 scout 가 카테고리별로 모으고(2) curator 가 선별(3)한 뒤 reader 가 읽는다(4).
+#  - **검증 순서**: 근거 검증(7)을 **옵션 설계(8) 전에** 둔다. 틀린 근거 위에 옵션을 설계하면
+#    옵션·4개 포맷을 통째로 다시 짜야 한다(patent-spec 의 "관할 변환 전 청구항 검증"과 같은 논리).
+#  - `bundle_export.py`·`runs_state.py` 는 미이식(번들 조립 = Deliver 의 파일 작업 ·
+#    상태머신은 Kanban 이 대체).
+#
+# 스키마 규약은 templates/trend-report.yaml 머리말 참조.
+
+name: policy-brief
+category: policy
+display_name: 정책 브리프(다중 포맷)
+maturity: draft
+goal_kr: 정책 이슈에서 출발해 근거를 GRADE 등급으로 평가하고 국내 법제도·이해관계자 지형을 매핑한 뒤, 정책 옵션 비교를 거쳐 제출 가능한 4개 포맷의 정책 자료를 산출한다.
+invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop, sources_cited]
+
+policy:
+  # ── 원본 GATE 2(diversity_check.py)를 스크립트 없이 흡수한 두 블록 ──────────────
+  source_balance_policy:
+    # 정책 자료의 source_type = 발신 주체. 한쪽으로 쏠린 출처는 정책 자료의 대표 실패다
+    # (산업 자료만 보면 규제 완화로, 시민단체 자료만 보면 규제 강화로 기운다).
+    categories: [government, academic, industry, ngo, international]
+    min_per_category:
+      government: 3      # 부처·국회·감사원·통계청 등 공식 발행
+      academic: 5        # 동료심사 문헌
+      industry: 2        # 협회·기업 백서
+      ngo: 2             # 시민단체·노조·소비자단체
+      international: 0   # OECD·EU·해외 규제기관(권장이나 필수는 아니다)
+    hard_block_if_missing: true
+  recency_policy:
+    cutoff_year_offset: -5      # 원본 Gate 2 의 "최근 5년"
+    recent_ratio: 0.6           # 원본 Gate 2 의 "60%"
+    hard_block_year_offset: -15 # 15년 넘은 자료는 법제도가 바뀌었을 가능성이 높다
+    seminal_exceptions: true    # 제정 당시 입법 자료 등은 오래됐어도 핵심이다
+
+  # ── 이식한 GATE 1 ────────────────────────────────────────────────────────────
+  evidence_policy:
+    evidence_file: evidence.md
+    strong_grades: [high, moderate]
+    caveat_grades: [low, very_low]
+    caveat_terms: ["⚠️", "잠정", "예비적", "신중", "추가 연구", "추가 모니터링",
+                   "근거 부족", "제한적 근거", "preliminary", "low-grade evidence"]
+    min_refs_per_format: 1
+    recommendation_headings: ["권고", "정책 권고", "권고사항", "제언", "recommendation"]
+    # 인포그래픽은 시각 서사라 권고 절 제목이 없을 수 있다 — 나머지 셋에는 강제한다.
+    recommendation_required_in: [brief, report, memo]
+
+  # ── 이식한 GATE 3 ────────────────────────────────────────────────────────────
+  stakeholder_policy:
+    context_file: context.md
+    require_fields: [interest, position]   # 나열이 아니라 이해·입장을 적어야 분석이다
+    require_in: [report]                   # 전수 분석 문서에는 전원이 등장해야 한다
+    min_name_len: 2
+
+  # ── 추가 이식(포맷 간 정합성) ─────────────────────────────────────────────────
+  format_policy:
+    options_file: options.md
+    formats: [brief, report, memo, infographic]   # SCOPE.md frontmatter 의 formats 가 우선
+    require_recommended_in_all: true
+    # ⚠️ 국문 어절 기준(A4 1쪽 ≈ 500~700 어절). 원본의 영문 word 기준을 그대로 쓰면
+    #    규격에 맞는 국문 브리프가 분량 미달로 반려된다(docs/13 §5).
+    word_ranges:
+      brief: [700, 2800]        # 2~4쪽
+      report: [5000, 21000]     # 15~30쪽
+      memo: [350, 900]          # 1쪽
+      infographic: [0, 1200]    # 시각 서사 — 상한만
+
+stages:
+  - id: 1
+    name: Scoping
+    profile: default          # Solomon
+    sam_gate: true
+    upstream: []
+    body: "정책 이슈의 범위를 확정해 reports/<MID>/SCOPE.md 에 작성 — 정책 이슈(한 문장) · **대상 청중**(행정부 특정 부처 / 국회 위원회 / 지자체 중 택1, 문체와 분량이 여기서 갈린다) · 제출 마감 · 산출 포맷 · 다루지 않을 것(범위 밖) · 완료조건. ⚠️ **frontmatter 에 `formats: [brief, report, memo, infographic]` 을 반드시 선언**하라(객관 게이트가 이 목록으로 포맷 문서 존재를 검사한다 — 워커가 통째로 실패해도 잡아낸다). ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라. 오직 SCOPE.md 산출과 이 task 완료만."
+  - id: 2
+    name: Evidence Gather
+    profile: scout
+    upstream: [1]
+    parallel:
+      mode: workers
+      # ⚠️ 분할 기준은 '검색 전략'이 아니라 **발신 주체**다 — source_balance 게이트가
+      #    워커 산출을 그대로 카테고리별로 셀 수 있어야 한다(docs/13 §5).
+      workers: [government, academic, industry, ngo, international]
+      batch_size: 3          # 5워커 = 3 + 2, 2라운드
+      shard: "raw/sources.<worker>.yaml"
+      merge_to: "raw/sources.yaml"
+    body: "자기 카테고리의 근거 자료를 수집한다(government=부처·국회입법조사처·감사원·통계청 공식 발행 · academic=동료심사 문헌 · industry=협회·기업 백서 · ngo=시민단체·노조·소비자단체 · international=OECD·EU·해외 규제기관). 각 항목 id·title·authors(또는 발행기관)·published_year·venue·url·**source_type(=자기 워커명)**·status·claim_summary(핵심 주장 1~2문장) 기록. ⚠️ 정부 출처는 **실제 발행기관명과 보고서명**을 정확히 남겨라 — 정책 자료에서 출처 오기는 치명적이다. ⚠️ 자기 카테고리가 아닌 자료를 주워오지 마라(균형 게이트가 무의미해진다)."
+  - id: 3
+    name: Dedup·Relevance
+    profile: curator
+    upstream: [2]
+    body: "중복 제거(같은 보고서의 요약본·재배포본 병합) 후 정책 이슈와의 관련성으로 선별. status=selected/excluded 와 사유 기록. ⚠️ **카테고리 균형을 무너뜨리는 배제를 조심하라** — 관련성이 다소 낮아도 NGO·산업 자료를 통째로 걷어내면 편향된 자료가 된다. 배제 후 카테고리별 잔여 건수를 표로 남겨라."
+  - id: 4
+    name: Literature Read·GRADE
+    profile: reader
+    upstream: [3]
+    body: "선별 자료를 읽고 literature.md 에 정리 — 자료별 핵심 발견 · 연구설계(RCT·준실험·관찰·사례·의견) · 표본·맥락(국내 적용 가능성) · **GRADE 예비 등급**(high/moderate/low/very_low)과 그 근거. ⚠️ 등급은 **읽은 내용에 근거해** 매겨라 — 권위 있는 기관이 냈다고 high 가 아니다(정부 백서의 의견 부분은 low 다). 불확실하면 낮게 매기고 사유를 적어라."
+  - id: 5
+    name: Context Mapping
+    profile: scout
+    upstream: [4]
+    body: "국내 정책 환경을 context.md 에 매핑 — ① 현행 법령·규정(**정확한 법령명 + 조항**: '산업안전보건법 제4조' 형식) · ② 소관 부처·기관(공식 명칭) 및 권한 · ③ 관련 예산·기존 사업 · ④ 해외 사례. 그리고 **이해관계자 블록을 다음 형식으로 정확히 작성**하라(객관 게이트가 파싱한다):\n```stakeholders\n- id: s1\n  name: 중소 제조사\n  category: industry\n  interest: 규제 준수 비용 부담\n  position: 유예기간·지원금 요구\n```\n⚠️ `interest`(그들의 이해)와 `position`(표명한 입장)을 **반드시 채워라** — 비어 있으면 게이트가 자동 반려한다. 이름만 나열하는 것은 이해관계자 분석이 아니다."
+  - id: 6
+    name: Evidence Synthesize
+    profile: synthesizer
+    upstream: [5]
+    body: "문헌 발견을 **정책 함의**로 종합해 evidence.md 에 작성. 합의된 것과 논쟁 중인 것을 구분하고, 국내 맥락 적용 시 제약을 명시한다. **근거 블록을 다음 형식으로 정확히 작성**하라(객관 게이트가 파싱한다):\n```evidence\n- id: e1\n  grade: high\n  statement: 사전 신고제는 사고율을 유의하게 낮춘다\n  sources: [gov_kosha_2024, acad_kim_2023]\n  caveat: 국내 소규모 사업장 데이터는 부족\n```\n⚠️ 등급은 stage 4 의 예비 등급을 **종합해 확정**한다(단일 연구 low + 메타분석 high → 근거체 전체는 moderate 일 수 있다). ⚠️ 이 id 들이 정책 문서의 인용 대상이다 — 문서에 쓸 근거는 **전부 여기에 정의**돼야 한다(정의 없는 id 인용은 게이트가 환각으로 반려한다)."
+  - id: 7
+    name: Evidence Verify
+    profile: fact-checker      # ≠ synthesizer
+    verifier: true
+    upstream: [6]
+    gate:
+      objective: [source_balance, recency_check]
+      llm: fact_checker_verdict
+      draft: "reports/<MID>/evidence.md"
+    body: "① 각 근거 진술이 인용한 출처의 **실제 내용과 일치**하는가(요약 과정에서 결론이 강해지지 않았는가). ② **GRADE 등급이 연구설계에 비해 과대평가되지 않았는가** — 정책 자료에서 등급 부풀리기는 가장 위험한 오류다(low 근거 위의 권고가 확정처럼 읽힌다). ③ 법령명·조항·기관명이 정확한가(객관 게이트는 이것을 못 본다). ④ 출처 균형·최신성(객관 게이트가 셈하지만 **카테고리 오분류**는 네가 본다 — 산업 협회 자료가 academic 으로 들어가 있지 않은가). 끝에 VERDICT: PASS|FAIL. ⚠️ 여기서 잡지 못하면 틀린 근거가 옵션 설계와 4개 포맷으로 복제된다."
+  - id: 8
+    name: Options Design
+    profile: synthesizer
+    upstream: [7]              # 게이트: 7 PASS 시 게이트키퍼가 unblock
+    body: "정책 옵션 2~4개를 설계해 options.md 에 작성. 각 옵션마다 **O1·O2… 식별자** · 내용 · 소관 부처 · 필요한 법령 개정 여부 · 비용(추정 근거 명시) · 편익 · 위험과 완화책 · 이해관계자별 영향. **현상유지(O0) 를 반드시 비교군으로 포함**하라. 마지막에 권고안을 다음 줄로 명시한다(객관 게이트가 이 줄을 읽는다):\n`recommended_option: O2`\n⚠️ 권고 근거는 evidence.md 의 근거 id 로 달아라. ⚠️ 비용·편익 수치를 지어내지 마라 — 추정이면 추정임을 밝히고 산출 근거를 적는다."
+  - id: 9
+    name: Format Write
+    profile: writer
+    sam_gate: true             # 4개 포맷을 다시 쓰는 비용이 크다 — 집필 개시 전 Sam 승인
+    approval_artifact: "reports/<MID>/options.md"
+    upstream: [8]
+    parallel:
+      mode: workers
+      # 포맷마다 같은 계약(같은 정책안을 규격에 맞춰 쓴다) = profile 아님, 워커다.
+      workers: [brief, report, memo, infographic]
+      batch_size: 3            # 4워커 = 3 + 1, 2라운드
+      shard: "formats/<worker>.md"
+      merge_to: null           # 포맷 문서는 병합 대상이 아니다 — 각자 독립 제출물
+    body: "SCOPE.md 의 `formats` 에 **선언된 포맷만** 작성한다. 전 포맷 공통 규칙: 본문 한국어 · 모든 주장에 **근거 id(e1 …) 인용** · **권고는 승인된 recommended_option 과 일치**(엇갈리면 게이트가 반려한다) · 낮은 등급 근거(low/very_low)를 쓸 때는 **유보 표현을 같은 문단에** 넣어라('잠정', '추가 연구 필요', '⚠️'). 포맷별: **brief**=2~4쪽(이슈·핵심 발견·권고·이행 개요, `## 정책 권고` 절 필수) · **report**=15~30쪽(전체 맥락·근거 검토·옵션 상세 비교·이행 로드맵·**이해관계자 전원 분석**, `## 정책 권고` 절 필수) · **memo**=1쪽(이슈 1줄·핵심 사실 3개·옵션 표·권고 1문장+근거 2문장, `## 권고` 절 필수) · **infographic**=시각 서사 1쪽 + 차트 3~5개 명세(Mermaid 또는 표로 데이터까지). ⚠️ 분량 규격은 국문 어절 기준으로 기계 검사된다(brief 700~2800 · report 5000~21000 · memo 350~900 · infographic ≤1200)."
+  - id: 10
+    name: Policy Review
+    profile: reviewer          # ≠ writer
+    verifier: true
+    upstream: [9]
+    gate:
+      objective: [evidence_grade, stakeholder_coverage, format_consistency]
+      llm: reviewer_verdict
+      draft: "reports/<MID>/formats"
+    body: "독립 검토: ① **근거↔권고 정합성**(객관 게이트는 id 인용과 등급만 본다 — **인용한 근거가 그 주장을 실제로 뒷받침하는지**는 네가 읽는다). ② **이해관계자 취급의 공정성**(게이트는 등장 여부만 센다 — 반대 입장을 형식적으로 한 줄 처리하지 않았는가). ③ **포맷 간 논조 일관성**(게이트는 옵션 토큰 일치만 본다 — 브리프는 단정적이고 보고서는 유보적이지 않은가). ④ 청중 적합성(SCOPE.md 의 대상에 맞는 문체·상세도인가). ⑤ 정치적 중립성 — 특정 진영 논리로 읽히는 표현이 없는가. 끝에 VERDICT: PASS|FAIL."
+  - id: 11
+    name: Wiki Update
+    profile: curator
+    upstream: [10]            # 게이트: 10 PASS 시 unblock
+    body: "정책 영역 지형(법제도·소관 부처·이해관계자 지도·근거 등급 판단 사례)을 llm-wiki 에 반영(entities/concepts) + reflection + 재사용률 갱신. 같은 정책 영역의 다음 미션에서 context 매핑을 재사용할 수 있게 정리한다."
+  - id: 12
+    name: Deliver
+    profile: default          # Solomon
+    sam_gate: true
+    approval_artifact: "reports/<MID>/formats/brief.md"
+    upstream: [11]
+    body: "① 번들 조립 `reports/<MID>/policy-bundle/`: formats/*.md 전부 · evidence-table.md(근거 id·등급·출처·정책 함의 표) · stakeholder-map.md(이해관계자·이해·입장·영향) · references.bib(`python3 scripts/tools/bib_export.py --sources reports/<MID>/raw/sources.yaml --out reports/<MID>/policy-bundle/references.bib`) · submission-guide.md(제출처·양식·절차·담당 부서). ② 커밋 + git push(컨테이너 GITHUB_TOKEN 자격) + Slack 요약. ⚠️ Slack 요약에는 **권고 옵션 · 3게이트 판정 · 근거 등급 분포**를 포함하라. ⚠️ Slack 게시는 반드시 `hermes send --to slack:#mission-log \"<요약+커밋링크>\"`(Web API)로 하라 — 에이전트 slack 도구는 인바운드 Socket Mode 어댑터에 의존해 실패할 수 있다(현재 flapping)."
