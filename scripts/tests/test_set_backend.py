@@ -320,15 +320,23 @@ def test_apply_switches_every_target_and_show_agrees():
 
 
 def test_round_trip_returns_to_original_codex_placement():
-    """★ 8/09 복귀 경로 — 되돌린 뒤 원래 배치와 같아야 한다."""
+    """★ 복귀 경로 — 되돌린 뒤 **배치표와** 같아야 한다.
+
+    ⚠️ 모델명을 리터럴로 박지 않는다. 이 테스트가 보려는 성질은 "왕복이 손실 없는가"지
+       특정 모델명이 아니다. 리터럴을 박으면 배치를 바꿀 때마다 **성질과 무관하게**
+       깨져서, 고치는 사람이 테스트를 배치표에 맞춰 수정하는 습관이 든다
+       (2026-08-05 (3) 전 티어 gpt-5.5 단일화에서 실제로 이 테스트만 깨졌다).
+    """
     d = _repo()
     sb.main(["--backend", "ollama", "--repo-root", d])
     sb.main(["--backend", "codex", "--repo-root", d])
     state = sb.inspect(d)
     assert state["active"] == "codex" and state["consistent"], state["active"]
     by_profile = {r["profile"]: r for r in state["rows"]}
-    assert by_profile["scout"]["model"] == "gpt-5.6-terra"
-    assert by_profile["fact-checker"]["model"] == "gpt-5.6-sol"
+    tier_of = sb.profile_of_tier()
+    for name, row in by_profile.items():
+        want = sb.BACKENDS["codex"]["models"][tier_of[name]]
+        assert row["model"] == want, f"{name}: {row['model']} != {want}"
 
 
 def test_detects_mixed_state():

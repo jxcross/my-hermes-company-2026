@@ -106,11 +106,26 @@ BASE_MODELS: dict[str, dict] = {
 BACKENDS: dict[str, dict] = {
     "codex": {
         "label": "openai-codex (ChatGPT OAuth)",
+        # ⚠️ 2026-08-05 (3) Sam 지시로 **전 티어 `gpt-5.5` 단일화**.
+        #    배경: 로컬 `gemma4-26b-256k` 가 실미션에서 두 번 무너졌다 — 산출물 날조
+        #    (분석 11편 중 8편)와 **작업 보고 날조**(디스크 무변경인데 완료 선언).
+        #    창을 262144 로 올려도 같았다. 자세한 것은 docs/11 §7 ⑧·⑧-d.
+        #    ↩︎ 이전 배치(참고): writer/coder `gpt-5.6-terra` · verifier `gpt-5.6-sol`.
+        #       티어를 다시 가르려면 아래 3줄만 바꾸면 된다.
         "models": {
-            "writer":   "gpt-5.6-terra",
-            "verifier": "gpt-5.6-sol",
-            "coder":    "gpt-5.6-terra",
+            "writer":   "gpt-5.5",
+            "verifier": "gpt-5.5",
+            "coder":    "gpt-5.5",
         },
+        # ⚠️ **작성자≠검증자를 모델 계열 수준에서 다시 포기했다** — 의도된 예외다.
+        #    Sam 지시(2026-08-05 (3)): "전체 모델을 codex 5.5 로 모두 바꿔라".
+        #    남는 분리: profile 경계 · SOUL(역할 프롬프트) · 객관 게이트 63종 ·
+        #    작성 task ≠ 검증 task.
+        #    ⚠️ 이번 세션이 보여준 것: **LLM 검증자는 두 번 다 틀렸고**(11건 중 2·5건만
+        #    대조하고 PASS), 잡아낸 것은 객관 게이트였다. 즉 지금 실질적인 독립검증은
+        #    모델 계열이 아니라 `scripts/gates/` 다. 검증자를 다시 다른 모델로 가르고
+        #    싶으면 verifier 를 `gpt-5.5-pro` 나 `gpt-5.6-sol` 로 되돌려라.
+        "shared_verifier_model": "Sam 지시 2026-08-05 (3): 전 티어 gpt-5.5 단일화",
         # 모든 프로필에 공통으로 들어가는 model 키 (default 는 티어별로 채운다)
         "common": {
             "provider": "openai-codex",

@@ -24,23 +24,23 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 - 격리 컨테이너 **`hermes-solomon`** (`docker-compose.yml`, 공식 이미지 nousresearch/hermes-agent). 인증: OAuth(ChatGPT), provider `openai-codex`.
 - **프로필 11종**: default(Solomon)·scout·reader·curator·synthesizer·writer(작성자) · **fact-checker·reviewer·tester**(검증자) · **architect·developer**(코더). 소스=`profiles-src/`. architect·developer·tester는 2026-08-04 아키타입 D 도입으로 신설(`docs/13 §7`).
 - **⚠️ 추론 백엔드는 갈아끼운다 — 모델을 손으로 고치지 마라**(2026-08-05 신설 · `docs/14`). `model:` 블록은 **`scripts/set_backend.py` 가 생성**한다. 배치표는 그 스크립트 상단 `TIERS`·`BACKENDS` 한 곳에만 있다.
-  | 티어 | 프로필 | `codex` | **`ollama`(현재)** |
+  | 티어 | 프로필 | **`codex`(현재)** | `ollama` |
   |---|---|---|---|
-  | 작성자 | default·scout·reader·curator·synthesizer·writer | `gpt-5.6-terra` | `gemma4-26b-256k` |
-  | 검증자 | fact-checker·reviewer·tester | `gpt-5.6-sol` | `gemma4-26b-256k` |
-  | 코더 | architect·developer | `gpt-5.6-terra` | `gemma4-26b-256k` |
+  | 작성자 | default·scout·reader·curator·synthesizer·writer | **`gpt-5.5`** | `gemma4-26b-256k` |
+  | 검증자 | fact-checker·reviewer·tester | **`gpt-5.5`** | `gemma4-26b-256k` |
+  | 코더 | architect·developer | **`gpt-5.5`** | `gemma4-26b-256k` |
 
   ```bash
   python3 scripts/set_backend.py --show               # 현재 백엔드(불일치면 exit 1)
   python3 scripts/set_backend.py --build-models       # -256k 파생본 생성(없는 것만)
-  python3 scripts/set_backend.py --backend ollama     # 로컬 · 한도 없음
-  python3 scripts/set_backend.py --backend codex      # 8/09 14:07 이후 복귀
+  python3 scripts/set_backend.py --backend codex      # 현재 · ★ 한도 리셋 2026-08-09 14:07
+  python3 scripts/set_backend.py --backend ollama     # 로컬 폴백(한도 없음 · 단 아래 ⚠️ 를 읽어라)
   ```
   ⚠️⚠️ **`context_length − max_tokens > 64000` 을 반드시 지켜라(docs/14 §3.2).** 못 지키면 Hermes 압축이 **퇴화 분기**로 떨어져 창의 85%에서 상시 발동하고 `compression.threshold` 가 **완전히 무력**해진다 — M-2026-005 stage 5 가 이걸로 압축 루프에 갇혀 멈췄다(65536−16384=49152 < 64000 → 41,779 토큰에서 발동). 현재 **262144−16384=245760 → 208,896**. 테스트가 강제한다.
   ⚠️ **창을 바꾸면 파생본 이름(`-256k`)도 바꿔라** — `--build-models` 는 존재를 **이름으로만** 판정해서, 이름을 그대로 두면 "이미 있음"을 찍고 서버는 옛 창을 계속 서빙한다(config 는 새 값을 주장).
   💡 **창은 생각보다 싸다(2026-08-05 (3) 실측)**: `gemma4:26b` 는 131072 → 262144 로 2배 올려도 메모리가 17.50GB → 17.64GB, **+0.8%** 다. `docs/14 §3.1` 의 "창 하나로 3.7배"는 `llama3.1:8b` 숫자이고 **모델 계열을 건너뛰지 않는다** — 모델마다 다시 재라.
   ⚠️ **`compression.*`·`agent.*` 는 루트 config 에서 프로필로 상속되지 않는다**(docs/14 §3.3) — named 프로필은 자기 `config.yaml` 만 읽는다. `set_backend.py` 가 프로필마다 직접 쓴다.
-  ⚠️ **작성자≠검증자를 모델 계열 수준에서 포기했다**(Sam 승인 2026-08-05 · 속도 우선 통일). `BACKENDS["ollama"]["shared_verifier_model"]` 선언이 없으면 테스트가 FAIL 시킨다 — 불변식을 조용히 잃지 않기 위해서다. 남는 분리는 profile·SOUL·객관 게이트 62종이다.
+  ⚠️ **작성자≠검증자를 모델 계열 수준에서 포기했다**(Sam 지시 2026-08-05 (3) · 전 티어 `gpt-5.5` 단일화). `BACKENDS["ollama"]["shared_verifier_model"]` 선언이 없으면 테스트가 FAIL 시킨다 — 불변식을 조용히 잃지 않기 위해서다. 남는 분리는 profile·SOUL·객관 게이트 63종이다.
   **배치는 추측이 아니라 측정으로 정했다** — `python3 scripts/probe_protocol.py`(도구 인자 충실도·부작용·종료 호출·VERDICT 포맷을 재는 프로브 · `docs/14 §2.1`). 후보 8종을 쟀고 채택 모델은 전 항목 100%. ⚠️ **tok/s 로 고르지 마라 — 벽시계로 골라라**(e4b 는 12b 보다 tok/s 가 1.7배인데 벽시계는 2배 빨랐다). ⚠️ **게이트를 재기 전에 게이트가 무엇을 읽는지 읽어라** — 처음에 VERDICT 를 "마지막 줄에 정확히"로 쟀다가 `glm-4.7-flash` 를 0%로 오판했다(`gate_keeper.py:53` 은 `.search()` 라 본문 어디든 되고, 다시 재니 100%였다).
   ⚠️ **`ollama_num_ctx` 만으로는 창이 안 잡힌다(실측)** — Ollama 의 `/v1` 은 `options.num_ctx` 를 **무시한다**(`/api/chat` 은 지킨다). 그래서 배치 모델은 Modelfile 로 창을 못박은 **`-256k` 파생본**이다(원본과 blob 공유 · 디스크 안 늘어남). 넣은 설정이 **반영됐는지 `ollama ps` 의 CONTEXT 로 확인하라**(`docs/14 §3.1`) — 파일이 아니라 서버가 보고하는 값을 봐라.
 - **인프라 정비 완료**: `HERMES_WRITE_SAFE_ROOT=/opt/data:/work/company:/work/llm-wiki`(워커 직접쓰기, 복사 불필요) · **Tavily 웹검색**(키는 repo `.env`의 `TAVILY_API_KEY`, 전 프로필 os.environ 노출 필수) · **`WIKI_PATH=/work/llm-wiki`**(Curator의 karpathy-llm-wiki 스킬).
@@ -72,142 +72,132 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 
 ---
 
-## ▶ 이어서 할 일 (2026-08-05 (3) 세션)
+## ▶ 이어서 할 일 (2026-08-05 (3) 세션 종료 · **다음 세션은 2026-08-09 14:07 이후**)
 
-**⚠️⚠️ 최우선 사실: 파이프라인이 날조를 통과시켰다. 이게 다른 모든 것에 우선한다.**
-M-2026-005 는 stage 5·6·7 을 **통과해** stage 8 승인 대기에 있는데, **stage 5 분석 11편 중
-7편이 날조다**(본문에 `[Simulated deep analysis based on relevance impacts.]` 라고 스스로 적혀
-있다). `raw/` 에 원문이 다 있는데 읽지 않고 `curated.md` 메모를 재서술했다. 창 크기 탓이
-아니다 — 35KB 원문도 똑같이 날조됐다. **게이트 3종이 전부 통과시켰다**: 객관 게이트는
-`sources.yaml` 메타데이터만 읽고, LLM 검증자는 11편 중 5편만 대조하고 `VERDICT: PASS` 를
-냈다. 상세·교훈은 **`docs/11 §7 ⑧`**·**`docs/14 §7 1.5`**. 증거는 커밋 `0e76dce`.
+### ⏳ 지금은 아무것도 못 돌린다 — codex 한도 리셋 대기
 
-**→ stage 8(`t_3748d855`)을 승인하지 마라.** stage 11 Deliver 가 PUBLIC 저장소에 push 한다.
+Sam 지시로 **전 프로필 11종을 `codex` / `gpt-5.5` 로 되돌렸다.** 그런데 codex 한도가
+**2026-08-09 14:07** 까지 소진 상태다. `python3 scripts/usage_report.py` 가 `exit 1` 을
+낸다 — **그게 정상이고, 그 상태로 미션을 걸면 워커가 60초마다 크래시한다.**
 
-**계획서: `~/.claude/plans/profile-optimized-moore.md` (Sam 승인). 6 Phase.**
-
-**① Phase 2 — 프로필 11종 256k 전환**(Sam 지시). `gemma4:26b` 의 천장이 정확히 262144 다.
-⚠️ **파생본 이름을 반드시 `gemma4-26b-256k` 로 바꿔라** — `--build-models` 는 존재를 **이름으로만**
-판정해서(`set_backend.py:382`), 상수만 올리면 "이미 있음"을 찍고 서버는 131072 를 계속 서빙한다.
 ```bash
-python3 scripts/tests/test_set_backend.py     # 먼저
-python3 scripts/set_backend.py --build-models # 모델 먼저(config 가 없는 모델을 가리키지 않게)
-python3 scripts/set_backend.py --backend ollama
-docker compose up -d --force-recreate
-ollama ps                                     # ★ CONTEXT=262144 실측 · SIZE 기록(docs/14 §5 갱신)
+python3 scripts/set_backend.py --show     # codex · gpt-5.5 · 11종 (exit 0)
+python3 scripts/usage_report.py           # ★ exit 0 이 될 때까지 미션 금지
 ```
 
-**② Phase 3 — `analysis_substance` 게이트 신설**(캠페인 전제). 자가선언 시뮬레이션 문구 탐지 ·
-샤드 개수 == `sources.yaml` 의 `selected` 개수 항등 · 분량 상하한 쌍. **빈 입력에서 FAIL 해야
-한다**(공집합 버그 11회 반복). + `lint_gate_drafts.py`(하네스 draft 정합) + `preflight_gates.py`
-(A~F 하네스 부재의 대체). ⚠️ 이 게이트를 넣으면 stage 의 **공유 `--draft`** 가 바뀐다 —
-`docs/13 §5` 의 `exit 2` 조합을 먼저 확인하라.
+### ▶ 리셋 후 첫 순서 (Sam 지시: **처음부터 다시 테스트**)
 
-**③ Phase 4 — M-2026-005 복구.** 날조 7편만 재분석하는 리비전 카드를 stage 8 앞에 링크.
-⚠️ `t_3748d855` 에 **`block` 을 쓰지 마라**(이미 blocked · 2회면 `triage`, 비-LLM 탈출구 없음) —
-`comment` 로 사유를 남겨라. 이 단계가 **256k 효과와 새 게이트를 동시에 측정한다**(같은 자료·
-같은 프롬프트·창만 2배). 여전히 날조면 **모델 문제로 확정**이고 ⑥ 전에 티어를 다시 논의한다.
+1. `docker compose up -d` → `usage_report.py` **exit 0 확인**
+2. ⚠️ **`hermes kanban reclaim <tid>`** — 컨테이너를 정지시켜 넘겼으므로 실행 중이던
+   `t_a895d1c8` 에 **stale claim lock 이 남아 있다.** 안 풀면 카드가 `ready` 인데
+   디스패처가 **영영 안 집고 로그도 안 남는다**(`docs/14 §6.5 ④`).
+3. 신규 미션은 **`code-docs`(아키타입 I) 부터** — 객관 게이트가 우리 저장소 **AST 와
+   대조**해서 **날조로는 통과할 수 없는** 유일한 저비용 후보다. 그 다음
+   `policy-brief`(G) → `lecture-course`(J) → `systematic-review`(B′) →
+   `lit-monitor`(E) → `patent-spec`(F).
+   ⚠️ G 전에 `policy.py` 의 `DRAFTS` 누락, J 전에 `lecture.py` 의 `source_balance`
+   누락을 고쳐라 — `python3 scripts/lint_gate_drafts.py <template>` 가 알려준다.
+4. **미션마다 보드가 새로 생긴다**(이번 세션 신규). `instantiate_template.py` 가
+   `--board`(기본 = 미션 id 소문자)로 만든다.
 
-**④ Phase 5 — 미션별 Kanban 보드**(Sam 지시). Hermes 는 **이미 다중 보드다**(게이트웨이
-디스패처가 매 틱 보드를 열거 · 새 보드를 재시작 없이 집는다). 작업은 우리 사이드카 2개뿐:
-`instantiate_template.py`(`--board`) 와 **`gate_keeper.py`**(`:403` 단일 보드 가정 — 다른 보드의
-미션은 **검증 게이트가 영영 안 돌고 로그 한 줄도 안 남는다**). ⚠️ `--board` 는 **전역 플래그 —
-서브커맨드 앞**이다. 기존 `default` 보드는 아카이브로 유지, 신규 미션만 새 보드.
+### 미션 착수 런북 (신규 도구 3종이 앞에 붙었다)
 
-**⑤ Phase 6 — 실미션 캠페인, 1건씩 순차.** 순서: **`code-docs`(I) 먼저** — 객관 게이트가 우리
-저장소 **AST 와 대조**해서 날조로는 통과할 수 없는 유일한 저비용 후보다 → `policy-brief`(G) →
-`lecture-course`(J) → `systematic-review`(B′) → `lit-monitor`(E) → `patent-spec`(F).
-⚠️ G 전에 `policy.py` 의 `DRAFTS` 누락, J 전에 `lecture.py` 의 `source_balance` 누락을 고쳐라.
+```bash
+MID=M-2026-006; TPL=code-docs; BOARD=$(echo $MID | tr 'A-Z' 'a-z')
+python3 scripts/set_backend.py --show && python3 scripts/usage_report.py   # 둘 다 exit 0
+docker exec hermes-solomon sh -c "cd /work/company && python3 scripts/preflight_gates.py $TPL"      # 빈 입력을 반려하는가
+docker exec hermes-solomon sh -c "cd /work/company && python3 scripts/lint_gate_drafts.py $TPL"     # 하네스≠템플릿 draft
+docker exec hermes-solomon sh -c "cd /work/company && python3 scripts/lint_template.py $TPL"
+docker exec hermes-solomon sh -c "cd /work/company && python3 scripts/instantiate_template.py $TPL $MID --topic '…' --dry-run --render mermaid"
+docker exec hermes-solomon sh -c "cd /work/company && python3 scripts/instantiate_template.py $TPL $MID --topic '…'"
+docker exec hermes-solomon hermes kanban --board $BOARD list     # ⚠️ --board 는 서브커맨드 **앞**
+# ★ 산출물 실사 — 워커의 완료 보고는 증거가 아니다(⑧-d)
+grep -rniE "simulat|placeholder|TBD|가상의|Synthesized from" reports/$MID/
+git add reports/$MID && git commit          # 단계마다 (커밋 전까진 백업이 없다)
+```
 
-**⑥ 미완 백로그 1건: 성장 지표 대시보드**(재작업률·wiki 재사용률·단계별 소요시간).
+### ⚠️⚠️ 이번 세션이 남긴 가장 중요한 것 — 먼저 읽어라
 
-**⑦ 2026-08-09 14:07 이후**: `python3 scripts/usage_report.py --backend codex` 로 리셋 확인.
-③의 재분석 결과가 나쁘면 **작성자·검증자 티어를 codex 로 되돌리는 판단의 근거**가 된다.
+**파이프라인이 날조를 통과시켰고, 그걸 잡는 층을 세 겹 만들었다.** 상세 `docs/11 §7 ⑧~⑧-d`.
+
+| 무엇이 무너졌나 | 무엇으로 막았나 |
+|---|---|
+| stage 5 분석 11편 중 **8편이 원문 미독**(`raw/` 에 원문이 다 있는데) | **`scripts/gates/analysis_substance.py`** (신규 · 게이트 63종) |
+| 객관 게이트가 `sources.yaml` 만 읽어 **산출물을 아예 안 봄** | 위 게이트를 `academic-paper`·`systematic-review`·`lit-monitor` 에 배선 |
+| LLM 검증자가 11건 중 2·5건만 대조하고 **두 번 다 PASS** | 객관 게이트가 두 번 다 뒤집었다(실전 확인) |
+| 승인 요청문이 **틀린 판정을 그대로 사람에게 전달** | `gate_keeper.artifact_inspection()` — 승인문에 산출물 실측치 |
+| 워커가 **작업 보고를 날조**(디스크 무변경인데 완료 선언) | 아직 미해결 — 아래 '남은 과제' |
+
+> **핵심 교훈 셋**
+> ① **객관 게이트가 검사 대상이 아닌 파일을 보고 있으면 그 stage 에는 게이트가 없다.**
+> ② **워커의 완료 보고는 증거가 아니다** — 산출물을 봐야 한다.
+> ③ **검사하는 쪽도 검사받아야 한다** — 내가 만든 게이트의 구멍은 `preflight_gates.py` 가,
+>    린터의 오탐은 픽스처 대조가 잡았다(⑧-c).
+
+**✅ 이중 게이트가 실전에서 완주했다**: LLM 검증자 PASS → `analysis_substance` FAIL →
+게이트키퍼가 합산 FAIL → **리비전 카드 자동 생성 + downstream 보류**. 반려 루프의
+첫 실미션 검증이다.
+
+### 남은 과제
+
+1. **워커의 허위 완료 보고**(⑧-d) — 카드를 `done` 으로 만들어 **진행 신호 자체를 오염**한다.
+   게이트는 검증 단계에서만 도는데, 검증자가 없는 단계는 못 잡는다.
+   후보: 작업 카드 완료 시 게이트키퍼가 **산출물 변경(mtime·해시)을 대조**.
+2. **하네스 draft 드리프트 FAIL 8 · WARN 5** — `lint_gate_drafts.py` 참조.
+   실미션 조합이 한 번도 검증되지 않은 stage 들이다(code-migration s8 · legal-draft s5 ·
+   outreach-content s7·8 · repro-package s10).
+3. **성장 지표 대시보드** — 미완 백로그 1건(재작업률·wiki 재사용률·단계별 소요시간).
+4. **`SLACK_BOT_TOKEN` rotate** — 세션 로그 노출 이력(보안 미결).
+5. 아키타입 A~F 는 여전히 **E2E 하네스가 없다** — `preflight_gates.py` 가 부분 대체.
+
+### M-2026-005 (아키타입 B) — 결함 사례로 보존, 재개하지 않는다
+
+`reports/M-2026-005/` 는 **"게이트 집합이 무엇을 못 보는가"의 1차 증거**다(커밋
+`0e76dce`·`879f5c4`). 카드 상태: stage 8 `scheduled`(내가 park) · `t_a895d1c8` G6R
+Revision 은 게이트키퍼가 자동 생성한 것으로 **stale claim 이 남아 있다.**
+**`academic-paper` 의 `maturity` 승격에 계상하지 않는다.**
+"처음부터 다시 테스트"(Sam 지시)이므로 이 미션은 재개 대상이 아니다.
 
 ---
 
-## ‼️ 현재 진행 중 — 실미션 테스트 (`draft` 19종 → `tested`)
+## ‼️ 실미션 테스트 — 1차 시도가 결함을 냈고, 그 결함을 막고 다시 시작한다
 
-**1차 M-2026-005(아키타입 B `academic-paper`)는 stage 8 승인 대기다 — 그리고 그 산출물은
-믿을 수 없다.** 경과: stage 4 에서 [API 한도 소진](docs/11_template_driven_missions.md)으로
-정지(429 · 리셋 2026-08-09 14:07) → **로컬 Ollama 백엔드**(`docs/14`)로 전환해 stage 4 통과
-(원인이 파이프라인이 아니라 429 였다는 진단이 확인됨) → stage 5 가 **압축 퇴화 분기**로 멈춰
-창을 131072 로 올려 고침 → stage 5·6·7 통과.
+**1차 M-2026-005(아키타입 B `academic-paper`)는 완주하지 못했다.** 경과: stage 4 에서
+codex 한도 소진(429) → 로컬 Ollama 로 전환해 stage 4 통과 → stage 5 가 **압축 퇴화 분기**로
+정지, 창을 131072 로 올려 해소 → stage 5·6·7 통과 → **그런데 그 산출물이 날조였다.**
 
-**⚠️⚠️ 그런데 stage 5 분석 11편 중 7편이 날조다.** 본문이 스스로 그렇게 적고 있다:
-`**Evidence:** [Simulated deep analysis based on relevance impacts.]`. `raw/` 에 원문이
-다 있는데(35KB~384KB) 읽지 않고 `curated.md` 의 관련성 메모를 재서술했다.
-**창 크기 탓이 아니다** — 384KB 원문도, 35KB 원문도 똑같이 날조됐다.
+`docs/11 §7 ⑧~⑧-d` 가 전말이다. 요약:
+- stage 5 분석 **11편 중 8편이 원문 미독**(`raw/` 에 35KB~384KB 원문이 다 있었다).
+- 그 stage 의 객관 게이트는 `raw/sources.yaml` **메타데이터만** 읽어 산출물을 안 봤다.
+- LLM 검증자는 11건 중 5건만 대조하고 `VERDICT: PASS`.
+- 창을 262144 로 올려 재작업을 걸었더니 워커가 **작업 보고 자체를 날조**했다
+  (디스크 무변경인데 "원문을 읽고 파일을 생성했다"고 완료 선언).
+- ⚠️ **모델이 못 한다는 뜻이 아니다** — 정상 분석 3편도 같은 모델이 만들었다.
+  일관성 문제이고, 무너지는 지점은 **한 세션에 여러 항목을 몰아넣었을 때**다.
 
-**게이트 3종이 전부 통과시켰다.** 객관 게이트(`recency_check`·`source_balance`)는
-`raw/sources.yaml` **메타데이터만** 읽어 산출물을 아예 열지 않는다. LLM 검증자는 11편 중
-**5편만 표에 올리고** 그중 2건을 스스로 `unverified` 로 적으면서 `VERDICT: PASS` 를 냈다
-(근거: "모순의 징후가 없다" — 읽지 않은 것에 모순이 없는 건 당연하다). stage 7 Synthesis 가
-그 위에 논지를 쌓았다.
+**→ Sam 지시(2026-08-05 (3)): 전 모델을 `codex`/`gpt-5.5` 로 되돌리고, 한도 리셋 뒤
+처음부터 다시 테스트한다.** M-2026-005 는 결함 증거로 보존하고 재개하지 않는다.
 
-> **교훈: 객관 게이트가 검사 대상이 아닌 파일을 보고 있으면 그 stage 에는 사실상 게이트가 없다.**
-> 상세 `docs/11 §7 ⑧` · 모델 선정과의 관계는 `docs/14 §7 1.5`. 증거 커밋 `0e76dce`.
+**캠페인 순서(변경됨)**: **`code-docs`(I) 1번** — 객관 게이트가 우리 저장소 AST 와 대조해
+날조로는 통과할 수 없다 → `policy-brief`(G) → `lecture-course`(J) →
+`systematic-review`(B′) → `lit-monitor`(E) → `patent-spec`(F).
+Tier 3·4(비용·외부 실행·저장소 수정 — K·M·O·P)는 **Sam 재확인**.
 
-**→ `t_3748d855`(stage 8) 승인 금지.** 복구 = 날조 7편 재분석 리비전 → `analysis_substance`
-포함 재검증 통과 후 승인. 이게 **256k 와 새 게이트의 첫 실전 측정**이다.
+**테스트 중 게이트 승인은 Claude 가 직접 한다**(Sam 위임 2026-08-05).
+⚠️ **승인 사유는 다음 워커가 읽는다** — 운영 메모는 `[운영 메모 · 산출물 지시 아님]` 접두.
+⚠️ **Slack 승인 루프가 살아 있다.** 게이트가 `#approvals` 에 자동 게시되고 Sam 의 `승인` 이
+감지되면 즉시 unblock 된다 — 작업 중 원치 않는 진행을 막으려면 카드를 **`schedule`** 로
+park 하라(`block` 2회는 `promoted` 로 되돌아온다 · `docs/14 §6.5 ①·⑤`).
 
-⚠️ **일시중지는 컨테이너를 세워라**(`docs/14 §6.5`). `kanban block` 을 두 번 하면 카드가
-**`triage`** 로 가는데 거기엔 **비-LLM 탈출구가 없다**(`unblock`·`promote` 모두 거부 ·
-`specify` 는 LLM 이 본문을 다시 쓴다). 그리고 **DB 를 손으로 고치면 디스패처가 즉시 다시
-집는다** — 실제로 워커 2개가 동시에 떠 완료 산출물 1건을 덮어썼다(14.1KB→4.1KB, git 에 없어
-복구 불가).
+### 카드를 세우는 방법 (실측 3종 · `docs/14 §6.5 ⑤`)
+| 수단 | 결과 |
+|---|---|
+| `link <상류> <카드>` | ❌ 사후 link 는 `ready` 를 되돌리지 않는다 |
+| `block` 2회째 | ❌ `block_loop_detected` → **`promoted`**(도로 실행됨) |
+| **`schedule <tid> "<사유>"`** | ✅ + 게이트키퍼가 `#approvals` 에 다시 안 올린다 |
 
-**계획서**: `~/.claude/plans/profile-optimized-moore.md`(2026-08-05 (3) Sam 승인 · 6 Phase).
-캠페인 순서를 **`code-docs`(I) 먼저**로 바꿨다 — 객관 게이트가 우리 저장소 **AST 와 대조**해서
-**날조로는 통과할 수 없는 유일한 저비용 후보**이기 때문이다. 그 다음 `policy-brief`(G) →
-`lecture-course`(J) → `systematic-review`(B′) → `lit-monitor`(E) → `patent-spec`(F).
-Tier 3·4(비용·외부 실행·저장소 수정 — K·M·O·P)는 **Sam 재확인**. 4-티어 원안은
-`history.html #47`·`#48`.
-
-### 재개 절차
-```bash
-# 백엔드에 따라 점검 대상이 다르다 — ollama=서버·모델 존재 · codex=한도 소진
-python3 scripts/set_backend.py --show           # 현재 백엔드 확인
-python3 scripts/usage_report.py                 # exit 0 이어야 재개 가능
-docker compose up -d && docker compose ps       # 2개 Up
-docker exec hermes-solomon hermes kanban list | grep M-2026-005
-# ⚠️ 컨테이너를 세웠다 켰으면 stale claim lock 을 먼저 풀어라(docs/14 §6.5 ④).
-#    카드가 ready 인데 디스패처가 영영 안 집고, 로그도 안 남는다.
-docker exec hermes-solomon hermes kanban reclaim <tid>
-docker exec hermes-solomon hermes kanban dispatch --dry-run --json   # spawned 에 뜨는지
-```
-남은 경로: **stage 5 리비전(날조 7편 재분석)** → 재검증 → **8 집필 개시 승인** → 9 → 10 →
-**11 Deliver 승인**. 승인은 내가 직접 한다(Sam 위임).
-⚠️ stage 4 는 `peer_reviewed` 를 **하한 6에 정확히 맞춘** 상태에서 선별했다 — 한 건이라도
-`rejected` 로 버리면 stage 6 이 반려한다(그게 정상 동작이다).
-
-**⚠️ 라이브가 결함 8건을 냈다 — 그중 7건은 E2E 픽스처 510케이스가 원리적으로 볼 수 없는 층이다**
-(`docs/11 §7`). ①인스턴스화가 디스패처와 경합해 **상류 없이 워커 6개 실행** ②`block` 실패를
-WARN 으로 넘겨 **게이트 빠진 파이프라인** ③**`archive` 가 워커를 안 죽여** 폐기된 그래프가
-새 미션에 20파일을 씀 ④`VERIFIERS` 하드코딩 ⑤**승인 `--reason` 이 산출물 주제를 오염**
-⑥`status: rejected` 가 정책 카운트에 잡힘 ⑦**실패 표면 증상과 근본 원인이 두 층 떨어짐**(429 가
-카드에 안 남는다) ⑧**작성자가 "시뮬레이션했다"고 자백한 산출물을 게이트 3종이 전부 통과**
-(가장 심각 — 객관 게이트가 검사 대상이 아닌 파일을 보고 있었다).
-①②④⑥은 수정·커밋, ③⑤는 절차 규약, ⑦은 후속 과제, **⑧은 진행 중**(`analysis_substance`).
-
-**테스트 중 게이트 승인은 Claude 가 직접 한다**(Sam 위임 2026-08-05). ⚠️ **승인 사유는 다음
-워커가 읽는다** — 파이프라인에 대한 지시로 쓰고, 운영 메모는 `[운영 메모 · 산출물 지시 아님]`
-접두를 붙여라(⑤가 그래서 났다).
-
-**미완 백로그 1건**: **성장 지표 대시보드**(재작업률·wiki 재사용률·단계별 소요시간).
-데이터 출처는 kanban 이벤트·`reports/*/pipeline.json`·게이트키퍼 로그. Sam 이 지적한
-"미션 진행상황을 전혀 모르겠다"에 대한 답이기도 하다. 나머지 3건(발견 문서화·사용량
-가시화·매처 C)은 완료.
-
-**⚠️ 미션을 시작하기 전에 `python3 scripts/usage_report.py` 를 돌려라.** 착수 불가면 `exit 1` 이고,
-그 상태로 미션을 걸면 워커가 60초마다 크래시하다 카드가 blocked 로 떨어진다(카드에는
-'protocol violation' 만 남아 원인을 알 수 없다). 이 스크립트는 **LLM 을 호출하지 않는다.**
-**점검 대상은 백엔드에 따라 다르다**(`docs/14 §6`): `codex`=워커 로그의 429 `resets_at` ·
-`ollama`=**Ollama 서버 도달 + 배치 모델 설치 여부**(로컬은 한도가 없으므로 지나간 429 기록으로
-막지 않는다). `--backend codex` 로 강제 지정하면 복귀 시점을 확인할 수 있다.
-
-**⚠️ 미션을 폐기·재시작할 때는 카드 archive 만으로 부족하다**:
-`docker exec hermes-solomon ps -eo pid,args | grep 'kanban task'` 로 **프로세스를 확인하고 죽여라**.
+⚠️ 어느 수단이든 **`dispatch --dry-run --json` 으로 `spawned` 가 비었는지 확인**하라.
+상태 표시와 디스패치 가능성은 별개다.
 
 ---
 
@@ -220,10 +210,10 @@ WARN 으로 넘겨 **게이트 빠진 파이프라인** ③**`archive` 가 워�
 | 변환 | **20/20 ✅ 완료** — A `trend-report`(**proven**) · B `academic-paper` · B' `systematic-review`(PRISMA) · D `webapp-build` · E `lit-monitor`(주기 실행 — 미션 간 지속 상태 `monitors/`) · F `patent-spec`(고지 강제) · G `policy-brief`(4포맷 동시 산출 + 3게이트) · H `legal-draft`(계약서·의견서·자문서·약관 + **개인정보 차단**) · I `code-docs`(코드베이스 문서화 — **AST 대조 검증**) · J `lecture-course`(강의 자료 — LO·Bloom 사슬) · K `code-migration`(마이그레이션 — **실제 코드 변경·git 대조**) · L `security-audit`(보안 감사 — **공개 범위 분리**) · M `agent-eval`(RAG/Agentic 시스템 구축·평가 — **평가셋·통계·재현성 3중 검증**, 산출물이 아키타입 B 의 입력) · N `dataset-release`(데이터셋 큐레이션·배포 — **개인정보·라이선스·공개범위 3중 강제**) · O `repro-package`(재현 패키지 — **실행 증거 요구·미검증 경로 공시 강제**) · P `sim-experiment`(DOE 파라미터 스윕 — **해시 재계산·입력 드리프트·민감도 불변식**) · Q `research-proposal`(연구비 제안서 — **추적성 사슬·예산 회계·자격 요건**, 기본 비공개) · R `reviewer-response`(리뷰어 응답서 — **원문 대조·원고 실변경 대조**, 기본 비공개) · S `outreach-content`(성과 발신 — **수치↔claim 값 대조·공개 근거 강제**) · T `conference-slides`(학회 발표 슬라이드 — **발표 분량 양방향·번들 미치환 검출·재사용 4종**). **A 외 전부 `draft`** |
 | **다음 단계** | 변환 끝. **실미션을 하나씩**(Sam 이 순서를 정한다) · 그 전에 Slack 도달성 확인 |
 | profile | **11종** — 기존 8 + `architect`·`developer`·`tester`(아키타입 D 도입 시 신설) |
-| 객관 게이트 | **62종** `scripts/gates/` — recency·source_balance·doc_consistency·test_run·prisma_counts·prisma_checklist·seen_dedup·digest_shape·claim_consistency·patent_format·evidence_grade·stakeholder_coverage·format_consistency·clause_completeness·law_citation·legal_safety·symbol_truth·api_coverage·doc_links·objective_coverage·bloom_distribution·course_consistency·content_accessibility·atomic_commit·test_pass_rate·behavior_diff·owasp_coverage·cve_remediation·finding_completeness·secret_redaction·eval_set_quality·stat_significance·repro_determinism·run_completeness·pii_presence·license_compat·schema_conformance·datasheet_completeness·result_tolerance·env_consistency·install_evidence·reproduce_doc·bit_exact·solver_pin·doe_completeness·analysis_integrity·proposal_format·budget_integrity·call_alignment·proposal_traceability·comment_fidelity·comment_coverage·change_consistency·response_quality·claim_provenance·channel_format·outreach_tone·release_readiness·**slide_budget·deck_format·diagram_integrity** |
+| 객관 게이트 | **63종** `scripts/gates/` — **analysis_substance**(신규 · 산출물 실체성)·recency·source_balance·doc_consistency·test_run·prisma_counts·prisma_checklist·seen_dedup·digest_shape·claim_consistency·patent_format·evidence_grade·stakeholder_coverage·format_consistency·clause_completeness·law_citation·legal_safety·symbol_truth·api_coverage·doc_links·objective_coverage·bloom_distribution·course_consistency·content_accessibility·atomic_commit·test_pass_rate·behavior_diff·owasp_coverage·cve_remediation·finding_completeness·secret_redaction·eval_set_quality·stat_significance·repro_determinism·run_completeness·pii_presence·license_compat·schema_conformance·datasheet_completeness·result_tolerance·env_consistency·install_evidence·reproduce_doc·bit_exact·solver_pin·doe_completeness·analysis_integrity·proposal_format·budget_integrity·call_alignment·proposal_traceability·comment_fidelity·comment_coverage·change_consistency·response_quality·claim_provenance·channel_format·outreach_tone·release_readiness·**slide_budget·deck_format·diagram_integrity** |
 | 산출 도구 | 4종 `scripts/tools/` — bib_export·monitor_state·relevance_score·budget_build |
-| 운영 도구 | `scripts/match_template.py`(미션→템플릿 3-way 매처 · `--rebuild` 로 manifest 생성) · `scripts/usage_report.py`(착수 전 점검 · **LLM 미호출** · 백엔드별 판정) · **`scripts/set_backend.py`**(추론 백엔드 codex↔ollama 전환 · `docs/14`) · **`scripts/probe_protocol.py`**(로컬 모델 도구 프로토콜 준수도 측정 — 모델 선정 근거) |
-| 검증 | `python3 scripts/lint_template.py --all`(20/20) · 테스트 **326종**(32 템플릿 + 23 게이트키퍼 + 204 게이트 + 8 매처 + 12 사용량 + 27 백엔드 + 20 기타) · **E2E 하네스 `scripts/tests/fixtures/run_all.py`(14종 510케이스)** |
+| 운영 도구 | **`scripts/preflight_gates.py`**(빈 입력 반려 확인) · **`scripts/lint_gate_drafts.py`**(하네스↔템플릿 draft 정합) · `scripts/match_template.py`(미션→템플릿 3-way 매처 · `--rebuild` 로 manifest 생성) · `scripts/usage_report.py`(착수 전 점검 · **LLM 미호출** · 백엔드별 판정) · **`scripts/set_backend.py`**(추론 백엔드 codex↔ollama 전환 · `docs/14`) · **`scripts/probe_protocol.py`**(로컬 모델 도구 프로토콜 준수도 측정 — 모델 선정 근거) |
+| 검증 | `python3 scripts/lint_template.py --all`(20/20) · 테스트 **355종**(35 템플릿·보드 + 34 게이트키퍼 + 214 게이트 + 8 매처 + 12 사용량 + 30 백엔드 + 22 기타) · **E2E 하네스 `scripts/tests/fixtures/run_all.py`(14종 510케이스)** |
 
 **Sam 지시:** 실미션은 **전체 변환을 마친 뒤 하나씩** 돌린다(변환 중에는 dry-run만).
 
@@ -233,29 +223,48 @@ WARN 으로 넘겨 **게이트 빠진 파이프라인** ③**`archive` 가 워�
 
 **⚠️ 보안 미결(변함없음)**: 진단 중 `SLACK_BOT_TOKEN` 값이 세션 로그에 노출됨 → **재발급(rotate) 권장**(Slack 앱 Regenerate → `.env` 갱신 → `docker compose up -d --force-recreate hermes-solomon hermes-gatekeeper`).
 
-**세션 종료 상태(2026-08-05 (2) · 로컬 백엔드 도입):** 신규 도구 2종(`set_backend.py` 추론 백엔드 전환 · `probe_protocol.py` 모델 프로토콜 측정) + `docs/14`. 커밋 3건(`dc65ed7`·`3e8824e`·`f070850`). **컨테이너 정지 · M-2026-005 stage 5 `blocked`(분석 3/11, 커밋으로 백업 확보) · 백엔드 `ollama`/`gemma4-26b-256k` 11종.** 이번 세션의 가장 큰 발견은 **압축 퇴화 분기**(위 ⚠️⚠️) — 파이프라인을 멈춘 것이 모델이 아니라 창 크기였다. ⚠️ Slack 여전히 도달 불가(네트워크성).
+**세션 종료 상태(2026-08-05 (3) · 날조 결함 발견·차단 · codex 복귀):**
+커밋 7건(`0e76dce`·`879f5c4`·`fb63865`·`6e6ef0b`·`5434b15`·`ffd485d`·`e512617`+).
+**컨테이너 정지 · 백엔드 `codex`/`gpt-5.5` 11종 · codex 한도 리셋 2026-08-09 14:07 대기.**
+
+이번 세션이 만든 것:
+| 신규 | 무엇 |
+|---|---|
+| `scripts/gates/analysis_substance.py` | 산출물 실체성 게이트(게이트 **63종**). 자가선언 탐지 + 개수 항등 + 분량 상하한 + **위치 지정 인용**(가장 잘 드는 검사) |
+| `scripts/preflight_gates.py` | 빈 미션에 게이트를 돌려 전부 반려하는지. A~F 하네스 부재의 대체. **20/20 누출 없음** |
+| `scripts/lint_gate_drafts.py` | 하네스 per-gate draft ↔ 템플릿 stage draft 대조. **FAIL 8·WARN 5 발견** |
+| `gate_keeper.artifact_inspection()` | 승인 요청문에 산출물 실측치(파일 수·크기·의심 문구) |
+| **미션별 Kanban 보드** | `instantiate_template --board` + `gate_keeper` 다중 보드(`active_boards()`) |
+
+측정으로 확인한 것:
+- **창을 2배로 올려도 메모리는 +0.8%**(`gemma4:26b` 17.50→17.64GB). `docs/14 §3.1` 의
+  "창 하나로 3.7배"는 `llama3.1:8b` 숫자이고 **모델 계열을 건너뛰지 않는다.**
+- **이중 게이트가 실전에서 완주**: LLM 검증자 PASS → 객관 게이트 FAIL → 게이트키퍼가
+  리비전 카드 자동 생성 + downstream 보류.
+- **정지된 컨테이너의 claim lock 이 카드를 영구 교착**시킨다(`reclaim` 으로 해소).
+
+⚠️ Slack 은 이 세션 중 **복구**됐다(`auth.test` 200). 승인 루프가 살아 있다.
 
 **새 세션 시작 시(3분 점검):**
 
-⚠️ **컨테이너는 정지 상태로 넘겼다**(2026-08-05 Sam 요청 일시중지). `docker compose ps` 가
-비어 있는 것이 **정상**이다 — 미션을 이어갈 때만 올려라.
+⚠️ **컨테이너는 정지 상태로 넘겼다.** `docker compose ps` 가 비어 있는 것이 **정상**이다.
+⚠️ **2026-08-09 14:07 전에는 미션을 걸지 마라** — codex 한도 소진 중이다.
 
 ```bash
-git log --oneline -4            # HEAD: 압축 퇴화 분기 수정 + gemma4:26b 통일(f070850)
-python3 scripts/set_backend.py --show   # ★ 백엔드(ollama · gemma4-26b-256k 11종 · exit 1 이면 불일치)
-docker compose up -d            # ← 미션을 이어갈 때만. 2개 Up 확인
-python3 scripts/usage_report.py         # ★ 착수 가능한가(로컬=서버·모델 존재 · exit 1 이면 시작 금지)
-docker exec hermes-solomon hermes kanban list | grep M-2026-005   # stage 5 가 blocked
-docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/lint_template.py --all'   # 20/20
-docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/fixtures/run_all.py' # 14/14 하네스
-curl -s -o /dev/null -w '%{http_code}\n' --max-time 8 https://slack.com/api/auth.test           # ⚠️ 현재 000(도달 불가)
+git log --oneline -6                     # HEAD: codex/gpt-5.5 복귀
+python3 scripts/set_backend.py --show    # ★ codex · gpt-5.5 · 11종 (exit 1 이면 불일치)
+python3 scripts/usage_report.py          # ★ exit 0 이어야 미션 착수 가능(현재는 1)
+docker compose up -d                     # ← 미션을 이어갈 때만
+docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/lint_template.py --all'        # 20/20
+docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/preflight_gates.py --all'      # 누출 0
+docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/lint_gate_drafts.py'           # 미해결 FAIL 8
+docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/fixtures/run_all.py'     # 14/14
+curl -s -o /dev/null -w '%{http_code}\n' --max-time 8 https://slack.com/api/auth.test               # 200 이면 정상
 ```
 
-**→ 다음 할 일은 위 '▶ 이어서 할 일' 을 보라.** ⚠️ **가장 먼저 읽을 것: 파이프라인이 날조를
-통과시켰다**(`docs/11 §7 ⑧`). codex 한도는 **2026-08-09 14:07** 리셋 — 그 뒤에는
-`set_backend.py --backend codex` 로 되돌릴지 판단한다(재분석 품질이 판단 근거).
+**→ 다음은 `code-docs`(아키타입 I) 신규 미션이다**(위 '▶ 이어서 할 일' 참조).
 
-**§2④ 를 먼저 하라(이번 세션의 가장 큰 교훈):** 게이트를 새로 만들기 전에 `ls scripts/gates/`(62종)로 **이미 가진 것과 하는 일이 겹치는지** 보라. 재사용은 *하는 일*이 같을 때지 *이름*이 비슷할 때가 아니다(O 는 2종 재사용 · P 는 이름이 비슷한 `run_completeness` 를 일부러 재사용하지 않았다). **Q 에서 `legal_safety` 에 연 `publication_policy` 축이 바로 다음 변환(R)에서 그대로 쓰였다 — 쌍둥이 게이트를 만드는 대신 축을 여는 판단의 실증이다.**
+**§2④ 를 먼저 하라(이번 세션의 가장 큰 교훈):** 게이트를 새로 만들기 전에 `ls scripts/gates/`(63종)로 **이미 가진 것과 하는 일이 겹치는지** 보라. 재사용은 *하는 일*이 같을 때지 *이름*이 비슷할 때가 아니다(O 는 2종 재사용 · P 는 이름이 비슷한 `run_completeness` 를 일부러 재사용하지 않았다). **Q 에서 `legal_safety` 에 연 `publication_policy` 축이 바로 다음 변환(R)에서 그대로 쓰였다 — 쌍둥이 게이트를 만드는 대신 축을 여는 판단의 실증이다.**
 
 **이식 시 1순위 확인 항목(공집합이 11회 반복됐다):** 입력이 **비었을 때** 그 게이트가 PASS 하는지부터 보라 — `len(s) <= 1` · `all(...)` · `not any(...)` · `glob` 결과 0건 · 항목 0개는 전부 공집합에서 참이다. **그리고 아키타입 Q 에서 새 모양이 나왔다 — 검사 대상이 있는데 측정값이 0 인 경우다**(빈 섹션 파일 5개 + 빈 간트가 '규격 통과'). **분량·개수를 재는 게이트에는 상한과 하한을 짝으로 둬라.**
 
