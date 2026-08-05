@@ -9,7 +9,7 @@
 
 2026-08-05, 실미션 M-2026-005 가 stage 4 에서 멈췄다. 원인은 파이프라인이 아니라
 **`openai-codex` 주간 한도 소진**(HTTP 429 · plan=team · 리셋 2026-08-09 14:07)이었다
-(`docs/11 §7 ⑦`). 리셋까지 나흘 동안 **파이프라인·게이트 62종·템플릿 20종 어느 것도 실행으로
+(`docs/11 §7 ⑦`). 리셋까지 나흘 동안 **파이프라인·게이트 63종·템플릿 20종 어느 것도 실행으로
 검증할 수 없었다.** 호스트(M4 Max · 64GB)에는 Ollama 가 이미 돌고 있었다.
 
 여기서 얻은 규율은 하나다 — **추론 백엔드는 갈아끼울 수 있어야 한다.** 한 공급자의 한도가
@@ -28,17 +28,25 @@
 > (stage 를 항목당 카드로 쪼개 세션 범위를 지시가 아니라 **구조로** 강제).
 
 
-| 티어 | 프로필 | codex | **ollama(현재)** | 원본 |
+| 티어 | 프로필 | **codex(현재)** | ollama(폴백) | 원본 |
 |---|---|---|---|---|
-| 작성자 | `default`(Solomon)·`scout`·`reader`·`curator`·`synthesizer`·`writer` | `gpt-5.6-terra` | **`gemma4-26b-256k`** | `gemma4:26b` |
-| 검증자 | `fact-checker`·`reviewer`·`tester` | `gpt-5.6-sol` | **`gemma4-26b-256k`** | `gemma4:26b` |
-| 코더 | `architect`·`developer` | `gpt-5.6-terra` | **`gemma4-26b-256k`** | `gemma4:26b` |
+| 작성자 | `default`(Solomon)·`scout`·`reader`·`curator`·`synthesizer`·`writer` | **`gpt-5.5`** | `gemma4-26b-256k` | `gemma4:26b` |
+| 검증자 | `fact-checker`·`reviewer`·`tester` | **`gpt-5.5`** | `gemma4-26b-256k` | `gemma4:26b` |
+| 코더 | `architect`·`developer` | **`gpt-5.5`** | `gemma4-26b-256k` | `gemma4:26b` |
 
-### 2.2 ⚠️ 로컬 백엔드는 **작성자≠검증자를 모델 계열 수준에서 포기했다** (Sam 승인 2026-08-05)
+*(이전 codex 배치: writer/coder `gpt-5.6-terra` · verifier `gpt-5.6-sol`. 티어를 다시
+가르려면 `set_backend.py` 의 `BACKENDS["codex"]["models"]` 3줄만 바꾸면 된다.)*
+
+### 2.2 ⚠️ **작성자≠검증자를 모델 계열 수준에서 포기했다** (ollama 2026-08-05 · codex 2026-08-05 (3))
 
 Sam 지시로 속도 우선 통일했다. **남는 분리**: profile 경계·SOUL(역할 프롬프트)·객관 게이트
-62종(산출물을 기계 판정)·작성 task ≠ 검증 task. **잃는 분리**: 모델 계열 다양성 —
+63종(산출물을 기계 판정)·작성 task ≠ 검증 task. **잃는 분리**: 모델 계열 다양성 —
 검증자가 작성자와 **같은 맹점을 공유**한다.
+
+> **⚠️ 2026-08-05 (3) 실측: 이 우려가 현실이 됐고, 메운 것은 객관 게이트였다.**
+> LLM 검증자는 같은 산출물을 **두 번 다** 통과시켰다(11건 중 2·5건만 대조하고 `PASS`).
+> 잡아낸 것은 `analysis_substance` 다. **지금 실질적인 독립검증은 모델 계열이 아니라
+> `scripts/gates/` 에 있다.** 모델을 가르는 것보다 게이트를 채우는 편이 값이 컸다.
 
 이 결정을 조용히 잃지 않도록 `BACKENDS["ollama"]["shared_verifier_model"]` 에 사유를 선언하고,
 테스트가 **선언 없는 통일을 FAIL** 시킨다(`test_writer_and_verifier_share_a_model_only_by_
