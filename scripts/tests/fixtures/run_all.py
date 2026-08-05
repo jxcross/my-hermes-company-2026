@@ -28,6 +28,7 @@ HARNESSES = [
     ("sim", "P 시뮬레이션 실험"),
     ("proposal", "Q 연구제안서"),
     ("rebuttal", "R 리뷰어 응답서"),
+    ("outreach", "S 성과 발신"),
 ]
 
 

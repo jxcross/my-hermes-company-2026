@@ -79,6 +79,11 @@ comment_coverage = _load("comment_coverage")
 change_consistency = _load("change_consistency")
 response_quality = _load("response_quality")
 
+claim_provenance = _load("claim_provenance")
+channel_format = _load("channel_format")
+outreach_tone = _load("outreach_tone")
+release_readiness = _load("release_readiness")
+
 
 # ── prisma_counts ────────────────────────────────────────────────────────
 def test_counts_parse():
@@ -1419,6 +1424,86 @@ def test_banned_phrase_matching_is_literal():
                                        response_quality.DEFAULT_BANNED) == ["리뷰어가 오해"]
     assert response_quality.has_phrase("리뷰어의 지적에 감사드립니다",
                                        response_quality.DEFAULT_BANNED) == []
+
+
+# ── 아키타입 S: claim_provenance ─────────────────────────────────────────
+def test_citations_are_scoped_to_the_paragraph():
+    """'주변 N자' 창은 옆 트윗의 인용을 끌어온다(픽스처가 잡았다)."""
+    text = "## 1/2\n정확도 0.873 [e1].\n\n## 2/2\n기존 대비 8배 빠르다.\n"
+    segs = claim_provenance.segments(text)
+    assert claim_provenance.citations_at(segs, text.index("0.873")) == {"e1"}
+    assert claim_provenance.citations_at(segs, text.index("8배")) == set()
+
+
+def test_bare_decimal_is_a_number_claim():
+    """단위 없는 소수(정확도 0.873)가 발신물에서 가장 흔한 수치다."""
+    import re as _re
+    pats = claim_provenance.DEFAULT_NUMBER
+    assert any(_re.search(p, "정확도는 0.873 이다") for p in pats)
+    assert any(_re.search(p, "3.2배 빠르다") for p in pats)
+    assert not any(_re.search(p, "버전 v2 를 냈다") for p in pats)
+
+
+def test_cited_ids_returns_unknown_ids_too():
+    """아는 id 만 걸러 내면 환각 인용을 영영 못 잡는다."""
+    assert claim_provenance.cited_ids("정확도 [e9] 라고 썼다") == {"e9"}
+
+
+def test_norm_num_compares_values_not_substrings():
+    assert claim_provenance.norm_num("0.873") == claim_provenance.norm_num(" 0.873 ")
+    assert claim_provenance.norm_num("8배") != claim_provenance.norm_num("0.873")
+
+
+# ── 아키타입 S: channel_format ───────────────────────────────────────────
+def test_url_counts_as_23_chars():
+    n = channel_format.chars_with_url_rule("보라 https://example.com/very/long/path/indeed")
+    assert n == len("보라 ") + 23
+
+
+def test_twitter_numbering_and_cta():
+    ok = "## 1/2\n첫 글\n\n## 2/2\n마지막 https://x.com\n"
+    assert channel_format.check_twitter(ok, {"min_posts": 2, "max_posts": 2}) == []
+    bad = "## 1/2\n첫 글\n\n## 3/2\n마지막 https://x.com\n"
+    assert any("번호" in e for e in
+               channel_format.check_twitter(bad, {"min_posts": 2, "max_posts": 2}))
+
+
+def test_medium_word_range_is_korean_eojeol():
+    """영문 word 수치를 그대로 쓰면 정상 국문 글이 반려된다(원본 결함)."""
+    text = "# 제목\n\n> Hero image hint: 그림\n\n" + "## 절\n\n" * 3 + "낱말 " * 1000
+    errs = channel_format.check_medium(text, {"word_range": [900, 2100],
+                                              "min_headings": 3, "max_headings": 6})
+    assert errs == [], errs
+
+
+# ── 아키타입 S: outreach_tone ────────────────────────────────────────────
+def test_hype_counting_is_cumulative():
+    hits = outreach_tone.count_hype("획기적이고 혁명적인 놀라운 breakthrough 이며 전례없는 성과",
+                                    outreach_tone.DEFAULT_HYPE)
+    assert len(hits) == 5      # 원본은 이것을 PASS 로 판정했다
+
+
+def test_posts_split_by_thread_numbering():
+    posts = outreach_tone.posts_of("## 1/2\n가\n\n## 2/2\n나\n")
+    assert len(posts) == 2
+
+
+# ── 아키타입 S: release_readiness ────────────────────────────────────────
+def test_embargo_compared_to_launch_without_a_clock():
+    """시각에 의존하는 판정은 시간이 지나면 픽스처가 깨진다(P 에서 배운 것)."""
+    assert "2026-10-01" > "2026-09-01"     # 게이트가 쓰는 비교 그대로
+    assert not ("2026-08-15" > "2026-09-01")
+
+
+def test_visuals_block_requires_source_and_license():
+    import tempfile, os as _os
+    p = _os.path.join(tempfile.mkdtemp(), "visuals.md")
+    open(p, "w", encoding="utf-8").write(
+        "```visuals\n- id: v1\n  source: fig.png\n  license: own\n```\n")
+    got = release_readiness.parse_visuals(p)
+    assert got == [{"id": "v1", "source": "fig.png", "license": "own"}]
+    open(p, "w", encoding="utf-8").write("# 그림만 있고 블록이 없다\n")
+    assert release_readiness.parse_visuals(p) is None
 
 
 if __name__ == "__main__":
