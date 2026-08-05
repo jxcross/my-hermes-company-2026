@@ -66,7 +66,33 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 3. ~~**Slack 승인→Kanban unblock 배선**~~ · ~~**pre-blocked Sam 게이트 알림**~~ **[해소 2026-08-04]** gate_keeper `approval_poll`(Web API 폴링, Socket Mode 비의존): #4 활성 Sam-게이트를 `#approvals`에 **판단 내용 포함**(주제·계획·정책 또는 보고서요약·검증·공개대상) 자동 게시 + #3 `SLACK_ALLOWED_USERS`(Sam)의 `승인`(단일)/`승인 <task_id>`(명시) 감지→`kanban unblock`. 단위테스트 10 + 라이브 E2E 검증. **[잔여] Socket Mode 인바운드 flapping**(네트워크성; recreate 후 안정, 승인흐름은 비의존) 모니터.
 4. ~~**Slack 네트워크 도달 불가**~~ **[해소 2026-08-04 오후]** 세션 초 `slack.com` HTTPS 타임아웃(google·github은 정상 = 네트워크성)이 있었으나 복구됨. 검증: 호스트 `auth.test` 200 · 컨테이너 Web API `ok=true` · **게이트키퍼 WARN 3시간 38분째 없음**(마지막 10:16, 확인 13:54). 진단 순서는 `docs/10 §4.3`.
 5. ~~**매처(C)**~~ **[완료 2026-08-05]** `scripts/match_template.py` + `templates/manifest.json`(템플릿에서 생성). 3-way 판정 + 근거 낱말 + `draft` 경고. 템플릿 20종에 `keywords:` 선언 추가. ~~전용 린터(E)~~ [완료 — `scripts/lint_template.py`].
-6. **성장 지표 대시보드** ← **남은 백로그 1건** — 재작업률·wiki 재사용률·소요시간 누적. + **미션 진행상황 Slack 실시간 보고**(현재 통지는 게이트 이벤트·Deliver 시점만 — Sam이 "진행상황을 전혀 모르겠다"고 지적한 건).
+6. **성장 지표 대시보드** ← **남은 백로그 1건**(로컬 백엔드 도입 후에도 유효) — 재작업률·wiki 재사용률·소요시간 누적. + **미션 진행상황 Slack 실시간 보고**(현재 통지는 게이트 이벤트·Deliver 시점만 — Sam이 "진행상황을 전혀 모르겠다"고 지적한 건).
+
+---
+
+## ▶ 이어서 할 일 (2026-08-05 세션 종료 시점)
+
+**① M-2026-005 stage 5 재개 — 최우선.**
+```bash
+docker compose up -d
+python3 scripts/usage_report.py                     # exit 0 확인
+docker exec hermes-solomon hermes kanban unblock t_b07b1739 \
+  --reason "stage 5 재개. 이미 있는 analysis/dhuliawala2024.md·gao2023.md·min2023.md 는 덮지 말고 나머지 자료만 처리하라. 각 자료마다 analysis/<id>.md 를 쓰고 전부 끝나면 analysis/_index.md 로 병합한 뒤 kanban_complete 를 호출하라."
+# 압축 재발 감시 — 이 숫자가 늘면 창 설정이 부족한 것이다(docs/14 §3.2)
+watch -n 60 'grep -c "Compacting context" hermes-home/kanban/logs/t_b07b1739.log; ls reports/M-2026-005/analysis | wc -l'
+```
+⚠️ **`analysis/dhuliawala2024.md` 는 4.1KB 로 잘려 있다**(내가 낸 사고 — `docs/14 §6.5` ②).
+다른 2편은 8.6KB·14.4KB 다. 재생성이 필요하면 그 항목만 다시 돌려라.
+
+**② 그 다음: stage 6 Cross-Verify** — 로컬 검증자(`gemma4-26b-128k`)의 **첫 실미션 판정**이다.
+`probe_protocol.py` 는 판정 *포맷*만 쟀고 **검증의 *깊이*는 못 잰다** — 여기서 확인한다.
+게이트키퍼가 `VERDICT: FAIL` 을 잡아 재작업 루프를 거는지도 처음 실전 검증된다.
+
+**③ 미완 백로그 1건: 성장 지표 대시보드**(재작업률·wiki 재사용률·단계별 소요시간).
+Sam 이 지적한 "미션 진행상황을 전혀 모르겠다"에 대한 답이기도 하다.
+
+**④ 2026-08-09 14:07 이후**: `python3 scripts/usage_report.py --backend codex` 로 리셋을
+확인하고, codex 로 되돌릴지 로컬을 유지할지 판단한다(로컬은 한도가 없지만 느리다).
 
 ---
 
@@ -164,19 +190,26 @@ WARN 으로 넘겨 **게이트 빠진 파이프라인** ③**`archive` 가 워�
 
 **⚠️ 보안 미결(변함없음)**: 진단 중 `SLACK_BOT_TOKEN` 값이 세션 로그에 노출됨 → **재발급(rotate) 권장**(Slack 앱 Regenerate → `.env` 갱신 → `docker compose up -d --force-recreate hermes-solomon hermes-gatekeeper`).
 
-**세션 종료 상태(2026-08-05 · 변환 완료):** **20/20** — 마지막 `slideforge` → 아키타입 T(학회 발표 슬라이드). 신설 게이트 3종(`slide_budget`·`deck_format`·`diagram_integrity`) + **재사용 4종**(`claim_provenance`·`evidence_grade`·`content_accessibility`·`release_readiness`) · E2E 80케이스. **부수 성과: 아키타입 S 의 실미션 결함을 고쳤다** — stage 7·8 의 객관 게이트 3종이 `--draft` 규약 불일치로 `exit 2` fail-closed 였다(하네스가 편한 draft 를 쓰고 있어 못 잡았다 · `docs/13 §5`). Kanban 전부 done · 활성 게이트 0. ⚠️ Slack 여전히 도달 불가(`slack.com` 000 · `github.com` 200 = 네트워크성) — **실미션 재개 전에 반드시 확인**.
+**세션 종료 상태(2026-08-05 (2) · 로컬 백엔드 도입):** 신규 도구 2종(`set_backend.py` 추론 백엔드 전환 · `probe_protocol.py` 모델 프로토콜 측정) + `docs/14`. 커밋 3건(`dc65ed7`·`3e8824e`·`f070850`). **컨테이너 정지 · M-2026-005 stage 5 `blocked`(분석 3/11, 커밋으로 백업 확보) · 백엔드 `ollama`/`gemma4-26b-128k` 11종.** 이번 세션의 가장 큰 발견은 **압축 퇴화 분기**(위 ⚠️⚠️) — 파이프라인을 멈춘 것이 모델이 아니라 창 크기였다. ⚠️ Slack 여전히 도달 불가(네트워크성).
 
 **새 세션 시작 시(3분 점검):**
+
+⚠️ **컨테이너는 정지 상태로 넘겼다**(2026-08-05 Sam 요청 일시중지). `docker compose ps` 가
+비어 있는 것이 **정상**이다 — 미션을 이어갈 때만 올려라.
+
 ```bash
-git log --oneline -6            # HEAD: 로컬 Ollama 백엔드 전환기 · 그 앞 slideforge→T(20/20)
-docker compose ps               # hermes-solomon · hermes-gatekeeper 2개 Up
-python3 scripts/set_backend.py --show   # ★ 어느 백엔드인가(현재 ollama · exit 1 이면 불일치)
-python3 scripts/usage_report.py         # ★ 착수 가능한가 — exit 1 이면 미션을 시작하지 마라(LLM 미호출)
+git log --oneline -4            # HEAD: 압축 퇴화 분기 수정 + gemma4:26b 통일(f070850)
+python3 scripts/set_backend.py --show   # ★ 백엔드(ollama · gemma4-26b-128k 11종 · exit 1 이면 불일치)
+docker compose up -d            # ← 미션을 이어갈 때만. 2개 Up 확인
+python3 scripts/usage_report.py         # ★ 착수 가능한가(로컬=서버·모델 존재 · exit 1 이면 시작 금지)
+docker exec hermes-solomon hermes kanban list | grep M-2026-005   # stage 5 가 blocked
 docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/lint_template.py --all'   # 20/20
 docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/fixtures/run_all.py' # 14/14 하네스
 curl -s -o /dev/null -w '%{http_code}\n' --max-time 8 https://slack.com/api/auth.test           # ⚠️ 현재 000(도달 불가)
 ```
-→ 변환은 끝났다. **다음은 실미션**이다 — Sam 에게 어느 아키타입을 먼저 돌릴지 확인하고(19종이 `draft`), Slack 도달성을 먼저 회복하라. 그 다음 과제는 **매처(C)**·**성장 지표 대시보드**(위 '다음 할 일' 5·6번).
+
+**→ 다음은 M-2026-005 stage 5 재개다**(아래 '이어서 할 일' 참조). codex 한도는
+**2026-08-09 14:07** 리셋 — 그 뒤에는 `set_backend.py --backend codex` 로 되돌릴지 판단한다.
 
 **§2④ 를 먼저 하라(이번 세션의 가장 큰 교훈):** 게이트를 새로 만들기 전에 `ls scripts/gates/`(62종)로 **이미 가진 것과 하는 일이 겹치는지** 보라. 재사용은 *하는 일*이 같을 때지 *이름*이 비슷할 때가 아니다(O 는 2종 재사용 · P 는 이름이 비슷한 `run_completeness` 를 일부러 재사용하지 않았다). **Q 에서 `legal_safety` 에 연 `publication_policy` 축이 바로 다음 변환(R)에서 그대로 쓰였다 — 쌍둥이 게이트를 만드는 대신 축을 여는 판단의 실증이다.**
 
