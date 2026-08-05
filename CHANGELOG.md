@@ -3,6 +3,54 @@
 이 프로젝트의 주요 변경 이력. 형식은 [Keep a Changelog](https://keepachangelog.com/) 및
 [Semantic Versioning](https://semver.org/)을 따른다.
 
+## [v0.3.0] - 2026-08-05
+
+**실미션 테스트 착수** — 변환된 아키타입을 라이브로 돌리기 시작했고, **첫 미션이 배선·운영
+층의 결함 7건을 냈다.** 그중 6건은 E2E 픽스처 510케이스가 **원리적으로 볼 수 없는** 종류다.
+
+### Fixed — 라이브가 잡은 것 (M-2026-005 · 아키타입 B)
+- **인스턴스화가 디스패처와 경합**: 카드 N장을 모두 만든 뒤 block·link 하는 순서라 그 사이
+  카드가 *부모 없는 `ready`* 로 노출돼 **상류 산출물 없이 워커 6개가 동시 실행**됐다.
+  Hermes CLI 제약을 실측(`create --parent`→`todo`=창 0 · `block` 은 `ready` 에서만 ·
+  `--initial-status blocked` 는 실제로 blocked 를 만들지 않는다)하고 **stage 마다
+  생성→게이트→링크를 한 번에** 끝내도록 재배치.
+- **`block` 실패(`rc=-7`)를 WARN 으로 넘겨 게이트가 빠진 파이프라인이 남던 것** →
+  1회 재시도 후 **중단 + 롤백**. 게이트 하나 빠진 그래프는 없는 것보다 나쁘다.
+- **`gate_keeper.VERIFIERS` 하드코딩** → `pipeline.json` 이 선언한 검증자를 읽는다.
+  `webapp-build` 의 `tester` 검증자를 게이트키퍼가 아예 보지 못해 downstream 이 영구
+  정지하던 문제(로그도 남지 않는다).
+- **선별에서 버린 자료(`status: rejected`)가 정책 카운트에 잡히던 것** — 템플릿은 curator 에게
+  `selected/rejected` 판정을 지시하는데 게이트는 `("failed","excluded")` 두 단어만 걸렀다.
+  게이트가 *선별한 것*이 아니라 *수집한 것*을 재고 있었다. 접두 deny-list + 정책화.
+
+### Added — 운영 도구
+- **`scripts/match_template.py`** — 미션→템플릿 3-way 매처(docs/12 §5). 근거 낱말을 함께
+  내고, `maturity` 를 점수에 반영하며 `draft` 선택 시 경고한다. **관계없는 요청에는 '낮음'을
+  내고 억지로 고르지 않는다.** `manifest.json` 은 템플릿에서 생성한다(손으로 유지하면 어긋난다).
+- **`scripts/usage_report.py`** — 사용량·한도 리포트. **LLM 을 호출하지 않는다**(한도를
+  확인하려고 한도를 쓸 수 없다). `exit 1` = 소진 중 → 미션 착수 전 점검용.
+- 템플릿 20종에 **`keywords:`** 선언 · `trend-report` 에 **`maturity: proven`** 명시
+  (실미션 2회 완주 실적은 있는데 필드가 없었다).
+
+### Notes — 운영 규약 두 가지 (코드로 못 막는 것)
+- **게이트 승인의 `--reason` 은 다음 워커가 읽는다.** 승인하며 남긴 "골격 검증 미션·게이트
+  변수를 배제하고 골격만 본다"가 **논문의 스코프**로 SCOPE.md 에 들어갔다(RQ1 과 모순되는
+  범위 제외까지). 승인 사유는 **파이프라인에 대한 지시**로 쓰고, 운영 메모는
+  `[운영 메모 · 산출물 지시 아님]` 접두를 붙인다.
+- **`archive`·`reclaim` 은 실행 중인 워커를 죽이지 않는다.** 폐기한 카드의 워커가 8분 41초째
+  살아서 **새 미션의 `raw/` 에 20파일을 썼다.** 폐기·재시작 시 `ps | grep 'kanban task'` 로
+  프로세스를 확인하고 죽여라.
+
+### Known issues
+- **M-2026-005 는 stage 4 에서 정지 중** — 원인은 파이프라인이 아니라 **LLM 사용량 한도
+  소진**(`HTTP 429` · plan=team · 리셋 **2026-08-09 14:07**). 미션은 깨끗이 세워져 있고
+  stage 1~3 산출물은 온전하다. 재개 절차는 `CLAUDE.md`.
+- **실패의 표면 증상과 근본 원인이 두 층 떨어져 있다** — 카드에는
+  `protocol violation` 만 남고 429 는 세션 로그에만 있다. 환경성 실패를 카드에 남기는 것이
+  후속 과제(`usage_report.py` 가 임시로 그 간극을 메운다).
+- 미완 백로그: **성장 지표 대시보드**(재작업률·wiki 재사용률·소요시간).
+- Slack 도달 불가(네트워크성) 지속 · `SLACK_BOT_TOKEN` rotate 미결.
+
 ## [v0.2.0] - 2026-08-05
 
 두 번째 마일스톤 — **Stage 1 파이프라인 실동작 + 템플릿 기반 미션 시스템 + 아키타입 20종 확보**.
@@ -99,5 +147,6 @@ reviewer-response(R) · outreach-content(S) · conference-slides(T).
 - 별도 지식 저장소: `my-hermes-company-llm-wiki-2026`.
 - 다음: **Stage 1** — 1호 미션(연구·기술 동향 보고서) 파이프라인 완주.
 
+[v0.3.0]: https://github.com/jxcross/my-hermes-company-2026/releases/tag/v0.3.0
 [v0.2.0]: https://github.com/jxcross/my-hermes-company-2026/releases/tag/v0.2.0
 [v0.1.0]: https://github.com/jxcross/my-hermes-company-2026/releases/tag/v0.1.0

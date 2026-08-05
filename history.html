@@ -25,6 +25,26 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#48 — 2026-08-05 세션 핸드오프 (실미션 1차 정지 · 백로그 3/4 · <b>v0.3.0</b>)</h2>
+    <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "다음 세션에서 이어서 하겠다. 관련 파일 업데이트하라. 태깅 및 릴리스 적용하라. 새로운 세션 시작시 첫 질문도 알려달라."</div>
+    <div class="label">세션 성과 요약:</div>
+    <ol class="steps">
+      <li><b>변환 20/20 완료 + v0.2.0 릴리스</b> — 마지막 <code>slideforge</code> → 아키타입 T(학회 발표 슬라이드). 신설 게이트 3종 + <b>재사용 4종</b>(지금까지 최다) · E2E 80케이스. 부수로 <b>아키타입 S 의 실미션 결함</b>(stage 7·8 의 게이트 3종이 <code>--draft</code> 규약 불일치로 exit 2 fail-closed)을 발견·수정.</li>
+      <li><b>실미션 테스트 착수</b> — 4-티어 실행 순서 수립 후 1차 <code>academic-paper</code>(M-2026-005). <b>라이브가 결함 7건을 냈고 그중 6건은 픽스처가 원리적으로 볼 수 없는 층</b>(배선·프로세스 수명·운영 조작). 상세는 #47.</li>
+      <li><b>미션은 stage 4 에서 정지</b> — 원인은 파이프라인이 아니라 <b>LLM 사용량 한도 소진</b>(HTTP 429 · plan=team · 리셋 <b>2026-08-09 14:07</b>). Sam 결정으로 <b>세워두고 백로그</b>로 전환. 미션은 깨끗이 정지(running 0 · ready 0 · stage 1~3 산출물 온전 · 정지 사유를 카드에 <code>[운영 메모]</code> 로 기록).</li>
+      <li><b>백로그 3/4 완료</b>: ①발견 문서화(docs/11 §7 · history #47 · CLAUDE.md) ②<b>사용량 가시화</b> <code>scripts/usage_report.py</code> — LLM 미호출, exit 1=소진, 환경성 실패 task 나열로 'protocol violation' 오진 방지 ③<b>매처(C)</b> <code>scripts/match_template.py</code> — 3-way 판정 + 근거 낱말 + draft 경고, manifest 는 템플릿에서 생성, 템플릿 20종에 <code>keywords:</code> 선언. <b>미완: ④성장 지표 대시보드.</b></li>
+      <li><b>운영 규약 2건을 못박았다</b>(코드로 막을 수 없는 것): 승인 <code>--reason</code> 은 다음 워커가 읽으므로 <b>파이프라인에 대한 지시</b>로 쓴다(운영 메모는 <code>[운영 메모 · 산출물 지시 아님]</code> 접두) · <code>archive</code> 는 워커를 죽이지 않으므로 폐기 시 <b>프로세스를 확인하고 죽인다</b>.</li>
+      <li><b>정정 2건</b>: M-2026-003 의 <code>excluded_missing_published_year</code> 는 <code>status</code> 가 아니라 <code>dedup_status</code> 필드라 제대로 제외됐다(내가 처음에 결함으로 오인) · 게이트 테스트에 모듈 로드를 빠뜨린 채 커밋해 3건이 실패했고 바로 잡았다.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      태그 <b>v0.2.0</b>(변환 20/20) · <b>v0.3.0</b>(실미션 착수 + 운영 도구 2종) 릴리스. 커밋 17건. 검증: 린터 <b>20/20</b> · 단위 <b>294종</b> · <b>E2E 14/14 510케이스</b> 전건 통과.
+      <b>다음 세션</b>: ① <code>python3 scripts/usage_report.py</code> 로 한도 리셋 확인(8/9 14:07 이후) → ② <code>M-2026-005</code> stage 4 부터 재개(<code>kanban unblock t_b62286c9</code>) → ③ 미완 백로그 <b>성장 지표 대시보드</b>.
+      <b>미결</b>: Slack 도달 불가(네트워크성) · <code>SLACK_BOT_TOKEN</code> rotate · 환경성 실패를 카드에 남기기(관측성) · <code>draft</code> 19종의 실미션 완주.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#47 — 실미션 재개 1차 M-2026-005(아키타입 B) · <b>라이브가 결함 7건을 냈다</b> · API 한도 소진으로 일시 정지</h2>
     <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "이제 하나씩 실제 미션을 테스트해보자. 먼저 계획을 세워보라." → 계획 승인 → "지금은 테스트이니 gate 승인요청이 오면 네가 직접 승인하라."</div>

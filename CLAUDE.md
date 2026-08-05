@@ -46,8 +46,8 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 2. ~~**컨테이너 GITHUB_TOKEN**~~ **[해소 2026-08-04]** `.env`의 `GITHUB_TOKEN`(Fine-grained PAT, Contents:write) + docker-compose가 `GIT_CONFIG_*`로 github.com credential helper 주입(토큰 파일 미저장, 신원 보존). 컨테이너 `git push` 인증 검증됨. ~~**Deliver Slack 실패**~~ **[해소]** Deliver 게시를 `hermes send`(Web API)로 고정(템플릿 stage11). **[신규 잔여] Slack Socket Mode 인바운드 flapping**(2026-08-02~, 아웃바운드는 정상) 조사 필요.
 3. ~~**Slack 승인→Kanban unblock 배선**~~ · ~~**pre-blocked Sam 게이트 알림**~~ **[해소 2026-08-04]** gate_keeper `approval_poll`(Web API 폴링, Socket Mode 비의존): #4 활성 Sam-게이트를 `#approvals`에 **판단 내용 포함**(주제·계획·정책 또는 보고서요약·검증·공개대상) 자동 게시 + #3 `SLACK_ALLOWED_USERS`(Sam)의 `승인`(단일)/`승인 <task_id>`(명시) 감지→`kanban unblock`. 단위테스트 10 + 라이브 E2E 검증. **[잔여] Socket Mode 인바운드 flapping**(네트워크성; recreate 후 안정, 승인흐름은 비의존) 모니터.
 4. ~~**Slack 네트워크 도달 불가**~~ **[해소 2026-08-04 오후]** 세션 초 `slack.com` HTTPS 타임아웃(google·github은 정상 = 네트워크성)이 있었으나 복구됨. 검증: 호스트 `auth.test` 200 · 컨테이너 Web API `ok=true` · **게이트키퍼 WARN 3시간 38분째 없음**(마지막 10:16, 확인 13:54). 진단 순서는 `docs/10 §4.3`.
-5. **매처(C)** — 미션→템플릿 자동 선택(`match_template.py` + `manifest.json`). 템플릿이 6종이 돼 이제 의미가 생겼다. 설계는 `docs/12 §5`(3-way 판정: 높음/어중간=경고+신규구성 병행/낮음=골격에서 신규). ~~전용 린터(E)~~ [완료 — `scripts/lint_template.py`].
-6. **성장 지표 대시보드** — 재작업률·wiki 재사용률·소요시간 누적. + **미션 진행상황 Slack 실시간 보고**(현재 통지는 게이트 이벤트·Deliver 시점만 — Sam이 "진행상황을 전혀 모르겠다"고 지적한 건).
+5. ~~**매처(C)**~~ **[완료 2026-08-05]** `scripts/match_template.py` + `templates/manifest.json`(템플릿에서 생성). 3-way 판정 + 근거 낱말 + `draft` 경고. 템플릿 20종에 `keywords:` 선언 추가. ~~전용 린터(E)~~ [완료 — `scripts/lint_template.py`].
+6. **성장 지표 대시보드** ← **남은 백로그 1건** — 재작업률·wiki 재사용률·소요시간 누적. + **미션 진행상황 Slack 실시간 보고**(현재 통지는 게이트 이벤트·Deliver 시점만 — Sam이 "진행상황을 전혀 모르겠다"고 지적한 건).
 
 ---
 
@@ -59,9 +59,23 @@ plan=team · **리셋 2026-08-09 14:07**). 미션은 깨끗이 세워져 있다(
 stage 1~3 산출물 온전 · 정지 사유는 카드 코멘트에 기록). **재개 = 리셋 확인 → `t_b62286c9` unblock
 → stage 4 부터.**
 
-**계획서**: 4-티어 실행 순서·미션 1건 절차·승인 규약은 `history.html #47` 과 아래 요약 참조.
-1차 `academic-paper`(골격 검증) → 2차 `code-docs`(AST 게이트 · 우리 저장소 대상) →
-3차 `systematic-review`(이식 게이트). Tier 3·4(비용·외부 실행·저장소 수정)는 **Sam 재확인**.
+**계획서**: 4-티어 실행 순서·미션 1건 절차·승인 규약은 `history.html #47`·`#48` 참조.
+1차 `academic-paper`(골격 검증 · **진행 중, stage 4 정지**) → 2차 `code-docs`(AST 게이트 ·
+우리 저장소 대상) → 3차 `systematic-review`(이식 게이트). Tier 3·4(비용·외부 실행·저장소
+수정)는 **Sam 재확인**.
+
+### 재개 절차 (2026-08-09 14:07 이후)
+```bash
+python3 scripts/usage_report.py                 # exit 0 이어야 재개 가능(1이면 아직 소진)
+docker compose ps                               # 2개 Up
+docker exec hermes-solomon hermes kanban list | grep M-2026-005
+docker exec hermes-solomon hermes kanban unblock t_b62286c9 \
+  --reason "한도 리셋 확인 후 재개 — stage 4 Dedup·Relevance 진행"
+```
+그 뒤 stage 4→5→**6 Cross-Verify(객관 게이트 첫 실미션 판정)**→7→**8 집필 개시 승인**→
+9→10→**11 Deliver 승인**. 승인은 내가 직접 한다(Sam 위임).
+⚠️ stage 4 는 `peer_reviewed` 를 **하한 6에 정확히 맞춘** 상태에서 선별한다 — 한 건이라도
+`rejected` 로 버리면 stage 6 이 반려한다(그게 정상 동작이다. 방금 그 게이트를 고쳤다).
 
 **⚠️ 라이브가 결함 7건을 냈다 — 그중 6건은 E2E 픽스처 510케이스가 원리적으로 볼 수 없는 층이다**
 (`docs/11 §7`). ①인스턴스화가 디스패처와 경합해 **상류 없이 워커 6개 실행** ②`block` 실패를
@@ -73,6 +87,11 @@ WARN 으로 넘겨 **게이트 빠진 파이프라인** ③**`archive` 가 워�
 **테스트 중 게이트 승인은 Claude 가 직접 한다**(Sam 위임 2026-08-05). ⚠️ **승인 사유는 다음
 워커가 읽는다** — 파이프라인에 대한 지시로 쓰고, 운영 메모는 `[운영 메모 · 산출물 지시 아님]`
 접두를 붙여라(⑤가 그래서 났다).
+
+**미완 백로그 1건**: **성장 지표 대시보드**(재작업률·wiki 재사용률·단계별 소요시간).
+데이터 출처는 kanban 이벤트·`reports/*/pipeline.json`·게이트키퍼 로그. Sam 이 지적한
+"미션 진행상황을 전혀 모르겠다"에 대한 답이기도 하다. 나머지 3건(발견 문서화·사용량
+가시화·매처 C)은 완료.
 
 **⚠️ 미션을 시작하기 전에 `python3 scripts/usage_report.py` 를 돌려라.** 한도가 소진돼 있으면
 `exit 1` 이고, 그 상태로 미션을 걸면 워커가 60초마다 크래시하다 카드가 blocked 로 떨어진다
@@ -95,7 +114,8 @@ WARN 으로 넘겨 **게이트 빠진 파이프라인** ③**`archive` 가 워�
 | profile | **11종** — 기존 8 + `architect`·`developer`·`tester`(아키타입 D 도입 시 신설) |
 | 객관 게이트 | **62종** `scripts/gates/` — recency·source_balance·doc_consistency·test_run·prisma_counts·prisma_checklist·seen_dedup·digest_shape·claim_consistency·patent_format·evidence_grade·stakeholder_coverage·format_consistency·clause_completeness·law_citation·legal_safety·symbol_truth·api_coverage·doc_links·objective_coverage·bloom_distribution·course_consistency·content_accessibility·atomic_commit·test_pass_rate·behavior_diff·owasp_coverage·cve_remediation·finding_completeness·secret_redaction·eval_set_quality·stat_significance·repro_determinism·run_completeness·pii_presence·license_compat·schema_conformance·datasheet_completeness·result_tolerance·env_consistency·install_evidence·reproduce_doc·bit_exact·solver_pin·doe_completeness·analysis_integrity·proposal_format·budget_integrity·call_alignment·proposal_traceability·comment_fidelity·comment_coverage·change_consistency·response_quality·claim_provenance·channel_format·outreach_tone·release_readiness·**slide_budget·deck_format·diagram_integrity** |
 | 산출 도구 | 4종 `scripts/tools/` — bib_export·monitor_state·relevance_score·budget_build |
-| 검증 | `python3 scripts/lint_template.py --all`(20/20) · 테스트 **251종**(29 템플릿 + 21 게이트키퍼 + 201 게이트) · **E2E 하네스 `scripts/tests/fixtures/run_all.py`(14종 510케이스)** |
+| 운영 도구 | `scripts/match_template.py`(미션→템플릿 3-way 매처 · `--rebuild` 로 manifest 생성) · `scripts/usage_report.py`(사용량·한도 · **LLM 미호출** · exit 1=소진) |
+| 검증 | `python3 scripts/lint_template.py --all`(20/20) · 테스트 **294종**(32 템플릿 + 23 게이트키퍼 + 204 게이트 + 8 매처 + 7 사용량 + 20 기타) · **E2E 하네스 `scripts/tests/fixtures/run_all.py`(14종 510케이스)** |
 
 **Sam 지시:** 실미션은 **전체 변환을 마친 뒤 하나씩** 돌린다(변환 중에는 dry-run만).
 
