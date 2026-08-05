@@ -91,11 +91,51 @@ def _read(path: str) -> str:
 
 
 # ── 배치표 불변식 ───────────────────────────────────────────────────────────
-def test_writer_and_verifier_never_share_a_model():
-    """★ 작성자≠검증자 불변식 — 같은 모델이면 같은 맹점을 공유해 독립검증이 성립하지 않는다."""
+def test_writer_and_verifier_share_a_model_only_by_explicit_declaration():
+    """★ 작성자≠검증자 불변식 — 같은 모델이면 같은 맹점을 공유해 독립검증이 성립하지 않는다.
+
+    2026-08-05 Sam 승인으로 ollama 백엔드는 속도 우선 통일을 택했다. 그 결정을 **코드에
+    남기고** 지나가려면 `shared_verifier_model` 선언이 있어야 한다 — 선언 없이 같아지면
+    실수다. 불변식을 조용히 잃지 않기 위한 장치다(삭제하지 않고 예외로 만든 이유).
+    """
     for name, spec in sb.BACKENDS.items():
-        assert spec["models"]["writer"] != spec["models"]["verifier"], \
-            f"{name}: 작성자와 검증자가 같은 모델이다"
+        if spec["models"]["writer"] == spec["models"]["verifier"]:
+            assert spec.get("shared_verifier_model"), (
+                f"{name}: 작성자와 검증자가 같은 모델인데 `shared_verifier_model` 선언이 없다 "
+                "— 의도한 것이면 사유를 적어라")
+
+
+def test_window_escapes_the_degenerate_compaction_branch():
+    """★★ 이 테스트가 M-2026-005 를 멈춰 세운 결함의 회귀 방어다.
+
+    Hermes 의 압축 발동 지점은 `context_length` 가 아니라 **입력 예산**에서 나온다
+    (`context_compressor.py:2113`):
+        effective = context_length - max_tokens
+        floored   = max(effective × threshold, MINIMUM_CONTEXT_LENGTH=64000)
+        floored >= effective  →  **퇴화 분기** = effective × 0.85
+    `effective <= 64000` 이면 어떤 threshold 를 줘도 퇴화 분기라서 **compression.threshold
+    가 완전히 무력**해진다. 65536-16384=49152 이 정확히 그 상태였고, 41,779 토큰에서
+    압축이 걸려 stage 5 가 압축 루프에 갇혔다.
+    """
+    MINIMUM_CONTEXT_LENGTH = 64000   # /opt/hermes/agent/model_metadata.py:300
+    common = sb.BACKENDS["ollama"]["common"]
+    effective = common["context_length"] - common["max_tokens"]
+    assert effective > MINIMUM_CONTEXT_LENGTH, (
+        f"입력 예산 {effective} <= {MINIMUM_CONTEXT_LENGTH} — 퇴화 분기다. "
+        "compression.threshold 가 무력해지고 압축이 창의 85%에서 상시 발동한다")
+
+
+def test_compression_threshold_is_written_per_profile():
+    """★ `compression.*` 는 루트 config 에서 **상속되지 않는다** — 프로필에 직접 써야 한다.
+
+    named 프로필은 HERMES_HOME=<root>/profiles/<name> 이라 자기 config.yaml 만 읽는다
+    (`hermes_cli/config.py:694` get_config_path). 루트에만 두면 조용히 기본값이 쓰인다.
+    """
+    extra = sb.BACKENDS["ollama"].get("extra_blocks", {})
+    assert "compression" in extra, "compression 블록을 프로필에 쓰지 않는다"
+    th = extra["compression"]["threshold"]
+    # <512K 창은 0.75 로 하한이 강제된다(`_effective_threshold_percent`) — 그 이하는 무의미
+    assert th > 0.75, f"threshold {th} 는 0.75 하한에 먹혀 아무 효과가 없다"
 
 
 def test_every_profile_has_exactly_one_tier():
@@ -173,6 +213,30 @@ def test_preserves_agent_block_in_source_config():
     sb.apply_to_file(path, "ollama", "qwen3.6:35b", with_header=True)
     text = _read(path)
     assert "agent:" in text and "max_turns: 150" in text and "reasoning_effort: medium" in text, text
+
+
+def test_writes_compression_block_and_keeps_other_blocks():
+    d = _repo()
+    path = os.path.join(d, "profiles-src", "scout", "config.yaml")
+    sb.apply_to_file(path, "ollama", "gemma4-26b-128k", with_header=True)
+    text = _read(path)
+    assert "compression:" in text, text
+    cfg = sb.parse_model_block(text.splitlines(), "compression")
+    assert float(cfg["threshold"]) == sb.COMPRESSION_THRESHOLD, cfg
+    assert "agent:" in text and "max_turns: 150" in text, "agent 블록이 사라졌다"
+    assert sb.parse_model_block(text.splitlines())["provider"] == "ollama"
+
+
+def test_codex_switch_removes_the_ollama_only_compression_block():
+    """★ 백엔드를 되돌릴 때 다른 백엔드의 블록이 남으면 설정이 섞인다."""
+    d = _repo()
+    path = os.path.join(d, "profiles-src", "scout", "config.yaml")
+    sb.apply_to_file(path, "ollama", "gemma4-26b-128k", with_header=True)
+    assert "compression:" in _read(path)
+    sb.apply_to_file(path, "codex", "gpt-5.6-terra", with_header=True)
+    text = _read(path)
+    assert "compression:" not in text, text
+    assert "agent:" in text and "max_turns: 150" in text, "agent 블록이 사라졌다"
 
 
 def test_preserves_onboarding_block_written_by_hermes():

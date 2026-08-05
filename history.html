@@ -25,6 +25,48 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#51 — M-2026-005 재개 → stage 4 통과 → <b>stage 5 가 압축 루프에 갇혔다</b> · 원인은 모델이 아니라 <b>내가 고른 창 크기</b> · 로컬 모델 단일화</h2>
+    <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "M-2026-005 재개하라." → "너무 느리다. 모든 로컬 모델을 gemma4:12b 로 통일하라." → "gemma4:e4b 는 어떤가? (context 128K)" → "일시중지"</div>
+
+    <div class="label">① 재개 — 정지했던 stage 4 를 통과했다:</div>
+    <ol class="steps">
+      <li>재개 지시에 <b>제약을 명시</b>했다 — <code>peer_reviewed</code> 가 정확히 6/6(하한)이라 한 편이라도 <code>rejected</code> 로 두면 stage 6 이 반려된다. 게이트 코드(<code>source_balance.py:64</code>)가 rejected 를 카운트에서 빼는 것을 먼저 확인하고 썼다. 결과: 11편 전부 selected, 하한 충족.</li>
+      <li><b>코드는 한 줄도 안 고쳤는데 백엔드만 바꾸니 통과했다</b> — 4회 크래시의 원인이 파이프라인이 아니라 429 였다는 진단이 이걸로 실증됐다.</li>
+    </ol>
+
+    <div class="label">② ⚠️ stage 5 가 멈췄다 — Sam 의 "너무 느리다"는 사실 "멈췄다"였다:</div>
+    <ol class="steps">
+      <li>75분간 산출물 2/11. 로그: <code>📦 Pre-API compression: ~47,277 tokens</code> · <code>🗜️ Compacting context</code> 6회 · <code>⚠️ Session compressed 2 times — accuracy may degrade</code> · run 하나는 <b>signal 7 로 사망</b>. <b>압축이 끝나면 다시 임계를 넘어 또 압축하는 루프.</b></li>
+      <li><b>원인은 모델이 아니라 내가 첫 계획에서 고른 <code>context_length: 65536</code> 이었다.</b> Hermes 의 압축 발동 지점은 <code>context_length</code> 가 아니라 <b>입력 예산</b>에서 나온다(<code>context_compressor.py:2113</code>): <code>effective = ctx − max_tokens</code> · <code>floored = max(effective × threshold, MINIMUM_CONTEXT_LENGTH=64000)</code> · <code>floored >= effective</code> 면 <b>퇴화 분기</b> = <code>effective × 0.85</code>. <b>65536−16384 = 49152 &lt; 64000 이라 항상 퇴화 분기</b>였고, <b><code>compression.threshold</code> 를 0.9 로 올려도 41,779 로 값이 안 바뀌었다</b>(완전 무력).</li>
+      <li><b>그리고 <code>compression.*</code> 는 루트 config 에서 프로필로 상속되지 않는다</b>(<code>config.py:694</code> — named 프로필은 자기 파일만 읽는다). 우리 루트 블록은 <b>지금까지 무시되고 있었다</b>(값이 기본값과 같아 티가 안 났다).</li>
+      <li><b>수정</b>: 창 131072 + 프로필마다 <code>compression.threshold: 0.85</code> 직접 기입 → 압축 발동 <b>41,779 → 97,484(2.33배)</b>. <code>ollama ps</code> 로 CONTEXT 131072 서빙 확인. 재개 후 10분간 <b>새 압축 0회</b>.</li>
+    </ol>
+
+    <div class="label">③ 모델 통일 — 지시가 목표와 반대여서 재고를 요청했다:</div>
+    <ol class="steps">
+      <li>Sam 이 지시한 <code>gemma4:12b</code> 는 <b>측정 결과 가장 느렸다</b>(dense · 프로브 벽시계 97초 vs 26b·e4b 45초). 지시대로 하면 "너무 느리다"가 악화된다 → 측정치를 붙여 재확인 요청.</li>
+      <li>Sam 제안 <code>gemma4:e4b</code> 를 측정에 추가: 8B·9.6GB·<b>131072 창</b>·tools+thinking. 벽시계가 26b 와 <b>동률</b>(45초 · 실작업 57.2s vs 61.5s)이라 <b>창 여유로 갈랐다</b> — e4b 는 131072 이 <b>천장</b>이라 ②의 설정에 여지가 없다. → <b><code>gemma4:26b</code> 로 통일</b>(262144 여유 · 마지막줄 규격 100% vs 33%).</li>
+      <li><b>교훈: tok/s 로 고르지 마라.</b> e4b 는 12b 보다 tok/s 가 1.7배인데 벽시계는 2배 빨랐다 — 비율이 다르다. 그리고 <b>경합 상태의 측정은 서로 비교할 수 없다</b>(미션이 도는 중 잰 e4b 265초가 무경합에서 45초).</li>
+      <li><b>작성자≠검증자를 모델 계열 수준에서 포기</b>(Sam 승인). 불변식을 조용히 잃지 않도록 <code>shared_verifier_model</code> 선언을 두고 <b>선언 없는 통일은 테스트가 FAIL</b> 시키게 바꿨다(테스트 삭제가 아니라 의도된 예외로 전환).</li>
+    </ol>
+
+    <div class="label">④ ⚠️ 일시중지에서 내가 밟은 함정 두 개 — 산출물 1건을 잃었다:</div>
+    <ol class="steps">
+      <li><b><code>kanban block</code> 을 두 번 하면 카드가 <code>triage</code> 로 간다</b>(unblock 루프 차단 장치). 그런데 <b>triage 에는 비-LLM 탈출구가 없다</b> — <code>unblock</code> ❌(blocked/scheduled만) · <code>promote</code> ❌(todo/blocked만) · <code>specify</code> 는 <b>LLM 이 카드 본문을 다시 쓴다</b>(stage 계약이 날아간다) · <code>decompose</code> 는 자식을 만든다.</li>
+      <li><b>그래서 SQL 로 <code>triage → blocked</code> 를 되돌렸더니 디스패처가 즉시 다시 집었다</b> — <b>워커 2개가 동시에 뜨고</b> 완료돼 있던 <code>analysis/dhuliawala2024.md</code> 를 덮어써 <b>14.1KB → 4.1KB 로 잘렸다.</b> git 에 없어 복구 불가(샤드 재실행으로 복원해야 한다). <b>상태기계를 우회하면 메타(block_kind·current_run_id)가 어긋난 채 남아 디스패처가 정상 카드로 본다.</b></li>
+      <li><b>확실한 일시중지 = 워커를 죽이고 <code>docker compose stop</code></b>. 보드를 손으로 고치지 마라. <b>미션 산출물은 커밋 전까지 백업이 없다.</b></li>
+    </ol>
+
+    <div class="result"><span class="label">결과:</span>
+      <b>stage 4 통과 · stage 5 는 Sam 요청으로 일시중지</b>(분석 3/11 · 카드 <code>blocked</code> · 컨테이너 정지). 전 프로필 <code>gemma4-26b-128k</code> 통일 · 압축 발동 2.33배 상향.
+      회귀: 린터 <b>20/20</b> · E2E <b>14/14 510케이스</b> · 단위 <b>326종</b>.
+      <b>재개</b>: <code>docker compose up -d</code> → <code>kanban unblock t_b07b1739</code>(기존 3편 덮지 말 것) → <code>grep -c "Compacting context"</code> 로 압축 재발 감시.
+      <b>남은 것</b>: <code>dhuliawala2024.md</code> 재생성 · 검증의 <i>깊이</i>는 프로브가 못 재므로 stage 6 에서 확인.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#50 — "더 좋은 로컬 모델은 없나?" → <b>추측 대신 측정</b> · 검증자를 <code>gemma4:26b</code> 로 교체 · <b>내 잣대가 틀렸던 것을 발견</b></h2>
     <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "1번에서 문제를 해결할 수 있는 더 좋은 로컬 모델은 없나?" → "gemma4 모델은 어떤가?" (#49 가 남긴 한계 ①: 로컬 30B 급의 도구 프로토콜 준수)</div>

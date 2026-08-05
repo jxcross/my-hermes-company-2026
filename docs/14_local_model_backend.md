@@ -15,30 +15,41 @@
 여기서 얻은 규율은 하나다 — **추론 백엔드는 갈아끼울 수 있어야 한다.** 한 공급자의 한도가
 회사 전체를 세우면 안 된다.
 
-## 2. 배치 — 3티어, 계열 분리
+## 2. 배치 — 단일 모델 (2026-08-05 Sam 지시로 통일)
 
-| 티어 | 프로필 | codex | ollama | 원본 | 계열 | tok/s | 로드(64K) |
-|---|---|---|---|---|---|---|---|
-| 작성자 | `default`(Solomon)·`scout`·`reader`·`curator`·`synthesizer`·`writer` | `gpt-5.6-terra` | **`qwen3.6-64k`** | `qwen3.6:35b` (MoE a3b · 262K) | Qwen | 68 | 24GB |
-| 검증자 | `fact-checker`·`reviewer`·`tester` | `gpt-5.6-sol` | **`gemma4-26b-64k`** | `gemma4:26b` (MoE 25.8B · 262K) | Gemma | **96** | 17GB |
-| 코더 | `architect`·`developer` | `gpt-5.6-terra` | **`qwen3-coder-64k`** | `qwen3-coder:30b` (MoE · 262K) | Qwen | 89 | 24GB |
+| 티어 | 프로필 | codex | **ollama(현재)** | 원본 |
+|---|---|---|---|---|
+| 작성자 | `default`(Solomon)·`scout`·`reader`·`curator`·`synthesizer`·`writer` | `gpt-5.6-terra` | **`gemma4-26b-128k`** | `gemma4:26b` |
+| 검증자 | `fact-checker`·`reviewer`·`tester` | `gpt-5.6-sol` | **`gemma4-26b-128k`** | `gemma4:26b` |
+| 코더 | `architect`·`developer` | `gpt-5.6-terra` | **`gemma4-26b-128k`** | `gemma4:26b` |
 
-**`-64k` 는 원본에 `num_ctx` 를 못박은 파생본이다** — 이유는 §3.1. 원본과 **같은 blob 을
-공유**하므로 디스크가 늘지 않는다(실측: `ollama show --modelfile` 의 `FROM` 이 동일 sha256).
-없으면 만든다: `python3 scripts/set_backend.py --build-models`.
+### 2.2 ⚠️ 로컬 백엔드는 **작성자≠검증자를 모델 계열 수준에서 포기했다** (Sam 승인 2026-08-05)
 
-**작성자≠검증자 불변식을 모델 *계열* 수준까지 지킨다.** 검증자에 작성자와 같은 모델(혹은 같은
-계열)을 쓰면 같은 맹점을 공유해 독립검증이 성립하지 않는다. 그래서 검증자만 Qwen 이 아닌
-GLM 계열이다. `scripts/tests/test_set_backend.py::test_writer_and_verifier_never_share_a_model`
-이 이것을 강제한다 — 배치표를 고치다 이 불변식을 깨면 테스트가 막는다.
+Sam 지시로 속도 우선 통일했다. **남는 분리**: profile 경계·SOUL(역할 프롬프트)·객관 게이트
+62종(산출물을 기계 판정)·작성 task ≠ 검증 task. **잃는 분리**: 모델 계열 다양성 —
+검증자가 작성자와 **같은 맹점을 공유**한다.
+
+이 결정을 조용히 잃지 않도록 `BACKENDS["ollama"]["shared_verifier_model"]` 에 사유를 선언하고,
+테스트가 **선언 없는 통일을 FAIL** 시킨다(`test_writer_and_verifier_share_a_model_only_by_
+explicit_declaration`). 실미션에서 **검증자가 놓치는 것**을 눈여겨봐야 한다.
+
+`gemma4:26b`(MoE 25.8B · 17GB · 최대 창 262144) 는 무경합 측정에서 프로토콜 전 항목 100%,
+프로토콜 벽시계 45초(3회)로 `gemma4:e4b` 와 동률이었고 `gemma4:12b`(97초)보다 2배 빨랐다.
+**동률에서 `창 여유`로 갈랐다** — e4b 는 131072 이 천장이라 §3.2 의 설정에 여유가 없다.
+
+**`-128k` 는 원본에 `num_ctx 131072` 를 못박은 파생본이다** — 창을 왜 서버 쪽에 박는지는
+§3.1, **왜 131072 여야 하는지는 §3.2**(이게 실미션을 멈춰 세운 결함이다). 원본과 **같은 blob 을
+공유**하므로 디스크가 늘지 않는다. 없으면 만든다:
+`python3 scripts/set_backend.py --build-models`.
 
 **모델 선택 기준(순서대로):**
 1. **tool calling 지원** — Hermes 는 모든 동작이 tool call 이다. `tools` capability 가 없는
    모델은 아무것도 못 한다. `ollama show <model>` 의 Capabilities 로 확인하라.
-2. **계열 분리** — 작성자와 검증자.
-3. **64GB 안에서 상주 가능** — 24GB 모델 + 64K KV 캐시가 상한선이다.
-4. 속도. 실측(호스트 · 8K ctx · 100% GPU): `qwen3.6:35b` 89.7 tok/s(로드 11.9s) ·
-   `gpt-oss:20b` 93.1 tok/s(로드 4.6s).
+2. **프로토콜 준수** — §2.1 프로브의 구속 항목 100%.
+3. **실작업 벽시계** — tok/s 가 아니다(§2.1 의 주의).
+4. **창 여유** — §3.2 가 요구하는 `context_length − max_tokens > 64000` 을 만족하고도
+   더 올릴 여지가 있는가. `gemma4:e4b`(131072 천장)와 `gemma4:26b`(262144)를 여기서 갈랐다.
+5. 메모리. 131072 창 실측: `gemma4-26b-128k` 17GB · `gemma4-e4b-128k` 9.9GB.
 
 ## 2.1 배치는 측정으로 정했다 — `scripts/probe_protocol.py`
 
@@ -59,15 +70,21 @@ GLM 계열이다. `scripts/tests/test_set_backend.py::test_writer_and_verifier_n
 
 **결과 (2026-08-05 · reps 3~5 · temp 0.2)**
 
-| 모델 | arg_fid | no_stray | finish | v_found | v_unambig | v_correct | v_lastline | tok/s |
-|---|---|---|---|---|---|---|---|---|
-| **`gemma4:26b`** ✅채택 | 100 | 100 | 100 | 100 | 100 | 100 | **100** | **96** |
-| `qwen3.6:35b` ✅채택 | 100 | 100 | 100 | 100 | 100 | 100 | 100 | 68 |
-| `qwen3-coder:30b` ✅채택 | 100 | 100 | 100 | 100 | 100 | 100 | 100 | 89 |
-| `gemma4:12b` | 100 | 100 | 100 | 100 | 100 | 100 | 100 | 47 |
-| `gemma4:31b` | 100 | 100 | 100 | 100 | 100 | 100 | 100 | **11** ❌느림 |
-| `glm-4.7-flash` | 100 | 100 | 100 | 100 | 100 | 100 | **0** | 67 |
-| `gpt-oss:20b` | 100 | 100 | 100 | — | — | 67 | 67 | 93 |
+| 모델 | arg_fid | no_stray | finish | v_found | v_unambig | v_correct | v_lastline | tok/s | 프로브 벽시계(3회) |
+|---|---|---|---|---|---|---|---|---|---|
+| **`gemma4:26b`** ✅채택 | 100 | 100 | 100 | 100 | 100 | 100 | **100** | 96 | **45초** |
+| `gemma4:e4b` | 100 | 100 | 100 | 100 | 100 | 100 | 33 | 81 | **45초** |
+| `gemma4:12b` | 100 | 100 | 100 | 100 | 100 | 100 | 100 | 47 | 97초 |
+| `qwen3.6:35b` | 100 | 100 | 100 | 100 | 100 | 100 | 100 | 68 | – |
+| `qwen3-coder:30b` | 100 | 100 | 100 | 100 | 100 | 100 | 100 | 89 | – |
+| `gemma4:31b` | 100 | 100 | 100 | 100 | 100 | 100 | 100 | **11** ❌느림 | 288초 |
+| `glm-4.7-flash` | 100 | 100 | 100 | 100 | 100 | 100 | **0** | 67 | – |
+| `gpt-oss:20b` | 100 | 100 | 100 | — | — | 67 | 67 | 93 | – |
+
+⚠️ **`tok/s` 로 고르지 마라.** `gemma4:e4b` 는 tok/s 가 `gemma4:12b` 보다 훨씬 높은데(81 vs 47)
+프로브 벽시계는 45초 대 97초로 **비율이 다르다**. 턴 수·사고량·프롬프트 처리가 더 크게 작용한다.
+**벽시계로 골라라.** 그리고 **경합 상태에서 잰 값은 서로 비교할 수 없다** — 미션이 도는 중에
+잰 첫 e4b 측정(3회 265초)은 무경합 재측정에서 45초로 바뀌었다.
 
 **⚠️ 이 측정에서 내가 한 번 틀렸고, 그게 이 절의 핵심 교훈이다.**
 처음 프로브는 VERDICT 를 **"마지막 줄에 정확히"** 로 쟀고 `glm-4.7-flash` 가 **0%** 로 나왔다.
@@ -76,19 +93,19 @@ GLM 계열이다. `scripts/tests/test_set_backend.py::test_writer_and_verifier_n
 **게이트를 재기 전에 게이트가 무엇을 읽는지 읽어라.** 잣대를 잘못 잡으면 멀쩡한 후보를
 탈락시키고, 반대로 재면 못 쓸 것을 통과시킨다(`docs/13 §5` 의 "동작하는 척하는 게이트"의 거울상).
 
-**왜 `gemma4:26b` 인가**(모두 필요조건을 통과한 뒤의 선택):
-1. **엄격 기준까지 100%** — 템플릿이 요구하는 "끝에"까지 지킨다. 게이트키퍼가 지금은
-   관대하지만, 관대한 파서에 기대는 것보다 규격을 지키는 모델이 낫다.
-2. **가장 빠르다**(96 tok/s) — 측정한 것 중 최고. MoE 25.8B.
-3. **가장 작다**(17GB) — 검증자가 작을수록 작성자 모델과의 스왑이 싸다.
-4. **계열이 다르다**(Gemma ≠ Qwen) — 작성자≠검증자를 계열 수준까지 유지.
+**왜 `gemma4:26b` 로 통일했나**(모두 필요조건을 통과한 뒤의 선택):
+1. **벽시계 최속 동률** — 프로브 45초로 `gemma4:e4b` 와 같고 `gemma4:12b`(97초)의 절반.
+   실작업(18.8k 입력)도 61.5초 대 57.2초로 e4b 와 사실상 동률.
+2. **동률에서 창 여유로 갈랐다** — 262144 vs e4b 의 131072(천장). §3.2 의 설정에 여유가 있다.
+3. **엄격 기준까지 100%** — 템플릿이 요구하는 "끝에"까지 지킨다(e4b 는 33%). 관대한 파서에
+   기대는 것보다 규격을 지키는 모델이 낫다.
 
-**탈락 사유**: `gemma4:31b` 은 dense 라 **11 tok/s**(실사용 불가) · `gpt-oss:20b` 은 판정
-포맷이 3회 중 1회 비었다 · `glm-4.7-flash` 는 기능상 문제없으나 위 4가지에서 gemma4:26b 에
-밀린다(**폴백으로 남겨 둔다** — `BASE_MODELS` 에 유지).
+**탈락 사유**: `gemma4:12b`(Sam 이 처음 지시한 모델)은 dense 라 **벽시계 2배** ·
+`gemma4:31b` 은 dense 라 **11 tok/s**(실사용 불가) · `gpt-oss:20b` 은 판정 포맷이 3회 중 1회
+비었다 · `gemma4:e4b`·`glm-4.7-flash` 는 기능상 문제없어 **폴백으로 남긴다**(`BASE_MODELS`).
 
 **받지 않은 것**: `qwen3-next:80b`(50GB) · `qwen3-coder-next`(52GB)는 **받지 않았다.** 배치
-모델 3종이 이미 필요조건에서 만점이라 50GB 를 더 쓸 근거가 없다. `minimax-m2.7`·`glm-5.2` 는
+후보들이 이미 필요조건에서 만점이라 50GB 를 더 쓸 근거가 없다. `minimax-m2.7`·`glm-5.2` 는
 Ollama 에 **`:cloud` 태그뿐**이라 로컬 실행 자체가 안 된다.
 
 ⚠️ **이 프로브가 재지 않는 것: 검증의 *깊이*다.** 포맷을 지킨다는 것과 틀린 주장을 잡아낸다는
@@ -98,14 +115,16 @@ Ollama 에 **`:cloud` 태그뿐**이라 로컬 실행 자체가 안 된다.
 
 ```yaml
 model:
-  default: "qwen3.6-64k"
+  default: "gemma4-26b-128k"
   provider: "ollama"                                # → Hermes 내부에서 custom 으로 매핑
   base_url: "http://host.docker.internal:11434/v1"
   api_key: "ollama"
   api_mode: "chat_completions"
-  context_length: 65536
-  ollama_num_ctx: 65536
+  context_length: 131072
+  ollama_num_ctx: 131072
   max_tokens: 16384
+compression:
+  threshold: 0.85       # ⚠️ 프로필에 직접 — 루트에서 상속 안 됨(§3.3)
 ```
 
 | 키 | 빠지면 | 근거(컨테이너 내부 소스) |
@@ -140,8 +159,8 @@ model:
 **해법: 창을 서버 쪽에 못박는다.** Modelfile 로 파생 모델을 만든다.
 
 ```
-FROM qwen3.6:35b
-PARAMETER num_ctx 65536
+FROM gemma4:26b
+PARAMETER num_ctx 131072
 ```
 ```bash
 python3 scripts/set_backend.py --build-models     # 없는 것만 만든다
@@ -155,8 +174,7 @@ python3 scripts/set_backend.py --build-models     # 없는 것만 만든다
 `scripts/set_backend.py` 의 상수 `OLLAMA_NUM_CTX` **하나**에서 나오므로 갈라질 수 없고,
 `test_modelfile_pins_the_same_window_as_the_config` 가 그것을 강제한다.
 
-**검증(2026-08-05 실측):** 세 티어 모두 `ollama ps` CONTEXT = **65536**
-(qwen3.6-64k 24GB · glm-4.7-flash-64k 22GB · qwen3-coder-64k 24GB).
+**검증(2026-08-05 실측):** `ollama ps` CONTEXT = **131072** · `gemma4-26b-128k` 17GB.
 
 ⚠️ **`context_length` 와 Modelfile 의 `num_ctx` 는 항상 같은 값이어야 한다.** 압축 임계가 실제
 서빙 창보다 크면 Hermes 는 넣었다고 믿고 모델은 못 본 상태가 된다 — `docs/11 §7 ⑦` 의
@@ -166,21 +184,71 @@ python3 scripts/set_backend.py --build-models     # 없는 것만 만든다
 "동작하는 척하는 게이트" 와 같은 계열이다 — **설정을 넣었으면 그것이 실제로 반영됐는지를
 바깥에서 관측하라**(여기서는 `ollama ps` 의 CONTEXT 열).
 
+### 3.2 ⚠️⚠️ 창 크기는 성능 손잡이가 아니라 **정확성 손잡이**다 — M-2026-005 가 이걸로 멈췄다
+
+`context_length: 65536` 으로 실미션을 돌리자 stage 5 가 **압축 루프에 갇혀 사실상 멈췄다**
+(75분간 산출물 2/11, 워커 1회는 signal 7 로 사망). 로그:
+
+```
+📦 Pre-API compression: ~47,277 tokens near the context/output limit.
+🗜️ Compacting context …            (6회)
+⚠️ Session compressed 2 times — accuracy may degrade
+```
+
+**압축 발동 지점은 `context_length` 가 아니라 *입력 예산*에서 나온다**
+(`/opt/hermes/agent/context_compressor.py:2113` `_compute_threshold_tokens`):
+
+```
+effective_window = context_length − max_tokens
+floored = max(effective_window × threshold, MINIMUM_CONTEXT_LENGTH=64000)
+floored >= effective_window  →  ★퇴화 분기★ = int(effective_window × 0.85)
+```
+
+`65536 − 16384 = 49152 < 64000` 이라 **항상 퇴화 분기**로 떨어진다. 결과:
+
+| context_length | max_tokens | threshold | 압축 발동 | 비고 |
+|---|---|---|---|---|
+| 65536 | 16384 | 0.5 | **41,779** | 로그의 47,277 이 여기 걸렸다 |
+| 65536 | 16384 | **0.9** | **41,779** | ★ **임계를 올려도 값이 안 바뀐다 — 완전 무력** |
+| 98304 | 16384 | 0.85 | 69,632 | 퇴화 탈출 |
+| **131072** | 16384 | **0.85** | **97,484** | 현재 설정 (2.33배) |
+| 262144 | 16384 | 0.85 | 208,896 | 여지 |
+
+**규칙: `context_length − max_tokens > 64000` 을 반드시 만족시켜라.** 못 지키면
+`compression.threshold` 를 아무리 조정해도 창의 85%에서 압축이 상시 발동하고, 압축 자체가
+LLM 호출이라 **파이프라인이 전진하지 못한다.**
+`scripts/tests/test_set_backend.py::test_window_escapes_the_degenerate_compaction_branch`
+가 이 조건을 강제한다.
+
+### 3.3 ⚠️ `compression.*` 는 루트 config 에서 **상속되지 않는다**
+
+named 프로필은 `HERMES_HOME=<root>/profiles/<name>` 이라 **자기 `config.yaml` 만** 읽는다
+(`hermes_cli/config.py:694` `get_config_path()`). 레이어는
+`DEFAULT_CONFIG → <HERMES_HOME>/config.yaml → /etc/hermes/config.yaml` 뿐이고 **루트는
+레이어가 아니다.** 우리 `hermes-home/config.yaml` 의 `compression:` 블록은 지금까지
+**무시되고 있었다**(값이 전부 기본값과 같아서 티가 안 났다).
+
+그래서 `set_backend.py` 가 `compression:` 블록을 **프로필마다 직접 쓴다**(`extra_blocks`).
+`agent.reasoning_effort` 도 같은 규칙이다.
+
+⚠️ `<512K` 창에서는 `threshold` 가 **0.75 로 하한이 강제**되므로(`_effective_threshold_percent`)
+0.75 이하 값은 의미가 없다. 우리는 0.85 를 쓴다.
+
 ## 4. 전환 절차
 
 ```bash
 python3 scripts/set_backend.py --show                     # 현재 상태
 python3 scripts/set_backend.py --backend ollama --dry-run # 대상 확인
-python3 scripts/set_backend.py --build-models             # -64k 파생본 생성(없는 것만)
+python3 scripts/set_backend.py --build-models             # -128k 파생본 생성(없는 것만)
 python3 scripts/set_backend.py --backend ollama           # 적용
 docker compose up -d --force-recreate hermes-solomon hermes-gatekeeper
 docker exec hermes-solomon hermes profile list            # 모델명 확인
 python3 scripts/usage_report.py                           # 로컬 준비 상태(exit 0 이어야 착수 가능)
-ollama ps                                                 # ★ CONTEXT 가 65536 인지 확인
+ollama ps                                                 # ★ CONTEXT 가 131072 인지 확인
 ```
 
-`--build-models` 는 원본이 없으면 `ollama pull <원본>` 을 안내하고 exit 1 한다. 원본 3종은
-`qwen3.6:35b`(24GB) · `glm-4.7-flash`(19GB) · `qwen3-coder:30b`(18GB).
+`--build-models` 는 원본이 없으면 `ollama pull <원본>` 을 안내하고 exit 1 한다. 원본은
+`gemma4:26b`(17GB) 하나. 폴백은 `gemma4:e4b`(9.6GB)·`glm-4.7-flash`(19GB).
 
 **한도 리셋 후 복귀(2026-08-09 14:07 이후):**
 ```bash
@@ -203,8 +271,7 @@ root config 의 `platform_toolsets:`·`personalities:` 는 무손상이다. PyYA
 
 ## 5. 호스트 Ollama 설정
 
-배치 모델 3종은 64K 창에서 각각 22~24GB 를 쓴다(실측). 두 개가 동시에 올라가면 46GB,
-세 개면 70GB 로 **64GB 를 넘는다** — **상주 1개**가 안전하다. 11단계 파이프라인은 순차
+배치가 단일 모델(`gemma4-26b-128k` 17GB @131072)이라 스왑 자체가 없어졌다. 상주 1개면 충분하다. 11단계 파이프라인은 순차
 실행이고 스테이지 내 병렬은 같은 profile(=같은 모델)의 subagent 팬아웃이므로(`docs/11 §5`)
 동시에 두 모델이 필요한 구간이 없다. 단계 전환 시 5~12초 로드 비용만 든다.
 
@@ -237,6 +304,36 @@ launchctl setenv OLLAMA_KEEP_ALIVE 30m
 
 로컬 점검도 **LLM 을 호출하지 않는다** — `/api/tags` 는 메타데이터 조회다. "한도를 확인하려고
 한도를 쓰면 안 된다"는 원래 규율이 그대로 유지된다.
+
+## 6.5 ⚠️ 미션을 세울 때의 함정 두 개 (2026-08-05 실측 — 내가 둘 다 밟았다)
+
+**① `kanban block` 을 두 번 하면 카드가 `triage` 로 가고, 거기엔 비-LLM 탈출구가 없다.**
+`block --help` 에 적혀 있다 — *"Repeated same-kind re-blocks after unblock route the task to
+triage to break unblock loops."* 그런데 `triage` 에서 나오는 길은:
+- `unblock` ❌ — `blocked`/`scheduled` 만 받는다(`kanban_db.py:5901` `unblock_task`)
+- `promote` ❌ — *"promote only applies to 'todo' or 'blocked'"*
+- `specify` ⚠️ — **LLM 이 카드 제목·본문을 다시 쓴다.** stage 계약이 날아갈 수 있다
+- `decompose` ⚠️ — 자식 카드를 만든다(중복 생성)
+
+→ **정지는 한 번만 `block` 하고, 재개 후 다시 세울 일이 있으면 다른 방법을 써라**(아래 ③).
+
+**② 카드 상태를 SQL 로 직접 고치면 디스패처가 즉시 다시 집는다.**
+`triage → blocked` 로 되돌렸더니 **워커 2개가 동시에 뜨고**, 완료돼 있던
+`analysis/dhuliawala2024.md` 를 덮어써 14.1KB → 4.1KB 로 **잘렸다**(git 에 없어 복구 불가 ·
+샤드 재실행으로 복원). 상태기계를 우회하면 `block_kind`·`current_run_id` 같은 메타가
+어긋난 채로 남아 디스패처가 정상 카드로 본다.
+
+**③ 확실한 일시중지 = 컨테이너를 세운다.**
+```bash
+docker exec hermes-solomon ps -eo pid,args | grep '[k]anban task'   # 워커 확인
+docker exec hermes-solomon kill -9 <pid>                             # 먼저 죽인다
+docker compose stop hermes-solomon hermes-gatekeeper                 # 디스패처까지 정지
+```
+재개는 `docker compose up -d` → `hermes kanban unblock <id> --reason "…"`.
+**보드 상태를 손으로 고치는 것보다 디스패처를 세우는 것이 안전하다.**
+
+⚠️ **미션 산출물은 커밋되기 전까지 백업이 없다.** 워커가 덮어쓰면 그걸로 끝이다
+(위 ②가 정확히 그랬다). 단계가 끝날 때마다 커밋하는 것을 고려하라.
 
 ## 7. 알려진 한계 · 다음
 

@@ -24,21 +24,23 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 - 격리 컨테이너 **`hermes-solomon`** (`docker-compose.yml`, 공식 이미지 nousresearch/hermes-agent). 인증: OAuth(ChatGPT), provider `openai-codex`.
 - **프로필 11종**: default(Solomon)·scout·reader·curator·synthesizer·writer(작성자) · **fact-checker·reviewer·tester**(검증자) · **architect·developer**(코더). 소스=`profiles-src/`. architect·developer·tester는 2026-08-04 아키타입 D 도입으로 신설(`docs/13 §7`).
 - **⚠️ 추론 백엔드는 갈아끼운다 — 모델을 손으로 고치지 마라**(2026-08-05 신설 · `docs/14`). `model:` 블록은 **`scripts/set_backend.py` 가 생성**한다. 배치표는 그 스크립트 상단 `TIERS`·`BACKENDS` 한 곳에만 있다.
-  | 티어 | 프로필 | `codex` | **`ollama`(현재)** | 원본 |
-  |---|---|---|---|---|
-  | 작성자 | default·scout·reader·curator·synthesizer·writer | `gpt-5.6-terra` | `qwen3.6-64k` | `qwen3.6:35b` |
-  | 검증자 | fact-checker·reviewer·tester | `gpt-5.6-sol` | `gemma4-26b-64k` | `gemma4:26b` |
-  | 코더 | architect·developer | `gpt-5.6-terra` | `qwen3-coder-64k` | `qwen3-coder:30b` |
+  | 티어 | 프로필 | `codex` | **`ollama`(현재)** |
+  |---|---|---|---|
+  | 작성자 | default·scout·reader·curator·synthesizer·writer | `gpt-5.6-terra` | `gemma4-26b-128k` |
+  | 검증자 | fact-checker·reviewer·tester | `gpt-5.6-sol` | `gemma4-26b-128k` |
+  | 코더 | architect·developer | `gpt-5.6-terra` | `gemma4-26b-128k` |
 
   ```bash
   python3 scripts/set_backend.py --show               # 현재 백엔드(불일치면 exit 1)
-  python3 scripts/set_backend.py --build-models       # -64k 파생본 생성(없는 것만)
+  python3 scripts/set_backend.py --build-models       # -128k 파생본 생성(없는 것만)
   python3 scripts/set_backend.py --backend ollama     # 로컬 · 한도 없음
   python3 scripts/set_backend.py --backend codex      # 8/09 14:07 이후 복귀
   ```
-  **작성자≠검증자는 모델 *계열* 수준까지 지킨다** — 같은 계열은 같은 맹점을 공유해 독립검증이 성립하지 않는다(테스트가 강제한다).
-  **배치는 추측이 아니라 측정으로 정했다** — `python3 scripts/probe_protocol.py`(도구 인자 충실도·부작용·종료 호출·VERDICT 포맷을 재는 프로브 · `docs/14 §2.1`). 배치 3종은 전 항목 100%. ⚠️ **게이트를 재기 전에 게이트가 무엇을 읽는지 읽어라** — 처음에 VERDICT 를 "마지막 줄에 정확히"로 쟀다가 `glm-4.7-flash` 를 0%로 오판했다(`gate_keeper.py:53` 은 `.search()` 라 본문 어디든 되고, 다시 재니 100%였다).
-  ⚠️ **`ollama_num_ctx` 만으로는 창이 안 잡힌다(실측)** — Ollama 의 `/v1` 은 `options.num_ctx` 를 **무시한다**(`/api/chat` 은 지킨다). 그래서 배치 모델은 Modelfile 로 창을 못박은 **`-64k` 파생본**이다(원본과 blob 공유 · 디스크 안 늘어남). 창 하나 차이로 메모리가 3.7배 난다 — 넣은 설정이 **반영됐는지 `ollama ps` 의 CONTEXT 로 확인하라**(`docs/14 §3.1`).
+  ⚠️⚠️ **`context_length − max_tokens > 64000` 을 반드시 지켜라(docs/14 §3.2).** 못 지키면 Hermes 압축이 **퇴화 분기**로 떨어져 창의 85%에서 상시 발동하고 `compression.threshold` 가 **완전히 무력**해진다 — M-2026-005 stage 5 가 이걸로 압축 루프에 갇혀 멈췄다(65536−16384=49152 < 64000 → 41,779 토큰에서 발동). 현재 131072−16384=114688 → 97,484. 테스트가 강제한다.
+  ⚠️ **`compression.*`·`agent.*` 는 루트 config 에서 프로필로 상속되지 않는다**(docs/14 §3.3) — named 프로필은 자기 `config.yaml` 만 읽는다. `set_backend.py` 가 프로필마다 직접 쓴다.
+  ⚠️ **작성자≠검증자를 모델 계열 수준에서 포기했다**(Sam 승인 2026-08-05 · 속도 우선 통일). `BACKENDS["ollama"]["shared_verifier_model"]` 선언이 없으면 테스트가 FAIL 시킨다 — 불변식을 조용히 잃지 않기 위해서다. 남는 분리는 profile·SOUL·객관 게이트 62종이다.
+  **배치는 추측이 아니라 측정으로 정했다** — `python3 scripts/probe_protocol.py`(도구 인자 충실도·부작용·종료 호출·VERDICT 포맷을 재는 프로브 · `docs/14 §2.1`). 후보 8종을 쟀고 채택 모델은 전 항목 100%. ⚠️ **tok/s 로 고르지 마라 — 벽시계로 골라라**(e4b 는 12b 보다 tok/s 가 1.7배인데 벽시계는 2배 빨랐다). ⚠️ **게이트를 재기 전에 게이트가 무엇을 읽는지 읽어라** — 처음에 VERDICT 를 "마지막 줄에 정확히"로 쟀다가 `glm-4.7-flash` 를 0%로 오판했다(`gate_keeper.py:53` 은 `.search()` 라 본문 어디든 되고, 다시 재니 100%였다).
+  ⚠️ **`ollama_num_ctx` 만으로는 창이 안 잡힌다(실측)** — Ollama 의 `/v1` 은 `options.num_ctx` 를 **무시한다**(`/api/chat` 은 지킨다). 그래서 배치 모델은 Modelfile 로 창을 못박은 **`-128k` 파생본**이다(원본과 blob 공유 · 디스크 안 늘어남). 창 하나 차이로 메모리가 3.7배 난다 — 넣은 설정이 **반영됐는지 `ollama ps` 의 CONTEXT 로 확인하라**(`docs/14 §3.1`).
 - **인프라 정비 완료**: `HERMES_WRITE_SAFE_ROOT=/opt/data:/work/company:/work/llm-wiki`(워커 직접쓰기, 복사 불필요) · **Tavily 웹검색**(키는 repo `.env`의 `TAVILY_API_KEY`, 전 프로필 os.environ 노출 필수) · **`WIKI_PATH=/work/llm-wiki`**(Curator의 karpathy-llm-wiki 스킬).
 - **미션 산출물**: 보고서→`reports/M-2026-NNN/`, 지식→llm-wiki repo(raw/entities/concepts/reflections, 재사용률 추적). Kanban 게이트: 미션=부모·단계=자식, `link`=순차, `block --kind needs_input`=Sam 게이트, `--workspace dir:/work/company/reports/<mission>`.
 - **반려 게이트 자동화(게이트키퍼)**: 사이드카 컨테이너 **`hermes-gatekeeper`**(`docker-compose.yml`, `scripts/gate_keeper.py`). 검증 task(6·9) 판정이 `VERDICT: FAIL`이면 산출물 재작업 루프(리비전→재검증) 자동 생성 + downstream(7·10) PASS 전까지 보류. **활성 게이트만** 처리(완료 미션 스킵, 재시작 안전). **Sam 승인 게이트도 자동화**(`approval_poll`, Web API): 활성 Sam-게이트를 `#approvals`에 자동 게시 + Sam의 `승인`/`승인 <task_id>` 감지→`kanban unblock`(SLACK_ALLOWED_USERS만). 상세 `docs/10 §4.4`·`docs/11 §7`.
@@ -77,9 +79,20 @@ stage 1~3 산출물 온전 · 정지 사유는 카드 코멘트에 기록). **�
 → stage 4 부터.**
 
 **→ [2026-08-05] 한도에 묶이지 않는 경로를 만들었다: 로컬 Ollama 백엔드**(`docs/14`).
-`python3 scripts/set_backend.py --backend ollama` 로 프로필 11종을 호스트 로컬 모델로 돌렸다.
-**리셋을 기다리지 않고 재개할 수 있다.** 단, 로컬 30B 급은 gpt-5.6 만큼 도구 프로토콜을 지키지
-못할 수 있다(`kanban_complete` 미호출 · `VERDICT:` 포맷 이탈) — 재개는 Sam 판단.
+로컬 백엔드로 **stage 4 를 통과**했다(이전에 4회 크래시하던 지점 — 원인이 파이프라인이 아니라
+429 였다는 진단이 이걸로 확인됐다). **현재 상태: stage 5 에서 Sam 요청으로 일시중지**
+(분석 3/11 · 카드 `blocked` · 컨테이너 정지). stage 5 는 처음에 **압축 퇴화 분기**로 멈췄고
+창을 131072 로 올려 고쳤다(위 ⚠️⚠️).
+
+**재개**: `docker compose up -d` → `hermes kanban unblock t_b07b1739 --reason "…기존 분석 3편
+(dhuliawala2024·gao2023·min2023)을 덮지 말고 나머지만…"` → 압축 재발 여부를
+`grep -c "Compacting context" hermes-home/kanban/logs/t_b07b1739.log` 로 감시.
+
+⚠️ **일시중지는 컨테이너를 세워라**(`docs/14 §6.5`). `kanban block` 을 두 번 하면 카드가
+**`triage`** 로 가는데 거기엔 **비-LLM 탈출구가 없다**(`unblock`·`promote` 모두 거부 ·
+`specify` 는 LLM 이 본문을 다시 쓴다). 그리고 **DB 를 손으로 고치면 디스패처가 즉시 다시
+집는다** — 실제로 워커 2개가 동시에 떠 완료 산출물 1건을 덮어썼다(14.1KB→4.1KB, git 에 없어
+복구 불가).
 
 **계획서**: 4-티어 실행 순서·미션 1건 절차·승인 규약은 `history.html #47`·`#48` 참조.
 1차 `academic-paper`(골격 검증 · **진행 중, stage 4 정지**) → 2차 `code-docs`(AST 게이트 ·
@@ -141,7 +154,7 @@ WARN 으로 넘겨 **게이트 빠진 파이프라인** ③**`archive` 가 워�
 | 객관 게이트 | **62종** `scripts/gates/` — recency·source_balance·doc_consistency·test_run·prisma_counts·prisma_checklist·seen_dedup·digest_shape·claim_consistency·patent_format·evidence_grade·stakeholder_coverage·format_consistency·clause_completeness·law_citation·legal_safety·symbol_truth·api_coverage·doc_links·objective_coverage·bloom_distribution·course_consistency·content_accessibility·atomic_commit·test_pass_rate·behavior_diff·owasp_coverage·cve_remediation·finding_completeness·secret_redaction·eval_set_quality·stat_significance·repro_determinism·run_completeness·pii_presence·license_compat·schema_conformance·datasheet_completeness·result_tolerance·env_consistency·install_evidence·reproduce_doc·bit_exact·solver_pin·doe_completeness·analysis_integrity·proposal_format·budget_integrity·call_alignment·proposal_traceability·comment_fidelity·comment_coverage·change_consistency·response_quality·claim_provenance·channel_format·outreach_tone·release_readiness·**slide_budget·deck_format·diagram_integrity** |
 | 산출 도구 | 4종 `scripts/tools/` — bib_export·monitor_state·relevance_score·budget_build |
 | 운영 도구 | `scripts/match_template.py`(미션→템플릿 3-way 매처 · `--rebuild` 로 manifest 생성) · `scripts/usage_report.py`(착수 전 점검 · **LLM 미호출** · 백엔드별 판정) · **`scripts/set_backend.py`**(추론 백엔드 codex↔ollama 전환 · `docs/14`) · **`scripts/probe_protocol.py`**(로컬 모델 도구 프로토콜 준수도 측정 — 모델 선정 근거) |
-| 검증 | `python3 scripts/lint_template.py --all`(20/20) · 테스트 **322종**(32 템플릿 + 23 게이트키퍼 + 204 게이트 + 8 매처 + 12 사용량 + 23 백엔드 + 20 기타) · **E2E 하네스 `scripts/tests/fixtures/run_all.py`(14종 510케이스)** |
+| 검증 | `python3 scripts/lint_template.py --all`(20/20) · 테스트 **326종**(32 템플릿 + 23 게이트키퍼 + 204 게이트 + 8 매처 + 12 사용량 + 27 백엔드 + 20 기타) · **E2E 하네스 `scripts/tests/fixtures/run_all.py`(14종 510케이스)** |
 
 **Sam 지시:** 실미션은 **전체 변환을 마친 뒤 하나씩** 돌린다(변환 중에는 dry-run만).
 

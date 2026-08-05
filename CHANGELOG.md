@@ -5,6 +5,44 @@
 
 ## [Unreleased]
 
+### Fixed — 실미션을 멈춰 세운 **컨텍스트 압축 퇴화 분기** (`docs/14 §3.2`)
+- M-2026-005 stage 5 가 로컬 백엔드에서 **압축 루프에 갇혀 사실상 멈췄다**(75분간 산출물
+  2/11 · 워커 1회 signal 7 사망). 원인은 모델이 아니라 **내가 고른 `context_length: 65536`**.
+  Hermes 의 압축 발동 지점은 `context_length` 가 아니라 **입력 예산**에서 나온다
+  (`context_compressor.py:2113`): `effective = context_length − max_tokens`,
+  `floored = max(effective × threshold, MINIMUM_CONTEXT_LENGTH=64000)`,
+  `floored >= effective` 면 **퇴화 분기** = `effective × 0.85`.
+  `65536 − 16384 = 49152 < 64000` 이라 **항상 퇴화 분기**로 떨어져 41,779 토큰에서 압축이
+  걸렸고, **`compression.threshold` 를 0.9 로 올려도 값이 바뀌지 않았다**(완전 무력).
+- **수정**: `context_length` 131072 · `max_tokens` 16384 → 압축 발동 **41,779 → 97,484**(2.33배).
+  `test_window_escapes_the_degenerate_compaction_branch` 가 `ctx − max_tokens > 64000` 을 강제한다.
+- **`compression.*`·`agent.*` 는 루트 config 에서 프로필로 상속되지 않는다**
+  (`config.py:694` — named 프로필은 `HERMES_HOME=<root>/profiles/<name>` 이라 자기 파일만 읽는다).
+  루트의 `compression:` 블록은 지금까지 **무시되고 있었다**. `set_backend.py` 가 이제
+  `extra_blocks` 로 프로필마다 직접 쓴다.
+
+### Changed — 로컬 모델 단일화 (Sam 지시)
+- 전 프로필 11종 → **`gemma4-26b-128k`**. Sam 이 처음 지시한 `gemma4:12b` 는 **측정 결과
+  가장 느려서**(프로브 벽시계 97초 vs 26b·e4b 45초 · dense) 채택하지 않았고, Sam 확인 후
+  `gemma4:26b` 로 정했다.
+- **`gemma4:e4b` 를 측정에 추가**(Sam 제안): 8B·9.6GB·131072 창·tools+thinking. 벽시계가
+  26b 와 **동률**(45초 · 실작업 57.2s vs 61.5s)이라 **창 여유**로 갈랐다 — e4b 는 131072 이
+  천장이라 §3.2 의 설정에 여지가 없다. 폴백으로 `BASE_MODELS` 에 남긴다.
+- ⚠️ **`tok/s` 로 고르지 마라.** e4b 는 12b 보다 tok/s 가 1.7배인데 벽시계는 2배 빨랐다 —
+  비율이 다르다. 그리고 **경합 상태의 측정은 서로 비교할 수 없다**(미션이 도는 중에 잰
+  e4b 265초가 무경합에서 45초가 됐다).
+- **작성자≠검증자를 모델 계열 수준에서 포기**(Sam 승인). 조용히 잃지 않도록
+  `shared_verifier_model` 선언을 두고, **선언 없는 통일은 테스트가 FAIL** 시킨다.
+
+### Notes — 미션을 세울 때의 함정 두 개 (내가 둘 다 밟았다 · `docs/14 §6.5`)
+- **`kanban block` 을 두 번 하면 카드가 `triage` 로 가고 비-LLM 탈출구가 없다**
+  (`unblock`·`promote` 모두 거부 · `specify` 는 LLM 이 카드 본문을 다시 쓴다).
+- **카드 상태를 SQL 로 직접 고치면 디스패처가 즉시 다시 집는다** — 워커 2개가 동시에 떠
+  완료돼 있던 `analysis/dhuliawala2024.md` 를 덮어썼다(14.1KB → 4.1KB · **git 에 없어 복구
+  불가**, 샤드 재실행으로 복원 필요).
+- → **확실한 일시중지는 워커를 죽이고 `docker compose stop`** 이다. 보드를 손으로 고치지 마라.
+- **미션 산출물은 커밋 전까지 백업이 없다.** 단계마다 커밋을 고려하라.
+
 ### Added — 추론 백엔드를 갈아끼울 수 있게 했다 (`docs/14`)
 - **`scripts/set_backend.py`** — 프로필 11종의 `model:` 블록을 **한 명령으로** 전환한다
   (`--backend codex|ollama` · `--show` · `--dry-run`). 배치표는 스크립트 상단 `TIERS`·`BACKENDS`

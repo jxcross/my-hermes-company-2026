@@ -117,11 +117,15 @@ def test_local_backend_ignores_stale_codex_limit(monkeypatch=None):
 
 
 def test_local_backend_blocks_when_model_missing():
-    """모델이 없으면 워커가 매 턴 실패한다 — 카드에는 이유가 안 남는다(docs/11 §7 ⑦)."""
-    import set_backend as sb
+    """모델이 없으면 워커가 매 턴 실패한다 — 카드에는 이유가 안 남는다(docs/11 §7 ⑦).
+
+    ⚠️ 픽스처가 **배치 모델 개수에 의존하면 안 된다** — 2026-08-05 배치를 단일 모델로
+    통일하자 '1종만 설치' 픽스처가 곧 '전부 설치'가 되어 이 테스트가 조용히 무의미해졌다.
+    설치 목록에 배치 모델이 하나도 없도록 고정한다.
+    """
     orig_logs, orig_tags = ur.LOG_DIRS, ur.ollama_tags
     ur.LOG_DIRS = [_dir({})]
-    ur.ollama_tags = _fake_tags([sb.backend_models("ollama")[0]])  # 1종만 설치
+    ur.ollama_tags = _fake_tags(["some-unrelated-model:latest"])  # 배치 모델 0종
     try:
         assert ur.main_local(_args(), "ollama") == 1, "모델이 없는데 착수 가능으로 판정했다"
     finally:

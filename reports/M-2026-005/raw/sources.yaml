@@ -8,6 +8,9 @@
   collected_at: 2026-08-05
   status: selected
   raw_path: raw/dhuliawala2024.md
+  relevant_q: ["Q1-2", "Q2-1"]
+  dedup_note: "Unique paper. CoVe multi-stage verification for factual claims — Q1-2(主張·引用·사실 정합성 확인), Q2-1(다단계 검증 순서)."
+  relevance_note: "CoVe의 검증자 독립 질문/검토 순서가 RQ1/RQ2 핵심 사례."
 - id: gao2023
   title: "RARR: Researching and Revising What Language Models Say, Using Language Models"
   authors: ["Luyu Gao", "Zhuyun Dai", "Panupong Pasupat", "Anthony Chen", "Arun Tejasvi Chaganty", "Yicheng Fan", "Vincent Zhao", "Ni Lao", "Hongrae Lee", "Da-Cheng Juan", "Kelvin Guu"]
@@ -18,6 +21,9 @@
   collected_at: 2026-08-05
   status: selected
   raw_path: raw/gao2023.md
+  relevant_q: ["Q1-2", "Q3-1"]
+  dedup_note: "Unique paper. Author overlap with madaan2023 (Luyu Gao co-author) but different study."
+  relevance_note: "자기 검토 루프(Layered Reasoning)는 Q1-2(주장 검증)와 Q3-1(자기 수정 한계) 모두에 ground-truth 기준 제공."
 - id: min2023
   title: "FActScore: Fine-grained Atomic Evaluation of Factual Precision in Long Form Text Generation"
   authors: ["Sewon Min", "Kalpesh Krishna", "Xinxi Lyu", "Mike Lewis", "Wen-tau Yih", "Pang Koh", "Mohit Iyyer", "Luke Zettlemoyer", "Hannaneh Hajishirzi"]
@@ -28,6 +34,9 @@
   collected_at: 2026-08-05
   status: selected
   raw_path: raw/min2023.md
+  relevant_q: ["Q1-2"]
+  dedup_note: "Unique paper. Factuality evaluation benchmark tool — different from RARR's generative self-revision."
+  relevance_note: "Atomic 사실 정밀도 측정 프래밍 — Q1-2의 ground-truth 정합성 검증 도구로 직접 관련."
 - id: madaan2023
   title: "Self-Refine: Iterative Refinement with Self-Feedback"
   authors: ["Aman Madaan", "Niket Tandon", "Prakhar Gupta", "Skyler Hallinan", "Luyu Gao", "Sarah Wiegreffe", "Uri Alon", "Nouha Dziri", "Shrimai Prabhumoye", "Yiming Yang", "Shashank Gupta", "Bodhisattwa Prasad Majumder", "Katherine Hermann", "Sean Welleck", "Amir Yazdanbakhsh", "Peter Clark"]
@@ -38,6 +47,9 @@
   collected_at: 2026-08-05
   status: selected
   raw_path: raw/madaan2023.md
+  relevant_q: ["Q1-3", "Q3-1"]
+  dedup_note: "Unique paper. Gao2023와 Luyu Gao 공동저자이지만 별개 연구(자기 피드백 vs 레이어드 추론)."
+  relevance_note: "도구 상호작용 비판 없이 자체 생성 내피드로 자기 수정 — Q1-3(외부 도구/증거 사용 비판·수정)의 대조 사례."
 - id: manakul2023
   title: "SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection for Generative Large Language Models"
   authors: ["Potsawee Manakul", "Adian Liusie", "Mark Gales"]
@@ -48,6 +60,9 @@
   collected_at: 2026-08-05
   status: selected
   raw_path: raw/manakul2023.md
+  relevant_q: ["Q1-2", "Q2-1", "Q3-1"]
+  dedup_note: "Unique paper. Black-box hallucination detection — independent of FActScore's external knowledge grounding."
+  relevance_note: "외부 참조 없이 자기 자신의 출력 일관성으로 정합성 판정 — rules vs LLM gate 설계에 핵심 사례."
 - id: wu2024
   title: "Large Language Models Can Self-Correct with Key Condition Verification"
   authors: ["Zhenyu Wu", "Qingkai Zeng", "Zhihan Zhang", "Zhaoxuan Tan", "Chao Shen", "Meng Jiang"]
@@ -58,6 +73,9 @@
   collected_at: 2026-08-05
   status: selected
   raw_path: raw/wu2024.md
+  relevant_q: ["Q1-2", "Q3-1"]
+  dedup_note: "Unique paper. Executable condition verification (symbolic) with LLM generation — distinct from CoVe, RARR, SelfCheckGPT."
+  relevance_note: "실행 가능한 조건 검증(symoblic gate)으로 자기 수정 결정 — rules vs LLM 검증 책임 경계에 핵심 사례."
 - id: gokhale2025
   title: "LogicGuard: Improving Embodied LLM agents through Temporal Logic based Critics"
   authors: ["Anand Gokhale", "Vaibhav Srivastava", "Francesco Bullo"]
@@ -68,6 +86,9 @@
   collected_at: 2026-08-05
   status: selected
   raw_path: raw/gokhale2025.md
+  relevant_q: ["Q1-1", "Q2-3"]
+  dedup_note: "Unique paper. Temporal logic as executable verification gate — novel approach not in peer_reviewed set."
+  relevance_note: "시간 논리 기반 rules-based critic가 embodied agent에 적용 — Q1-1(규칙/실행기반 검증과 LLM 의미검증의 책임 경계)의 대표 사례."
 - id: yamauchi2025
   title: "An Empirical Study of LLM-as-a-Judge: How Design Choices Impact Evaluation Reliability"
   authors: ["Yusuke Yamauchi", "Taro Yano", "Masafumi Oyamada"]
@@ -78,6 +99,9 @@
   collected_at: 2026-08-05
   status: selected
   raw_path: raw/yamauchi2025.md
+  relevant_q: ["Q3-2", "Q4-1"]
+  dedup_note: "Unique paper. Empirical judge-design study — direct match to SCOPE Q3-2/ Q4-1 targets."
+  relevance_note: "judge 설계 선택지(비교 방식·순서 등)의 신뢰도 영향 측정 — LLM-as-a-Judge의 편향/비결정성 평가에 핵심."
 - id: kim2024
   title: "Can LLMs Produce Faithful Explanations For Fact-checking? Towards Faithful Explainable Fact-Checking via Multi-Agent Debate"
   authors: ["Kyungha Kim", "Sangyun Lee", "Kung-Hsiang Huang", "Hou Pong Chan", "Manling Li", "Heng Ji"]
@@ -88,6 +112,9 @@
   collected_at: 2026-08-05
   status: selected
   raw_path: raw/kim2024.md
+  relevant_q: ["Q1-2", "Q2-2"]
+  dedup_note: "Unique paper. Multi-agent debate for fact-checking explanations — distinct from single-agent self-reflection papers."
+  relevance_note: "다중 에이전트 논증을 통한 사실 확인 설명의 충실도 검증 — Q2-2(에이전트 workflow·역할·메시지 경계)에 직접 관련."
 - id: li2024
   title: "A survey on LLM-based multi-agent systems: workflow, infrastructure, and challenges"
   authors: ["Xinyi Li", "Sai Wang", "Siqi Zeng", "Yu Wu", "Yi Yang"]
@@ -99,14 +126,20 @@
   collected_at: 2026-08-05
   status: selected
   raw_path: raw/li2024.md
+  relevant_q: ["Q2-1", "Q2-2", "Q3-3"]
+  dedup_note: "Unique survey. Springer Vicinagearth venue — distinct from Wang2024's autonomous agent scope."
+  relevance_note: "multi-agent 시스템의 workflow/infra 구조 설계를 포괄적으로 서베이 — multi-stage verification 순서와 agent role design에 광범위하게 관련."
 - id: wang2024
   title: "A survey on large language model based autonomous agents"
   authors: ["Lei Wang", "Chen Ma", "Xueyang Feng", "Zeyu Zhang", "Hao Yang", "Jingsen Zhang", "Zhiyuan Chen", "Jiakai Tang", "Xu Chen", "Yankai Lin", "Wayne Xin Zhao", "Zhewei Wei", "Jirong Wen"]
   published_year: 2024
   venue: "Frontiers of Computer Science"
   doi: "10.1007/s11704-024-40231-1"
-  url: "https://link.springer.com/article/10.1007/s11704-024-40231-1"
+  url: "https://link.springer.com/article/10.1007/s44336-024-00009-2"
   source_type: survey
   collected_at: 2026-08-05
   status: selected
   raw_path: raw/wang2024.md
+  relevant_q: ["Q3-1", "Q4-3"]
+  dedup_note: "Unique survey. Frontiers of Computer Science venue — broader autonomous agent scope than Li2024's workflow focus."
+  relevance_note: "자율 에이전트의 self-reflection, self-correction, evaluation의 설계 원칙을 포괄 서베이 — Q3-1(자기 수정 한계)와 Q4-3(규칙 기반 검증 적용 한계)에 관련."

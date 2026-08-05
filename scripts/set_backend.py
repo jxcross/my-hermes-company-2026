@@ -59,15 +59,31 @@ TIERS: dict[str, list[str]] = {
 #    공유**하므로 디스크가 늘지 않는다.
 #    config 의 `ollama_num_ctx` 는 그대로 둔다 — 무시되더라도 해가 없고, Hermes 가 `/api/chat`
 #    경로를 쓰게 되면 그때는 유효하다.
-OLLAMA_NUM_CTX = 65536
+#
+# ⚠️⚠️ **창 크기는 성능 손잡이가 아니라 정확성 손잡이다 (2026-08-05 실미션에서 배움)**
+#    처음에 65536 으로 잡았더니 M-2026-005 stage 5 가 **압축 루프에 갇혀 사실상 멈췄다.**
+#    Hermes 의 압축 발동 지점은 `context_length` 가 아니라 **입력 예산**에서 계산된다
+#    (`/opt/hermes/agent/context_compressor.py:2113` `_compute_threshold_tokens`):
+#        effective_window = context_length - max_tokens
+#        floored = max(effective_window × threshold, MINIMUM_CONTEXT_LENGTH=64000)
+#        floored >= effective_window 이면 → **퇴화 분기**: effective_window × 0.85
+#    65536 - 16384 = 49152 < 64000 이라 **항상 퇴화 분기**로 떨어져 41,779 토큰에서
+#    압축이 걸렸고, `compression.threshold` 를 0.9 로 올려도 **값이 바뀌지 않았다**(무력).
+#    → `context_length - max_tokens > 64000` 을 만족해야 한다. 131072-16384=114688 ✓
+#    실측 대조: 65536→41,779 · 131072→97,484(th 0.85) · 262144→208,896
+OLLAMA_NUM_CTX = 131072
+# ⚠️ 프로필마다 직접 써야 한다 — `compression.*` 는 **루트 config 에서 상속되지 않는다**
+#    (named 프로필은 HERMES_HOME=<root>/profiles/<name> 이라 자기 config.yaml 만 읽는다).
+#    그리고 <512K 창에서는 0.75 로 하한이 강제되므로 0.75 이하 값은 의미가 없다.
+COMPRESSION_THRESHOLD = 0.85
 
 # 파생 모델 → 원본. `--build-models` 가 없는 것만 만든다.
 BASE_MODELS: dict[str, str] = {
-    "qwen3.6-64k":       "qwen3.6:35b",
-    "gemma4-26b-64k":    "gemma4:26b",
-    "qwen3-coder-64k":   "qwen3-coder:30b",
-    # 폴백(배치에서 빠졌지만 검증된 대안 — docs/14 §2)
-    "glm-4.7-flash-64k": "glm-4.7-flash",
+    "gemma4-26b-128k":   "gemma4:26b",
+    # 폴백(배치에서 빠졌지만 측정으로 검증된 대안 — docs/14 §2.1)
+    "gemma4-e4b-128k":   "gemma4:e4b",       # 동률 속도·최소 메모리, 단 131072 이 천장
+    "qwen3.6-128k":      "qwen3.6:35b",
+    "qwen3-coder-128k":  "qwen3-coder:30b",
 }
 
 
@@ -93,13 +109,21 @@ BACKENDS: dict[str, dict] = {
     },
     "ollama": {
         "label": "ollama (호스트 로컬 · host.docker.internal:11434)",
-        # ⚠️ 배치 모델은 **-64k 파생본**이다(원본이 아니다). 이유는 위 BASE_MODELS 주석.
+        # ⚠️ 배치 모델은 **-128k 파생본**이다(원본이 아니다). 이유는 위 BASE_MODELS 주석.
         # 선정 근거는 추측이 아니라 측정이다 — `scripts/probe_protocol.py` (docs/14 §2.1).
+        # 무경합 실측(2026-08-05): 프로토콜 3회 벽시계 26b 45s = e4b 45s < 12b 97s ·
+        # 실작업(18.8k 입력) 26b 61.5s ≈ e4b 57.2s. 속도가 동률이라 **창 여유**로 갈랐다
+        # (26b 262144 > e4b 131072=천장) + 마지막줄 규격 26b 100% vs e4b 33%.
         "models": {
-            "writer":   "qwen3.6-64k",
-            "verifier": "gemma4-26b-64k",
-            "coder":    "qwen3-coder-64k",
+            "writer":   "gemma4-26b-128k",
+            "verifier": "gemma4-26b-128k",
+            "coder":    "gemma4-26b-128k",
         },
+        # ⚠️ **작성자≠검증자를 모델 계열 수준에서 포기한 것은 의도된 예외다.**
+        # Sam 승인(2026-08-05): 속도 우선으로 전 프로필 단일 모델. 남는 분리는
+        # profile 경계·SOUL(역할 프롬프트)·객관 게이트 62종·작성 task ≠ 검증 task 다.
+        # 이 선언이 없으면 테스트가 통일을 FAIL 시킨다 — 불변식을 조용히 잃지 않기 위해서다.
+        "shared_verifier_model": "Sam 승인 2026-08-05: 속도 우선 통일(docs/14 §2.2)",
         "common": {
             # `ollama` 는 Hermes 내부에서 `custom` 프로바이더로 매핑된다
             # (/opt/hermes/hermes_cli/auth.py resolve_provider).
@@ -119,6 +143,11 @@ BACKENDS: dict[str, dict] = {
             # 미지정 시 provider 기본값이 65536 이라 출력이 창을 다 먹는다
             # (plugins/model-providers/custom/__init__.py default_max_tokens).
             "max_tokens": 16384,
+        },
+        # `model:` 외에 프로필 config 에 함께 써야 하는 최상위 블록.
+        # ⚠️ 루트 hermes-home/config.yaml 의 compression 은 named 프로필에 **상속되지 않는다.**
+        "extra_blocks": {
+            "compression": {"threshold": COMPRESSION_THRESHOLD},
         },
         "header": [
             "# 로컬 Ollama 백엔드 — scripts/set_backend.py 가 생성한다. 직접 고치지 말 것.",
@@ -162,15 +191,15 @@ def targets(repo_root: str = REPO_ROOT) -> list[tuple[str, str, str]]:
     return out
 
 
-# ── model 블록 읽기/쓰기 (PyYAML 비의존) ────────────────────────────────────
-def find_model_block(lines: list[str]) -> tuple[int, int] | None:
-    """`model:` 최상위 블록의 [start, end) 행 범위. 바로 위의 주석 줄도 포함한다.
+# ── 최상위 블록 읽기/쓰기 (PyYAML 비의존) ───────────────────────────────────
+def find_block(lines: list[str], name: str = "model") -> tuple[int, int] | None:
+    """`<name>:` 최상위 블록의 [start, end) 행 범위. 바로 위의 주석 줄도 포함한다.
 
     끝은 '다음 0열 시작 행' 직전이다(들여쓴 줄과 빈 줄은 블록 내부로 본다).
     """
     idx = None
     for i, line in enumerate(lines):
-        if line.rstrip() == "model:" and not line[:1].isspace():
+        if line.rstrip() == f"{name}:" and not line[:1].isspace():
             idx = i
             break
     if idx is None:
@@ -198,16 +227,21 @@ def find_model_block(lines: list[str]) -> tuple[int, int] | None:
     return start, end
 
 
-def parse_model_block(lines: list[str]) -> dict[str, str]:
-    """model 블록의 1단계 키/값만 읽는다(중첩 없음 — 실제 스키마가 평면이다)."""
-    span = find_model_block(lines)
+def find_model_block(lines: list[str]) -> tuple[int, int] | None:
+    """하위 호환 별칭."""
+    return find_block(lines, "model")
+
+
+def parse_model_block(lines: list[str], name: str = "model") -> dict[str, str]:
+    """블록의 1단계 키/값만 읽는다(중첩 없음 — 실제 스키마가 평면이다)."""
+    span = find_block(lines, name)
     if span is None:
         return {}
     start, end = span
     out: dict[str, str] = {}
     for line in lines[start:end]:
         stripped = line.strip()
-        if not stripped or stripped.startswith("#") or stripped == "model:":
+        if not stripped or stripped.startswith("#") or stripped == f"{name}:":
             continue
         if not line.startswith("  ") or line.startswith("   "):
             continue  # 2칸 들여쓰기(=1단계)만
@@ -218,6 +252,10 @@ def parse_model_block(lines: list[str]) -> dict[str, str]:
     return out
 
 
+def _kv(key, val) -> str:
+    return f'  {key}: "{val}"' if isinstance(val, str) else f"  {key}: {val}"
+
+
 def render_model_block(backend: str, model: str, with_header: bool) -> list[str]:
     spec = BACKENDS[backend]
     out: list[str] = []
@@ -226,8 +264,14 @@ def render_model_block(backend: str, model: str, with_header: bool) -> list[str]
     out.append("model:")
     out.append(f'  default: "{model}"')
     for key, val in spec["common"].items():
-        out.append(f'  {key}: "{val}"' if isinstance(val, str) else f"  {key}: {val}")
+        out.append(_kv(key, val))
     return out
+
+
+def render_extra_block(backend: str, name: str) -> list[str]:
+    """`compression:` 처럼 model 외에 프로필에 직접 써야 하는 최상위 블록."""
+    return [f"{name}:"] + [_kv(k, v)
+                           for k, v in BACKENDS[backend].get("extra_blocks", {})[name].items()]
 
 
 def apply_to_file(path: str, backend: str, model: str, with_header: bool) -> tuple[bool, str]:
@@ -237,15 +281,26 @@ def apply_to_file(path: str, backend: str, model: str, with_header: bool) -> tup
     with open(path, encoding="utf-8") as fh:
         original = fh.read()
     lines = original.splitlines()
-    block = render_model_block(backend, model, with_header)
 
-    span = find_model_block(lines)
-    if span is None:
-        new_lines = block + [""] + lines
-    else:
+    def splice(lines_: list[str], name: str, block: list[str]) -> list[str]:
+        span = find_block(lines_, name)
+        if span is None:
+            return lines_ + [""] + block if lines_ else list(block)
         start, end = span
-        new_lines = lines[:start] + block + lines[end:]
+        return lines_[:start] + block + lines_[end:]
 
+    lines = splice(lines, "model", render_model_block(backend, model, with_header))
+    # 다른 백엔드에서 남은 블록은 지우고, 이 백엔드가 요구하는 것만 남긴다
+    for name in set(BACKENDS["codex"].get("extra_blocks", {})) \
+            | set(BACKENDS["ollama"].get("extra_blocks", {})):
+        if name in BACKENDS[backend].get("extra_blocks", {}):
+            lines = splice(lines, name, render_extra_block(backend, name))
+        else:
+            span = find_block(lines, name)
+            if span:
+                lines = lines[:span[0]] + lines[span[1]:]
+
+    new_lines = lines
     new_text = "\n".join(new_lines) + "\n"
     if new_text == original:
         return False, "이미 동일"
