@@ -1,0 +1,196 @@
+{
+  "mission": "M-2026-005",
+  "template": "academic-paper",
+  "topic": "LLM 에이전트 파이프라인의 이중 게이트 설계 — 객관 게이트(규칙 기반)와 LLM 검증자의 역할 분담",
+  "policy_file": "reports/M-2026-005/SCOPE.md",
+  "sources_file": "reports/M-2026-005/raw/sources.yaml",
+  "policy": {
+    "recency_policy": {
+      "cutoff_year_offset": -3,
+      "recent_ratio": 0.5,
+      "hard_block_year_offset": -15,
+      "seminal_exceptions": true
+    },
+    "source_balance_policy": {
+      "categories": [
+        "peer_reviewed",
+        "preprint",
+        "survey",
+        "dataset_code",
+        "standards",
+        "web"
+      ],
+      "min_per_category": {
+        "peer_reviewed": 6,
+        "preprint": 2,
+        "survey": 1,
+        "dataset_code": 0,
+        "standards": 0,
+        "web": 0
+      },
+      "hard_block_if_missing": false
+    }
+  },
+  "stages": [
+    {
+      "id": 1,
+      "name": "Scoping",
+      "task_id": "t_063b2a4b",
+      "profile": "default",
+      "verifier": false,
+      "sam_gate": true,
+      "upstream_task_ids": []
+    },
+    {
+      "id": 2,
+      "name": "Search Strategy",
+      "task_id": "t_d387ea8c",
+      "profile": "scout",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_063b2a4b"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Collection",
+      "task_id": "t_b9741c4f",
+      "profile": "scout",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_d387ea8c"
+      ],
+      "parallel": {
+        "mode": "workers",
+        "workers": [
+          "peer_reviewed",
+          "preprint",
+          "survey",
+          "dataset_code",
+          "standards"
+        ],
+        "batch_size": 3,
+        "merge_to": "raw/sources.yaml"
+      }
+    },
+    {
+      "id": 4,
+      "name": "Dedup·Relevance",
+      "task_id": "t_b62286c9",
+      "profile": "curator",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_b9741c4f"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Deep Analysis",
+      "task_id": "t_b07b1739",
+      "profile": "reader",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_b62286c9"
+      ],
+      "parallel": {
+        "mode": "per_item",
+        "over": "raw/sources.yaml 의 status=selected 자료 각각",
+        "batch_size": 3,
+        "merge_to": "analysis/_index.md"
+      }
+    },
+    {
+      "id": 6,
+      "name": "Cross-Verify",
+      "task_id": "t_5d8a7cd5",
+      "profile": "fact-checker",
+      "verifier": true,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_b07b1739"
+      ],
+      "gate": {
+        "objective": [
+          "recency_check",
+          "source_balance"
+        ],
+        "llm": "fact_checker_verdict",
+        "draft": null
+      }
+    },
+    {
+      "id": 7,
+      "name": "Synthesis",
+      "task_id": "t_2d699e50",
+      "profile": "synthesizer",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_5d8a7cd5"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "Draft Sections",
+      "task_id": "t_3748d855",
+      "profile": "writer",
+      "verifier": false,
+      "sam_gate": true,
+      "upstream_task_ids": [
+        "t_2d699e50"
+      ],
+      "approval_artifact": "reports/M-2026-005/outline.md",
+      "parallel": {
+        "mode": "per_item",
+        "over": "outline.md 의 sections 목록 각각(Abstract·Introduction·Related Work·Method/Analysis·Discussion·Conclusion 등 목차가 정한 것)",
+        "batch_size": 3,
+        "merge_to": "draft.md"
+      }
+    },
+    {
+      "id": 9,
+      "name": "Independent Review",
+      "task_id": "t_68255d4b",
+      "profile": "reviewer",
+      "verifier": true,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_3748d855"
+      ],
+      "gate": {
+        "objective": [
+          "recency_check",
+          "source_balance"
+        ],
+        "llm": "reviewer_verdict",
+        "draft": "reports/M-2026-005/draft.md"
+      }
+    },
+    {
+      "id": 10,
+      "name": "Wiki Update",
+      "task_id": "t_f26bfbf0",
+      "profile": "curator",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_68255d4b"
+      ]
+    },
+    {
+      "id": 11,
+      "name": "Deliver",
+      "task_id": "t_2ffef5dd",
+      "profile": "default",
+      "verifier": false,
+      "sam_gate": true,
+      "upstream_task_ids": [
+        "t_f26bfbf0"
+      ]
+    }
+  ]
+}

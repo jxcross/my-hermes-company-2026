@@ -1,0 +1,112 @@
+- id: dhuliawala2024
+  title: "Chain-of-Verification Reduces Hallucination in Large Language Models"
+  authors: ["Shehzaad Dhuliawala", "Mojtaba Komeili", "Jing Xu", "Roberta Raileanu", "Xian Li", "Asli Celikyilmaz", "Jason Weston"]
+  published_year: 2024
+  venue: "Findings of the Association for Computational Linguistics: ACL 2024"
+  url: "https://aclanthology.org/2024.findings-acl.212/"
+  source_type: peer_reviewed
+  collected_at: 2026-08-05
+  status: selected
+  raw_path: raw/dhuliawala2024.md
+- id: gao2023
+  title: "RARR: Researching and Revising What Language Models Say, Using Language Models"
+  authors: ["Luyu Gao", "Zhuyun Dai", "Panupong Pasupat", "Anthony Chen", "Arun Tejasvi Chaganty", "Yicheng Fan", "Vincent Zhao", "Ni Lao", "Hongrae Lee", "Da-Cheng Juan", "Kelvin Guu"]
+  published_year: 2023
+  venue: "Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)"
+  url: "https://aclanthology.org/2023.acl-long.910/"
+  source_type: peer_reviewed
+  collected_at: 2026-08-05
+  status: selected
+  raw_path: raw/gao2023.md
+- id: min2023
+  title: "FActScore: Fine-grained Atomic Evaluation of Factual Precision in Long Form Text Generation"
+  authors: ["Sewon Min", "Kalpesh Krishna", "Xinxi Lyu", "Mike Lewis", "Wen-tau Yih", "Pang Koh", "Mohit Iyyer", "Luke Zettlemoyer", "Hannaneh Hajishirzi"]
+  published_year: 2023
+  venue: "Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing"
+  url: "https://aclanthology.org/2023.emnlp-main.741/"
+  source_type: peer_reviewed
+  collected_at: 2026-08-05
+  status: selected
+  raw_path: raw/min2023.md
+- id: madaan2023
+  title: "Self-Refine: Iterative Refinement with Self-Feedback"
+  authors: ["Aman Madaan", "Niket Tandon", "Prakhar Gupta", "Skyler Hallinan", "Luyu Gao", "Sarah Wiegreffe", "Uri Alon", "Nouha Dziri", "Shrimai Prabhumoye", "Yiming Yang", "Shashank Gupta", "Bodhisattwa Prasad Majumder", "Katherine Hermann", "Sean Welleck", "Amir Yazdanbakhsh", "Peter Clark"]
+  published_year: 2023
+  venue: "Advances in Neural Information Processing Systems 36 (NeurIPS 2023)"
+  url: "https://proceedings.neurips.cc/paper_files/paper/2023/hash/91edff07232fb1b55a505a9e9f6c0ff3-Abstract-Conference.html"
+  source_type: peer_reviewed
+  collected_at: 2026-08-05
+  status: selected
+  raw_path: raw/madaan2023.md
+- id: manakul2023
+  title: "SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection for Generative Large Language Models"
+  authors: ["Potsawee Manakul", "Adian Liusie", "Mark Gales"]
+  published_year: 2023
+  venue: "Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing"
+  url: "https://aclanthology.org/2023.emnlp-main.557/"
+  source_type: peer_reviewed
+  collected_at: 2026-08-05
+  status: selected
+  raw_path: raw/manakul2023.md
+- id: wu2024
+  title: "Large Language Models Can Self-Correct with Key Condition Verification"
+  authors: ["Zhenyu Wu", "Qingkai Zeng", "Zhihan Zhang", "Zhaoxuan Tan", "Chao Shen", "Meng Jiang"]
+  published_year: 2024
+  venue: "Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing"
+  url: "https://aclanthology.org/2024.emnlp-main.714/"
+  source_type: peer_reviewed
+  collected_at: 2026-08-05
+  status: selected
+  raw_path: raw/wu2024.md
+- id: gokhale2025
+  title: "LogicGuard: Improving Embodied LLM agents through Temporal Logic based Critics"
+  authors: ["Anand Gokhale", "Vaibhav Srivastava", "Francesco Bullo"]
+  published_year: 2025
+  venue: "arXiv"
+  url: "https://arxiv.org/abs/2507.03293"
+  source_type: preprint
+  collected_at: 2026-08-05
+  status: selected
+  raw_path: raw/gokhale2025.md
+- id: yamauchi2025
+  title: "An Empirical Study of LLM-as-a-Judge: How Design Choices Impact Evaluation Reliability"
+  authors: ["Yusuke Yamauchi", "Taro Yano", "Masafumi Oyamada"]
+  published_year: 2025
+  venue: "arXiv"
+  url: "https://arxiv.org/abs/2506.13639"
+  source_type: preprint
+  collected_at: 2026-08-05
+  status: selected
+  raw_path: raw/yamauchi2025.md
+- id: kim2024
+  title: "Can LLMs Produce Faithful Explanations For Fact-checking? Towards Faithful Explainable Fact-Checking via Multi-Agent Debate"
+  authors: ["Kyungha Kim", "Sangyun Lee", "Kung-Hsiang Huang", "Hou Pong Chan", "Manling Li", "Heng Ji"]
+  published_year: 2024
+  venue: "arXiv"
+  url: "https://arxiv.org/abs/2402.07401"
+  source_type: preprint
+  collected_at: 2026-08-05
+  status: selected
+  raw_path: raw/kim2024.md
+- id: li2024
+  title: "A survey on LLM-based multi-agent systems: workflow, infrastructure, and challenges"
+  authors: ["Xinyi Li", "Sai Wang", "Siqi Zeng", "Yu Wu", "Yi Yang"]
+  published_year: 2024
+  venue: "Vicinagearth"
+  doi: "10.1007/s44336-024-00009-2"
+  url: "https://link.springer.com/article/10.1007/s44336-024-00009-2"
+  source_type: survey
+  collected_at: 2026-08-05
+  status: selected
+  raw_path: raw/li2024.md
+- id: wang2024
+  title: "A survey on large language model based autonomous agents"
+  authors: ["Lei Wang", "Chen Ma", "Xueyang Feng", "Zeyu Zhang", "Hao Yang", "Jingsen Zhang", "Zhiyuan Chen", "Jiakai Tang", "Xu Chen", "Yankai Lin", "Wayne Xin Zhao", "Zhewei Wei", "Jirong Wen"]
+  published_year: 2024
+  venue: "Frontiers of Computer Science"
+  doi: "10.1007/s11704-024-40231-1"
+  url: "https://link.springer.com/article/10.1007/s11704-024-40231-1"
+  source_type: survey
+  collected_at: 2026-08-05
+  status: selected
+  raw_path: raw/wang2024.md

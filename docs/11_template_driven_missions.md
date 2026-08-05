@@ -163,6 +163,27 @@ scout를 `academic/industry/patents/news` **4워커로 분화** + `source_type` 
      → **조치**: 산출물을 손으로 고치지 않고 게이트키퍼와 같은 형태로 `1R Revision` 카드를
      만들어 downstream 앞에 링크했다(검증 사슬 밖의 편집은 ③에서 문제 삼은 것과 같은 일이다).
 
+   - **⑥ 선별에서 버린 자료(`status: rejected`)가 정책 카운트에 잡힌다 — 게이트가 '수집한 것'을 잰다.**
+     `academic-paper` stage 4 는 curator 에게 **"`status=selected/rejected` 판정"**을 지시하는데
+     `source_balance`·`recency_check` 는 `("failed","excluded")` **두 단어만** 걸렀다.
+     이번 미션은 scout 가 `peer_reviewed` 를 **하한(6)에 정확히 맞춰** 수집했으므로, curator 가
+     중복 한 건만 버려도 **실제 5편인데 PASS** 가 났을 것이다(실측: rejected 1건 → 6→5 FAIL).
+     아키타입 R 의 '문서와 코드가 서로 다른 형식을 말한다' 와 같은 계열이되 **방향이 거짓 PASS** 다.
+     → 접두 deny-list(`failed`·`excluded`·`rejected`·`dropped`·`duplicate`·`skipped`)로 넓히고
+     `policy.status_excluded_prefixes` 로 뺐다. **모르는 단어는 포함으로 둔다** —
+     M-2026-003 이 `new`·`reuse_existing_wiki` 를 정상 값으로 썼으므로 allow-list 로 뒤집으면
+     그 미션들이 조용히 0건이 된다.
+     > **부수 관찰**: 수집이 하한을 **정확히** 맞추면 그 다음 선별 단계가 하한을 깨뜨린다.
+     > 수집 목표는 하한이 아니라 **하한 + 여유**여야 한다(템플릿 지시 보강 후보).
+   - **⑦ 실패의 표면 증상과 근본 원인이 두 층 떨어져 있다 — 카드만 봐서는 왜 멈췄는지 모른다.**
+     stage 4 가 4회 연속 크래시했고 카드에 남은 것은
+     `worker exited cleanly (rc=0) without calling kanban_complete — protocol violation` 뿐이었다.
+     실제 원인은 **LLM 사용량 한도 소진**(`HTTP 429 usage_limit_reached` · plan=team ·
+     `resets_at` 2026-08-09)이었고, 그것은 **세션 로그에만** 있다(`hermes kanban log`).
+     디스패처는 429 재시도 실패로 조용히 끝난 세션을 '프로토콜 위반' 으로 읽는다.
+     → 게이트키퍼/디스패처가 429·인증 실패 같은 **환경성 실패를 카드에 남기게** 해야 한다.
+     그러지 않으면 다음 세션이 "워커가 규약을 안 지킨다"를 디버깅하게 된다(후속 과제).
+
    - 부수 수정: `gate_keeper.VERIFIERS` 하드코딩 → **`pipeline.json` 이 선언한 검증자**를 읽는다.
      `webapp-build` stage 8 의 검증자가 `tester` 라 게이트키퍼가 그 stage 를 아예 보지 않았다
      (downstream 이 blocked 인 채 영구 정지 · 로그도 남지 않는다).

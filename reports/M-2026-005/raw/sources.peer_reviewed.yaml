@@ -1,0 +1,112 @@
+- id: dhuliawala2024
+  title: "Chain-of-Verification Reduces Hallucination in Large Language Models"
+  authors:
+    - Shehzaad Dhuliawala
+    - Mojtaba Komeili
+    - Jing Xu
+    - Roberta Raileanu
+    - Xian Li
+    - Asli Celikyilmaz
+    - Jason Weston
+  published_year: 2024
+  venue: "Findings of the Association for Computational Linguistics: ACL 2024"
+  url: "https://aclanthology.org/2024.findings-acl.212/"
+  source_type: peer_reviewed
+  collected_at: 2026-08-05
+  status: selected
+  raw_path: raw/dhuliawala2024.md
+- id: gao2023
+  title: "RARR: Researching and Revising What Language Models Say, Using Language Models"
+  authors:
+    - Luyu Gao
+    - Zhuyun Dai
+    - Panupong Pasupat
+    - Anthony Chen
+    - Arun Tejasvi Chaganty
+    - Yicheng Fan
+    - Vincent Zhao
+    - Ni Lao
+    - Hongrae Lee
+    - Da-Cheng Juan
+    - Kelvin Guu
+  published_year: 2023
+  venue: "Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)"
+  url: "https://aclanthology.org/2023.acl-long.910/"
+  source_type: peer_reviewed
+  collected_at: 2026-08-05
+  status: selected
+  raw_path: raw/gao2023.md
+- id: min2023
+  title: "FActScore: Fine-grained Atomic Evaluation of Factual Precision in Long Form Text Generation"
+  authors:
+    - Sewon Min
+    - Kalpesh Krishna
+    - Xinxi Lyu
+    - Mike Lewis
+    - Wen-tau Yih
+    - Pang Koh
+    - Mohit Iyyer
+    - Luke Zettlemoyer
+    - Hannaneh Hajishirzi
+  published_year: 2023
+  venue: "Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing"
+  url: "https://aclanthology.org/2023.emnlp-main.741/"
+  source_type: peer_reviewed
+  collected_at: 2026-08-05
+  status: selected
+  raw_path: raw/min2023.md
+- id: madaan2023
+  title: "Self-Refine: Iterative Refinement with Self-Feedback"
+  authors:
+    - Aman Madaan
+    - Niket Tandon
+    - Prakhar Gupta
+    - Skyler Hallinan
+    - Luyu Gao
+    - Sarah Wiegreffe
+    - Uri Alon
+    - Nouha Dziri
+    - Shrimai Prabhumoye
+    - Yiming Yang
+    - Shashank Gupta
+    - Bodhisattwa Prasad Majumder
+    - Katherine Hermann
+    - Sean Welleck
+    - Amir Yazdanbakhsh
+    - Peter Clark
+  published_year: 2023
+  venue: "Advances in Neural Information Processing Systems 36 (NeurIPS 2023)"
+  url: "https://proceedings.neurips.cc/paper_files/paper/2023/hash/91edff07232fb1b55a505a9e9f6c0ff3-Abstract-Conference.html"
+  source_type: peer_reviewed
+  collected_at: 2026-08-05
+  status: selected
+  raw_path: raw/madaan2023.md
+- id: manakul2023
+  title: "SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection for Generative Large Language Models"
+  authors:
+    - Potsawee Manakul
+    - Adian Liusie
+    - Mark Gales
+  published_year: 2023
+  venue: "Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing"
+  url: "https://aclanthology.org/2023.emnlp-main.557/"
+  source_type: peer_reviewed
+  collected_at: 2026-08-05
+  status: selected
+  raw_path: raw/manakul2023.md
+- id: wu2024
+  title: "Large Language Models Can Self-Correct with Key Condition Verification"
+  authors:
+    - Zhenyu Wu
+    - Qingkai Zeng
+    - Zhihan Zhang
+    - Zhaoxuan Tan
+    - Chao Shen
+    - Meng Jiang
+  published_year: 2024
+  venue: "Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing"
+  url: "https://aclanthology.org/2024.emnlp-main.714/"
+  source_type: peer_reviewed
+  collected_at: 2026-08-05
+  status: selected
+  raw_path: raw/wu2024.md

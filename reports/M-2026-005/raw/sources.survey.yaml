@@ -1,0 +1,40 @@
+- id: li2024
+  title: "A survey on LLM-based multi-agent systems: workflow, infrastructure, and challenges"
+  authors:
+    - "Xinyi Li"
+    - "Sai Wang"
+    - "Siqi Zeng"
+    - "Yu Wu"
+    - "Yi Yang"
+  published_year: 2024
+  venue: "Vicinagearth"
+  doi: "10.1007/s44336-024-00009-2"
+  url: "https://link.springer.com/article/10.1007/s44336-024-00009-2"
+  source_type: survey
+  collected_at: "2026-08-05"
+  status: selected
+  raw_path: "raw/li2024.md"
+- id: wang2024
+  title: "A survey on large language model based autonomous agents"
+  authors:
+    - "Lei Wang"
+    - "Chen Ma"
+    - "Xueyang Feng"
+    - "Zeyu Zhang"
+    - "Hao Yang"
+    - "Jingsen Zhang"
+    - "Zhiyuan Chen"
+    - "Jiakai Tang"
+    - "Xu Chen"
+    - "Yankai Lin"
+    - "Wayne Xin Zhao"
+    - "Zhewei Wei"
+    - "Jirong Wen"
+  published_year: 2024
+  venue: "Frontiers of Computer Science"
+  doi: "10.1007/s11704-024-40231-1"
+  url: "https://link.springer.com/article/10.1007/s11704-024-40231-1"
+  source_type: survey
+  collected_at: "2026-08-05"
+  status: selected
+  raw_path: "raw/wang2024.md"

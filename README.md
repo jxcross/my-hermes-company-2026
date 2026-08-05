@@ -97,3 +97,11 @@ CHANGELOG.md        릴리스 변경 이력
 ```
 
 라이선스/공개 범위는 미정(내부 프로젝트).
+
+
+-------------
+## other_projects/
+- https://github.com/jxcross/harness-templates.git
+
+
+

@@ -1,0 +1,42 @@
+- id: gokhale2025
+  title: "LogicGuard: Improving Embodied LLM agents through Temporal Logic based Critics"
+  authors:
+    - "Anand Gokhale"
+    - "Vaibhav Srivastava"
+    - "Francesco Bullo"
+  published_year: 2025
+  venue: "arXiv"
+  url: "https://arxiv.org/abs/2507.03293"
+  source_type: preprint
+  collected_at: "2026-08-05"
+  status: selected
+  raw_path: "raw/gokhale2025.md"
+- id: yamauchi2025
+  title: "An Empirical Study of LLM-as-a-Judge: How Design Choices Impact Evaluation Reliability"
+  authors:
+    - "Yusuke Yamauchi"
+    - "Taro Yano"
+    - "Masafumi Oyamada"
+  published_year: 2025
+  venue: "arXiv"
+  url: "https://arxiv.org/abs/2506.13639"
+  source_type: preprint
+  collected_at: "2026-08-05"
+  status: selected
+  raw_path: "raw/yamauchi2025.md"
+- id: kim2024
+  title: "Can LLMs Produce Faithful Explanations For Fact-checking? Towards Faithful Explainable Fact-Checking via Multi-Agent Debate"
+  authors:
+    - "Kyungha Kim"
+    - "Sangyun Lee"
+    - "Kung-Hsiang Huang"
+    - "Hou Pong Chan"
+    - "Manling Li"
+    - "Heng Ji"
+  published_year: 2024
+  venue: "arXiv"
+  url: "https://arxiv.org/abs/2402.07401"
+  source_type: preprint
+  collected_at: "2026-08-05"
+  status: selected
+  raw_path: "raw/kim2024.md"
