@@ -22,7 +22,9 @@
 픽스처 자신의 truncate-before-read 로 48행 대신 0행을 검사하던 것(M —
 게이트는 옳았지만 **테스트가 주장한 것을 테스트하지 않고 있었다**) ·
 데이터시트 절 하한과 라이선스 조합을 잘못 고른 픽스처(N — **정상 픽스처가 PASS 하는지**를
-확인하지 않았다면 판정 기준이 과도한 채로 남았을 것이다).
+확인하지 않았다면 판정 기준이 과도한 채로 남았을 것이다) ·
+문서 H1 제목이 절 별칭과 겹쳐 진짜 절을 가리던 것(O — `# 재현 절차` 라는 **완전히 정상인**
+제목이 정상 문서를 반려시켰다).
 
 ## 실행
 
@@ -49,6 +51,7 @@ docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/fixt
 | `sec.py` | L 보안 감사 | finding_completeness · owasp_coverage · cve_remediation · secret_redaction | 22 |
 | `agent.py` | M AI 시스템 평가 | eval_set_quality · stat_significance · repro_determinism · run_completeness · source_balance · secret_redaction | 43 |
 | `dataset.py` | N 데이터셋 배포 | pii_presence · license_compat · schema_conformance · datasheet_completeness · source_balance | 42 |
+| `repro.py` | O 재현 패키지 | result_tolerance · env_consistency · install_evidence · reproduce_doc · license_compat · secret_redaction | 41 |
 
 **게이트를 고칠 때는 해당 하네스를 반드시 다시 돌려라.** 단위 테스트만 통과하는 수정은
 판정 경로 전체를 검증하지 않는다.

@@ -60,6 +60,10 @@ pii_presence = _load("pii_presence")
 license_compat = _load("license_compat")
 schema_conformance = _load("schema_conformance")
 datasheet_completeness = _load("datasheet_completeness")
+result_tolerance = _load("result_tolerance")
+env_consistency = _load("env_consistency")
+install_evidence = _load("install_evidence")
+reproduce_doc = _load("reproduce_doc")
 
 
 # ── prisma_counts ────────────────────────────────────────────────────────
@@ -1048,6 +1052,89 @@ def test_section_alias_matches_korean_heading():
     hit = datasheet_completeness.match_section(secs, ["collection", "수집"])
     assert hit and hit[1] == "본문"
     assert datasheet_completeness.match_section(secs, ["maintenance", "유지보수"]) is None
+
+
+# ── result_tolerance (아키타입 O · 원본 결함 3건) ───────────────────────────
+def test_declared_metric_count_is_compared_with_parsed():
+    """원본은 `expected:` 없는 항목을 조용히 건너뛰어 3개 중 1개만 검사하고 PASS 했다.
+    선언 개수를 따로 세야 그 소실을 잡을 수 있다(§5)."""
+    block = ("- metric: accuracy\n  expected: 0.873\n"
+             "- metric: f1\n  tolerance: {abs: 0.005}\n"
+             "- metric: auc\n  tolerance: {abs: 0.005}\n")
+    items, n_declared = result_tolerance.parse_key_results(block)
+    assert n_declared == 3 and len(items) == 3
+    have_expected = [it for it in items if result_tolerance.NUM_RE.match(str(it.get("expected", "")))]
+    assert [it["metric"] for it in have_expected] == ["accuracy"]
+
+
+def test_run_status_regex_reads_the_report():
+    """빌드 실패 보고서를 통과시키던 구멍 — 원본은 measurements 숫자만 읽었다."""
+    m = result_tolerance.STATUS_RE.search("build_status: failed\nrun_status: failed\n")
+    assert m and m.group(1) == "failed"
+    assert result_tolerance.STATUS_RE.search("run_status: success\n").group(1) == "success"
+
+
+# ── env_consistency (원본 결함 3건) ─────────────────────────────────────────
+def test_pin_is_extracted_only_from_exact_equality():
+    """`>=`·`~=` 는 핀이 아니다 — 원본은 버전을 한 번도 비교하지 않았다(§5)."""
+    assert env_consistency.split_spec("numpy==1.24.0") == ("numpy", "1.24.0")
+    assert env_consistency.split_spec("torch>=99.0") == ("torch", None)
+    assert env_consistency.split_spec("numpy") == ("numpy", None)
+    assert env_consistency.split_spec("scikit-learn=1.3.2") == ("scikit-learn", "1.3.2")
+
+
+def test_package_name_normalization():
+    """`Scikit_Learn` 과 `scikit-learn` 은 같은 패키지다 — 다르게 세면 거짓 미달이 뜬다."""
+    assert env_consistency.norm("Scikit_Learn") == "scikit-learn"
+    assert env_consistency.norm("NumPy") == "numpy"
+
+
+def test_dockerfile_mention_is_not_installation():
+    """원본은 파일 전체에서 `requirements.txt` 문자열만 찾아, 주석 한 줄에 전 패키지를
+    커버로 셌다(실측). COPY 와 RUN 이 **둘 다** 있어야 인정한다(§5)."""
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    p = _os.path.join(d, "Dockerfile")
+    open(p, "w").write("FROM python:3.11\n# TODO: requirements.txt 추가\n")
+    pkgs, notes = env_consistency.parse_docker(p, {"numpy": "1.24.0"})
+    assert pkgs == {} and notes
+    open(p, "w").write("FROM python:3.11\nCOPY requirements.txt .\n"
+                       "RUN pip install -r requirements.txt\n")
+    pkgs, _n = env_consistency.parse_docker(p, {"numpy": "1.24.0"})
+    assert pkgs == {"numpy": "1.24.0"}
+
+
+# ── install_evidence · reproduce_doc (신설) ────────────────────────────────
+def test_field_reader_handles_quotes():
+    assert install_evidence.field('method: "venv"\n', "method") == "venv"
+    assert install_evidence.field("exit_code: 0\n", "exit_code") == "0"
+    assert install_evidence.field("# 없음\n", "method") is None
+
+
+def test_success_words_exclude_failure():
+    for w in ("success", "ok", "passed"):
+        assert w in install_evidence.SUCCESS_WORDS
+    assert "failed" not in install_evidence.SUCCESS_WORDS
+    assert "skipped" not in install_evidence.SUCCESS_WORDS
+
+
+def test_document_title_does_not_shadow_a_section():
+    """픽스처가 잡은 자체 결함 — `# 재현 절차` 라는 H1 제목이 'run' 절 별칭에 걸려
+    진짜 `## 실행` 절을 덮었다. 하위 제목을 우선한다."""
+    secs = reproduce_doc.sections_of("# 재현 절차\n\n서문\n\n## 실행\n\n본문\n")
+    hit = reproduce_doc.match_section(secs, ["run", "실행", "재현 절차"])
+    assert hit == ("실행", "본문")
+
+
+def test_body_chars_excludes_code_fences():
+    """코드 블록은 설명이 아니다 — 명령만 붙여 놓고 설명을 생략하는 것을 잡는다."""
+    body = "설명이다.\n\n```bash\npip install -r requirements.txt\n```\n"
+    assert reproduce_doc.body_chars(body) == len("설명이다.")
+
+
+def test_command_file_tokens_extracted():
+    got = set(reproduce_doc.FILE_TOKEN_RE.findall("bash reproduce.sh && cat key-results.json"))
+    assert got == {"reproduce.sh", "key-results.json"}
 
 
 def test_systems_block_parses_change_field():

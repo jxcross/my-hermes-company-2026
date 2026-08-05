@@ -24,6 +24,7 @@ HARNESSES = [
     ("sec", "L 보안 감사"),
     ("agent", "M AI 시스템 평가"),
     ("dataset", "N 데이터셋 배포"),
+    ("repro", "O 재현 패키지"),
 ]
 
 

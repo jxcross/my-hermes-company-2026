@@ -1,0 +1,186 @@
+# 아키타입 O — 재현 패키지 빌드 (12단계)
+# 출처: other_projects/harness-templates/research-harnesses/project_reproforge
+#       (.claude/skills/reproforge/SKILL.md 8-stage + agents 12종). 변환 절차: docs/13
+#
+# 이 아키타입이 만드는 것: **남이 따라 돌릴 수 있는 재현 패키지**다. 연구 산출물(코드·데이터)을
+# 받아 환경을 3종 파일(Dockerfile·environment.yml·requirements.txt)로 포착하고, 한 번에 도는
+# `reproduce.sh` 를 만들고, **실제로 설치·실행해 핵심 수치를 재측정**한 뒤 REPRODUCE.md 와
+# 릴리스 노트를 붙여 번들로 낸다. 아키타입 M(agent-eval)·B(academic-paper)의 산출물을 받는다.
+#
+# ⚠️ **우리 컨테이너에는 docker 데몬이 없다**(실측: `docker info` 실패 · `/var/run/docker.sock`
+#    부재). CLI 는 있지만 데몬에 닿지 못한다. **소켓을 붙이지 않는다** — 그것은 호스트 root
+#    권한을 미션에 넘기는 일이다. 그래서:
+#      · 설치 테스트는 **`venv`** 로 한다(정책 `install_test_policy.allowed_methods`).
+#      · Dockerfile 은 만들되 **정적 검토만** 한다(빌드하지 않는다).
+#      · 그리고 그것을 **숨기지 않는다** — `install_evidence` 게이트가 `docker_verified: false`
+#        선언과 **release-notes 의 공시**를 강제한다. 게이트가 못 하는 일을 못 했다고 말하게
+#        하는 것이 못 한 일을 한 척하는 것보다 낫다.
+#
+# ⚠️ **stage 7 은 외부에서 패키지를 내려받아 이식한 코드를 실행한다.** 되돌리기 어렵고 네트워크를
+#    쓰는 행위라 **직전에 Sam 승인 게이트**를 뒀다(K 의 코드 변경 직전 승인 · M 의 API 비용 직전
+#    승인과 같은 계열).
+#
+# 변환 판단(요약 — 상세·근거는 docs/13 §2·§5):
+#  - **원본 게이트 2종에서 결함 6건을 실측**했다. 가장 큰 것: 하드게이트가
+#    `docker build: FAILED · smoke test: NOT RUN` 이라고 적힌 보고서의 숫자만 읽고 PASS 한다.
+#    **재현되지 않았음을 재현됐다고 판정한다.**
+#  - `expected:` 를 빼면 그 지표가 검사에서 조용히 사라진다(3개 중 2개를 지워도 PASS).
+#  - `env_diff` 는 **버전을 한 번도 비교하지 않는다** — CLAUDE.md 가 "임의 latest 금지"를
+#    선언하는데 코드에 없다. 주석에 `requirements.txt` 라고 적기만 해도 전 패키지 커버로 센다.
+#  - 원본 크리틱 `doc-clarity-check` 는 스크립트가 없다 → `reproduce_doc` 신설.
+#  - **기존 게이트를 재사용했다** — `license_compat`(아키타입 N)은 원본 CLAUDE.md 의
+#    "02-ingest 단계에서 라이센스 검토 · GPL incompatible 은 release-notes 에 명시"와 하는 일이
+#    같다. `secret_redaction`(L)은 번들의 데이터 URL·토큰을 잡는다. **새로 만들기 전에
+#    가진 것과 겹치는지 보라**(§2④)는 규율이 이번에 값을 했다.
+#  - **신규 profile 0개 — 대장의 "예상 있음(환경 빌드)"은 빗나갔다.** 환경 파일 3종을 쓰는 것은
+#    `developer`(N 의 포맷 변환기와 같은 판정), 실제로 돌려 보는 것은 `tester` 다.
+#  - `bundle_export.py`·`release_notes_build.py`·`runs_state.py` 는 미이식(산출 도구 · Kanban).
+#
+# 스키마 규약은 templates/trend-report.yaml 머리말 참조.
+
+name: repro-package
+category: research
+display_name: 재현 패키지 빌드(환경 3종 + 실측 검증)
+maturity: draft
+goal_kr: 연구 산출물의 실행 환경을 3종 파일로 포착하고 실제 설치·실행으로 핵심 수치를 재측정해 남이 따라 돌릴 수 있는 재현 패키지를 낸다.
+requires_profiles: [developer, tester]
+invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop]
+# ⚠️ `sources_cited` 를 선언하지 않는다 — 근거가 웹 출처가 아니라 **실행 결과와 코드**다
+#    (code-docs·code-migration·security-audit 과 같다). 대신 실행 증거를 게이트가 요구한다.
+
+policy:
+  tolerance_policy:
+    default_abs: 0.02           # 원본 CLAUDE.md 의 기본값. 원본은 선언만 하고 코드에 없었다
+    require_explicit_tolerance: false
+    require_run_success: true   # ⚠️ 빌드 실패 보고서를 통과시키던 구멍을 막는다
+    min_key_results: 1          # ⚠️ 0건이면 PASS 이던 구멍을 막는다
+
+  env_policy:
+    files:
+      docker: bundle/Dockerfile
+      conda: bundle/environment.yml
+      pip: bundle/requirements.txt
+    require_pinned: true        # ⚠️ "임의 latest 금지" — 원본은 선언만 했다
+    min_packages: 1
+    allow_unpinned: []          # 핀할 수 없는 것이 있으면 여기에 사유와 함께
+
+  install_test_policy:
+    # ⚠️ docker 는 목록에 없다 — 우리 컨테이너에 데몬이 없다(소켓을 붙이지 않는다)
+    allowed_methods: [venv, pip]
+    docker_available: false
+    min_duration_sec: 1
+    min_log_lines: 3
+    disclose_in: bundle/release-notes.md
+
+  doc_policy:
+    bundle_dir: bundle
+    min_section_chars: 40
+    min_command_blocks: 2
+    require_expected_runtime: true
+    placeholder_terms: [TBD, TODO, 미정, "<PATH>", "<YOUR", FIXME, 작성 예정]
+
+  license_policy:
+    intent_license: MIT         # Scoping 에서 미션별로 확정
+    source_dirs: [_private/source]
+    declare_in: [bundle/release-notes.md, bundle/REPRODUCE.md]
+    block_severities: [red]
+    require_notes_for: [yellow]
+    allow_unknown: false
+
+  redaction_policy:
+    require_disclaimer: true
+    disclaimer_terms: ["재현을 보장하지 않습니다", "이 환경에서 빌드 검증되지 않았", "단일 환경에서 수행"]
+    disclaimer_files: [release-notes.md]
+    block_secrets: true
+    # 번들에는 스크립트·설정이 들어간다 — 데이터 URL 에 토큰이 붙는 일이 흔하다
+    scan_extensions: [".md", ".sh", ".txt", ".yml", ".yaml", ".json", ".cfg", ".toml", ".env"]
+
+stages:
+  - id: 1
+    name: Scoping
+    profile: default          # Solomon
+    sam_gate: true
+    upstream: []
+    body: "미션 스펙을 reports/<MID>/SCOPE.md 에 작성 — 대상(어떤 산출물을 재현 가능하게 만드는가·경로/URL) · **핵심 결과 목록**(지표·기대값·허용오차·측정 명령) · 배포 라이선스 · 완료조건. ⚠️ **환경 규약을 Sam 에게 분명히 알려라**: 우리 컨테이너에는 **docker 데몬이 없어** 설치 테스트는 `venv` 로 하고 **Dockerfile 은 만들되 빌드 검증하지 않는다**. 이 사실은 release-notes 에 공시되며 게이트가 강제한다. Docker 검증까지 필요하면 그것은 이 파이프라인 밖의 작업이다. ⚠️ **핵심 결과를 처음부터 구체적으로 적어라** — `accuracy 0.873 ± 0.005` 처럼 지표·기대값·허용오차가 다 있어야 한다. 뒤에서 넓히는 것은 금지다(허용오차를 넓혀 통과시키면 재현 패키지의 의미가 없다). ⚠️ **대상 코드의 라이선스**를 먼저 확인하라 — 재배포할 수 없는 코드로 재현 패키지를 만들 수 없다. ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라."
+  - id: 2
+    name: Source Ingest
+    profile: reader
+    upstream: [1]
+    body: "대상을 `reports/<MID>/_private/source/` 로 가져와 인벤토리하고 `ingest.md` 에 정리한다 — 언어별 파일 수 · **진입점**(실행 가능한 스크립트·CLI·노트북) · 데이터 파일과 그 크기 · 외부 데이터 URL · 설정 파일 · 기존 환경 파일(requirements.txt·environment.yml·Dockerfile 이 이미 있으면 그대로 기록). ⚠️ **`ls`/`find` 결과에 근거하라 — 환각 파일 금지.** 여기서 지어낸 파일은 stage 5 의 환경 파일과 stage 9 의 안내서로 그대로 번진다. ⚠️ **LICENSE·COPYING·NOTICE 를 `_private/source/` 에 그대로 보존하라** — 게이트가 그 파일을 직접 읽어 등급을 판정한다. ⚠️ 원본은 `_private/` 안에만 둔다(제3자 코드·데이터는 커밋하지 않는다)."
+  - id: 3
+    name: Env Detect
+    profile: reader
+    upstream: [2]
+    body: "실행 환경을 실제 코드에서 탐지해 `env.md` 에 정리한다 — 언어와 런타임 버전 · 시스템 의존성(apt 패키지·컴파일러·CUDA) · **Python 패키지와 버전** · 외부 데이터 URL과 sha256 · GPU 필요 여부. **```py_packages``` 블록 형식을 정확히 지켜라**(게이트가 파싱한다):\n```py_packages\n- name: numpy\n  version: 1.24.0\n- name: torch\n  version: 2.1.0\n```\n⚠️ **버전을 비워 두지 마라.** import 문만 보고 이름만 적으면 stage 5 가 핀할 근거가 없어지고, 게이트가 미핀을 반려한다. 기존 lock 파일·`pip freeze` 기록·import 시 요구 버전을 근거로 실제 버전을 찾아라. ⚠️ **실제 import 와 requirements 분석에 근거하라** — 있을 법한 패키지를 넣지 마라. ⚠️ 시스템 의존성을 빠뜨리면 Docker 는 되고 venv 는 안 되는(또는 그 반대) 상황이 생긴다."
+  - id: 4
+    name: Source Verify
+    profile: fact-checker      # ≠ reader
+    verifier: true
+    upstream: [3]
+    gate:
+      objective: [license_compat]
+      llm: fact_checker_verdict
+      draft: "reports/<MID>"
+    body: "재현 패키지를 **만들어도 되는지·만들 수 있는지**를 검증한다(객관 게이트는 LICENSE 파일을 직접 읽어 등급·양립성·선언 일관성을 본다). ⚠️ **이 검증이 여기 있는 이유**: 환경 파일 3종과 스크립트를 만들고 실제로 설치·실행한 뒤에 '재배포할 수 없는 코드였다'가 나오면 전부 버려진다. 사람이 읽어야 할 것: ① **라이선스** — 재배포가 허용되는가, 카피레프트가 번들 전체를 구속하는가. ② **인벤토리의 사실성** — `ingest.md` 의 진입점이 실제로 실행 가능한 파일인가(열어서 확인하라). ③ **패키지 탐지의 완결성** — 코드가 import 하는데 `env.md` 에 없는 것이 있는가, 반대로 쓰지 않는 패키지를 넣었는가. ④ **버전 근거** — 적어 낸 버전이 어디서 나왔는가(lock 파일·문서·추측 중 무엇인가. 추측이면 그렇다고 적어야 한다). ⑤ **데이터 접근성** — 외부 데이터가 인증 없이 받아지는가, 아니면 재현자가 별도로 구해야 하는가(후자면 안내서에 적혀야 한다). 끝에 VERDICT: PASS|FAIL."
+  - id: 5
+    name: Env Capture
+    profile: developer
+    upstream: [4]              # 게이트: 4 PASS 시 게이트키퍼가 unblock
+    parallel:
+      mode: workers
+      # 세 파일은 "탐지한 환경을 한 형식으로 표현한다"는 같은 계약 = profile 아님, 워커다
+      # (아키타입 N 의 포맷 변환기와 같은 판정). 서로 다른 파일이라 경합이 없다.
+      workers: [docker, conda, pip]
+      batch_size: 3
+      shard: "bundle/<worker>"
+      merge_to: "env-capture.md"
+    body: "탐지한 환경을 자기 형식으로 표현한다 — **docker**=`bundle/Dockerfile`(베이스 이미지 태그를 고정하고, 시스템 의존성을 `apt-get install` 로, Python 의존성은 **`COPY requirements.txt` + `RUN pip install -r requirements.txt`** 로. ⚠️ 주석에 파일명만 적지 마라 — 게이트가 COPY 와 RUN 을 각각 확인한다. 원본은 주석 한 줄에 전 패키지를 '커버'로 셌다) · **conda**=`bundle/environment.yml` · **pip**=`bundle/requirements.txt`.\n⚠️ **모든 패키지를 정확한 버전으로 핀하라**(`==`). `>=`·`latest`·핀 없음은 반려된다 — 오늘 되는 것이 내일 다른 것을 설치하면 재현 패키지가 아니다. ⚠️ **세 파일의 패키지 이름과 버전이 완전히 같아야 한다**(게이트가 대조한다 — 원본은 이름만 비교하고 버전은 한 번도 보지 않았다). ⚠️ `env.md` 에 없는 패키지를 임의로 더하지 마라. ⚠️ **Dockerfile 은 이 환경에서 빌드되지 않는다**(데몬 없음) — 그래도 정확히 써라. 남이 그것으로 빌드한다."
+  - id: 6
+    name: Reproduce Script
+    profile: developer
+    upstream: [5]
+    body: "한 번에 도는 `bundle/reproduce.sh` 를 작성한다 — ① 환경 구성(venv 생성 + `pip install -r requirements.txt`) ② 데이터 확보(URL 다운로드 + sha256 검증, 인증이 필요하면 **안내 메시지를 내고 멈춘다**) ③ 실행(진입점) ④ **측정**(핵심 결과 지표를 뽑아 `measurements.json` 으로 출력) ⑤ 요약 출력. ⚠️ **`set -euo pipefail`** 로 시작하라 — 중간 실패를 삼키면 '성공했는데 결과가 없는' 보고가 나온다. ⚠️ **각 단계의 시작과 끝을 stdout 에 찍어라** — 그 출력이 stage 7 의 증거가 된다. ⚠️ **측정을 손으로 적지 말고 코드가 계산하게 하라.** 사람이 옮겨 적는 순간 그 수치는 검증된 것이 아니다. ⚠️ 절대 경로·개인 홈 디렉터리·개인 토큰을 넣지 마라(게이트가 커밋 대상의 비밀값을 반려한다). ⚠️ 예상 소요를 주석에 적어라(안내서가 가져간다)."
+  - id: 7
+    name: Install Test
+    profile: tester
+    sam_gate: true
+    approval_artifact: "reports/<MID>/bundle/reproduce.sh"
+    upstream: [6]
+    body: "⚠️ **Sam 승인 뒤에만 실행한다** — 이 단계는 **외부에서 패키지를 내려받고 이식한 코드를 실행**한다. 승인 요청에 무엇을 설치하고 무엇을 실행하는지, 예상 소요와 네트워크 접근 범위를 적어라.\n`bundle/reproduce.sh` 를 **실제로 돌리고** 결과를 `install-test.md` 에 기록한다. **형식을 정확히 지켜라**(게이트가 파싱한다):\n`method: venv` · `build_status: success` · `run_status: success` · `exit_code: 0` · `duration_sec: 143` · `python_version: 3.13.5` · `platform: linux-x86_64` · `n_packages_installed: 27` · `docker_verified: false` 줄을 먼저 적고, ```log``` 블록에 설치·실행 출력의 **실제 발췌**(3줄 이상)와 ```measurements``` 블록에 `지표: 값` 을 담는다.\n⚠️ **실패하면 실패로 적어라.** `run_status: failed` 는 정직한 결과이고 게이트가 리비전을 돌린다. **성공한 척한 보고서는 원본 게이트가 통과시키던 바로 그 구멍이다**(실측으로 확인했다). ⚠️ **`docker_verified: false`** 다 — 이 환경에는 docker 데몬이 없다. 빌드한 척하지 마라. ⚠️ 측정값은 `measurements.json` 에서 그대로 옮긴다(반올림·보정 금지). ⚠️ 허용오차를 벗어나면 **허용오차를 넓히지 말고** 원인을 찾아 stage 3·5·6 중 어디를 고쳐야 하는지 적어라."
+  - id: 8
+    name: Result Verify
+    profile: fact-checker      # ≠ tester
+    verifier: true
+    upstream: [7]
+    gate:
+      objective: [install_evidence, result_tolerance, env_consistency]
+      llm: fact_checker_verdict
+      draft: "reports/<MID>"
+    body: "재현이 **실제로 됐는지** 검증한다(객관 게이트는 실행 증거·허용오차·환경 3종 일치를 본다). 사람이 읽어야 할 것: ① **로그가 보고와 맞는가** — ```log``` 발췌가 실제로 그 명령의 출력처럼 보이는가, 설치된 패키지가 requirements 와 맞는가. 지어낸 로그는 대개 너무 깨끗하다. ② **측정이 계산된 것인가** — 스크립트가 계산해 `measurements.json` 으로 낸 값인가, 사람이 옮겨 적은 값인가. ③ **환경 3종의 실질적 동등성** — 게이트는 이름과 버전을 보지만, 시스템 의존성(apt·CUDA)이 Dockerfile 에만 있고 venv 경로에는 없으면 셋은 같은 환경이 아니다. ④ **미검증 경로** — Docker 를 빌드하지 않았다는 사실이 보고서와 release-notes 양쪽에 있는가. ⑤ **허용오차의 타당성** — 처음 선언한 값에서 넓혀지지 않았는가(넓혔다면 그 자체가 재현 실패다). 끝에 VERDICT: PASS|FAIL."
+  - id: 9
+    name: Bundle & Docs
+    profile: writer
+    upstream: [8]              # 게이트: 8 PASS 시 unblock
+    body: "**커밋 대상** 번들을 `reports/<MID>/bundle/` 에 완성한다(환경 3종과 reproduce.sh 는 이미 있다). ① `REPRODUCE.md` — **다른 연구자가 그대로 따라할 수 있는** 단계별 안내: 전제조건(하드웨어·OS·계정) · 설치 · 데이터 준비 · 실행 · **검증**(무엇이 나오면 성공인가 — 기대값과 허용오차) · 문제 해결 · **예상 소요 시간**. 명령은 코드 블록으로 쓰고 **번들에 실재하는 파일만** 가리켜라(게이트가 대조한다). ② `key-results.json` — 기계가 읽을 형식(지표·기대·허용오차·측정값). ③ `install-test-report.md` — stage 7 기록의 공유용 정리. ④ `release-notes.md` — 규모·라이선스·**Docker 경로가 이 환경에서 빌드 검증되지 않았다는 공시**(필수 · 게이트가 강제한다) · 알려진 한계 · **필수 고지**('본 패키지는 단일 환경에서 수행된 검증이며 모든 환경에서의 재현을 보장하지 않습니다'). ⚠️ **수치는 `install-test.md` 에서 가져오고 손으로 바꾸지 마라.** ⚠️ 개인 토큰·절대 경로·내부 URL 을 넣지 마라(게이트가 반려한다)."
+  - id: 10
+    name: Bundle Review
+    profile: reviewer          # ≠ writer
+    verifier: true
+    upstream: [9]
+    gate:
+      objective: [reproduce_doc, secret_redaction]
+      llm: reviewer_verdict
+      draft: "reports/<MID>"
+    body: "번들이 **남에게 쓸모 있는지** 독립 검토한다: ① **따라할 수 있는가** — REPRODUCE.md 를 처음 보는 사람 입장에서 읽어라. 전제되지 않은 지식(어느 디렉터리에서 실행하는지·가상환경을 먼저 만들어야 하는지)이 있는가. ② **검증 절이 실질적인가** — '성공하면 됩니다' 가 아니라 **무엇이 얼마로 나와야 하는지**가 적혀 있는가. ③ **공개 안전성** — 토큰·절대 경로·내부 URL·개인 정보가 번들에 없는가(게이트는 알려진 패턴만 잡는다). ④ **미검증 공시** — Docker 미검증이 눈에 띄게 적혀 있는가, 아니면 각주로 숨겼는가. ⑤ **한계의 정직성** — 단일 환경·단일 실행이라는 한계가 적혀 있는가. 끝에 VERDICT: PASS|FAIL."
+  - id: 11
+    name: Wiki Update
+    profile: curator
+    upstream: [10]             # 게이트: 10 PASS 시 unblock
+    body: "이 재현 작업에서 얻은 것을 llm-wiki 에 반영(entities/concepts) + reflection + 재사용률 갱신 — 이 코드베이스·도메인에서 환경 재현이 막히는 지점(버전 충돌·시스템 의존성·데이터 접근) · 핀 되지 않은 의존성이 만든 문제 · 재현이 실패했다면 그 원인 · 다음에 같은 유형을 만나면 먼저 볼 것. ⚠️ **wiki 는 별도 저장소이고 공개될 수 있다** — 토큰이나 내부 경로가 아니라 **일반화된 교훈**만 남겨라."
+  - id: 12
+    name: Deliver
+    profile: default          # Solomon
+    sam_gate: true
+    approval_artifact: "reports/<MID>/bundle/REPRODUCE.md"
+    upstream: [11]
+    body: "① 번들 조립 `reports/<MID>/bundle/`(커밋 대상): REPRODUCE.md · Dockerfile · environment.yml · requirements.txt · reproduce.sh · key-results.json · install-test-report.md · release-notes.md. `_private/source/` 는 **커밋하지 않는다**(제3자 코드·데이터). ② **⚠️ Sam 승인 요청에 반드시 적어라**: **무엇이 검증됐고 무엇이 검증되지 않았는지**(venv 경로는 실측 · **Docker 경로는 이 환경에서 빌드 검증되지 않음**) · 핵심 결과의 측정값과 허용오차 · 소스 라이선스와 배포 라이선스. ③ 승인 후 커밋 + git push(컨테이너 GITHUB_TOKEN 자격) + Slack 요약. ④ **GitHub Release 로 낼 것인지는 Sam 이 정한다** — 이 파이프라인은 릴리스 노트를 만들 뿐 자동으로 릴리스하지 않는다. ⚠️ Slack 게시는 반드시 `hermes send --to slack:#mission-log \"<요약+커밋링크>\"`(Web API)로 하라."
