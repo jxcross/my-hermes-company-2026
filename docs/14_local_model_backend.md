@@ -315,7 +315,11 @@ triage to break unblock loops."* 그런데 `triage` 에서 나오는 길은:
 - `specify` ⚠️ — **LLM 이 카드 제목·본문을 다시 쓴다.** stage 계약이 날아갈 수 있다
 - `decompose` ⚠️ — 자식 카드를 만든다(중복 생성)
 
-→ **정지는 한 번만 `block` 하고, 재개 후 다시 세울 일이 있으면 다른 방법을 써라**(아래 ③).
+→ **정지는 한 번만 `block` 하고, 재개 후 다시 세울 일이 있으면 `schedule` 을 써라**(아래 ⑤).
+
+⚠️ 실측 보정: 2회째 `block` 이 `triage` 로 간다고 적었지만, 실제로 두 번 관측한 결과는
+**`block_loop_detected {recurrences: 2, limit: 2}` → `promoted`**, 즉 **도로 `ready` 가 되어
+디스패처가 바로 집는다**. `triage` 보다 위험하다 — 세우려던 카드가 오히려 실행된다.
 
 **② 카드 상태를 SQL 로 직접 고치면 디스패처가 즉시 다시 집는다.**
 `triage → blocked` 로 되돌렸더니 **워커 2개가 동시에 뜨고**, 완료돼 있던
@@ -364,6 +368,27 @@ hermes kanban dispatch --dry-run --json   # spawned 에 뜨는지 확인
 
 → 재개 절차에 넣어라: `docker compose up -d` → **`hermes kanban reclaim <tid>`** →
 `unblock`(필요하면) → `dispatch --dry-run` 으로 후보에 올랐는지 확인.
+
+**⑤ 이미 한 번 `blocked` 됐던 카드를 다시 세우는 방법은 `schedule` 이다 — `link` 도 `block` 도 안 된다.**
+Slack 승인이 stage 8 을 열어 워커가 뜬 것을 세우고(워커 kill + 컨테이너 stop) 다시 닫으려는데,
+쓸 수 있는 수단이 생각보다 적었다. **셋 다 실측했다:**
+
+| 수단 | 결과 |
+|---|---|
+| `link <상류> <이 카드>` (미완료 부모 추가) | ❌ **막지 못한다.** 사후 `link` 는 `ready` 를 `todo` 로 되돌리지 않는다. `dispatch --dry-run` 에 그대로 `spawned` 로 뜬다 — 부모/자식 관계는 **생성 시점**에만 초기 상태를 정한다(`instantiate_template.py` 가 게이트 카드를 `--parent` 없이 만든 뒤 곧바로 `block` 하는 이유가 이것이다) |
+| `block` 2회째 | ❌ **위험하다.** `block_loop_detected` → `promoted` → 도로 `ready`(위 ① 보정) |
+| **`schedule <tid> "<사유>"`** | ✅ **된다.** `Scheduled`(시간 대기)는 `needs_input` 과 **다른 상태**라 block-loop 카운터를 건드리지 않는다. `dispatch --dry-run` → `spawned: []` |
+
+**부수 효과가 하나 더 있는데 이게 오히려 중요하다**: 게이트키퍼의 `pending_sam_gates` 는
+`task_status(tid) == "blocked"` 만 본다. 따라서 `scheduled` 카드는 **`#approvals` 에 다시
+게시되지 않고 Slack 의 `승인` 으로도 열리지 않는다.** 작업 중 승인 루프가 카드를 도로 여는
+것을 막으려면 `schedule` 이 정답이다.
+
+재개는 `unblock` 이다 — *"Return **blocked/scheduled** tasks to ready"*.
+
+⚠️ **어느 수단을 쓰든 `dispatch --dry-run --json` 으로 `spawned` 가 비었는지 확인하라.**
+카드 목록의 상태 표시만 믿지 마라 — ④가 정확히 그 반대 방향의 사고였다(`ready` 로
+보이는데 안 돌았다). **상태 표시와 디스패치 가능성은 별개다.**
 
 ## 7. 알려진 한계 · 다음
 
