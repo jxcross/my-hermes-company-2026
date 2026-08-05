@@ -49,6 +49,17 @@ policy:
     checklist_strict: false          # PARTIAL 은 경고(LLM 검증자가 충분성 판단)
     checklist_min_yes: 20            # 27항목 중 YES 최소치
 
+  analysis_substance_policy:
+    # 아키타입 B 와 같은 이유(docs/11 §7 ⑧). PRISMA 추출은 원문 대조가 본질이라
+    # 위치 지정 인용 요구가 더 강하다.
+    shard_dir: analysis
+    exclude: ["_index.md"]
+    min_words: 150
+    max_words: 20000
+    min_evidence_bullets: 3
+    min_locator_citations: 2
+    require_shard_per_selected: true
+
 stages:
   - id: 1
     name: Scoping
@@ -96,7 +107,7 @@ stages:
     verifier: true
     upstream: [5]
     gate:
-      objective: [prisma_counts, recency_check]
+      objective: [prisma_counts, recency_check, analysis_substance]
       llm: fact_checker_verdict
       draft: "reports/<MID>/screening.md"   # 카운트 항등식 검사 대상
     body: "① 추출 정확성 교차검증 — 노트의 수치·주장이 원문에 실제로 있는가, 인용이 included 목록의 실재 항목을 가리키는가. ② 근거 커버리지 — 포함된 논문이 연구질문의 각 축(PICO)을 실제로 덮는가. 상충·미검증을 분리 보고. 끝에 VERDICT: PASS|FAIL."

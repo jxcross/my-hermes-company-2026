@@ -33,7 +33,35 @@ HARNESSES = [
 ]
 
 
+def draft_drift() -> None:
+    """`lint_gate_drafts.py` 를 **보고 전용**으로 먼저 돌린다.
+
+    ⚠️ 하네스가 통과했다는 것과 실미션이 통과한다는 것은 다르다 — 하네스는 게이트마다
+       편한 `--draft` 를 골라 주지만 실미션은 stage 당 **하나를 공유한다**
+       (`gate_keeper.py:239-247`). 아키타입 S 는 하네스 53/53 인 채로 실미션에서
+       3종이 `exit 2` 로 막혔다(`docs/13 §5`).
+
+    ⚠️ **여기서는 차단하지 않는다.** 현재 미해결 드리프트가 남아 있고, 그걸로 하네스
+       전체를 못 돌리게 만들면 이 점검이 오히려 꺼진다. 대신 **미션 착수 런북에서
+       `lint_gate_drafts.py <template>` 를 차단 조건으로** 쓴다 — 고쳐야 할 시점에서
+       정확히 막는 것이 전역으로 막는 것보다 낫다.
+    """
+    lint = os.path.join(HERE, "..", "..", "lint_gate_drafts.py")
+    if not os.path.exists(lint):
+        return
+    r = subprocess.run([sys.executable, lint], capture_output=True, text=True)
+    fails = [l.strip() for l in r.stdout.splitlines() if l.strip().startswith("FAIL")]
+    warns = [l.strip() for l in r.stdout.splitlines() if l.strip().startswith("WARN")]
+    if fails or warns:
+        print(f"△ draft 정합: FAIL {len(fails)} · WARN {len(warns)} "
+              "— `python3 scripts/lint_gate_drafts.py` 로 상세 확인 (하네스는 계속 진행)")
+    else:
+        print("✓ draft 정합: 하네스와 템플릿이 일치")
+    print()
+
+
 def main() -> int:
+    draft_drift()
     results = []
     for name, label in HARNESSES:
         path = os.path.join(HERE, f"{name}.py")

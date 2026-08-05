@@ -633,7 +633,71 @@ def gate_summary(g: dict, pl: dict) -> str:
             L.append("• 산출물: " + ", ".join(arts[:12]))
     except OSError:
         pass
+    insp = artifact_inspection(root)
+    if insp:
+        L.append(insp)
     return "\n".join(L) or "(요약 없음 — reports/ 산출물 직접 확인 요망)"
+
+
+# ⚠️⚠️ 왜 이게 있는가 (2026-08-05 · docs/11 §7 ⑧)
+#   M-2026-005 stage 8 승인 요청이 Sam 에게 이렇게 갔다: "검증 통과했으니 집필 시작할까요."
+#   그 시점에 stage 5 분석 11편 중 8편은 원문을 읽지 않고 작성된 껍데기였다. 승인 요청문은
+#   **검증자의 판정을 그대로 옮기는데, 그 판정이 틀렸기 때문이다.**
+#   사람이 최종 방어선인데 **그 사람에게 가는 정보가 이미 오염돼 있었다.**
+#   → 승인문에 판정만이 아니라 **산출물의 실측치**를 함께 싣는다. 게이트가 못 본 것을
+#     사람이 볼 기회를 준다. 판정과 실측이 어긋나면 그 자체가 신호다.
+SUSPECT_RE = re.compile(
+    r"\[[^\]\n]{0,120}?(?:simulat|synthesi[sz]ed\s+from|placeholder|\bTBD\b|\bTODO\b|추정|가상)"
+    r"[^\]\n]{0,120}?\]|simulated\s+(?:deep\s+)?analysis",
+    re.IGNORECASE,
+)
+
+
+def artifact_inspection(root: str, max_files: int = 400) -> str:
+    """산출물 실사 — 파일 수·크기 분포·의심 문구. LLM 을 부르지 않는다.
+
+    ⚠️ 이것은 게이트가 아니다(판정하지 않는다). **사람에게 보여줄 숫자**다.
+       게이트는 `scripts/gates/analysis_substance.py` 가 한다.
+    """
+    rows: list[tuple[str, int]] = []
+    suspects: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in (".git", "raw", "_private", "_personal")]
+        for fn in filenames:
+            if not fn.endswith((".md", ".txt", ".json", ".yaml", ".yml")):
+                continue
+            p = os.path.join(dirpath, fn)
+            rel = os.path.relpath(p, root)
+            try:
+                size = os.path.getsize(p)
+            except OSError:
+                continue
+            rows.append((rel, size))
+            if len(rows) > max_files:
+                break
+            if fn.endswith(".md"):
+                try:
+                    with open(p, encoding="utf-8", errors="replace") as f:
+                        hit = SUSPECT_RE.search(f.read())
+                    if hit:
+                        suspects.append(f"{rel}: {hit.group(0)[:70]}")
+                except OSError:
+                    pass
+    if not rows:
+        return ""
+    sizes = sorted(s for _r, s in rows)
+    tiny = [r for r, s in rows if s < 2048 and r.endswith(".md")]
+    out = [f"• 산출물 실사: 파일 {len(rows)}개 · 크기 중앙값 {sizes[len(sizes)//2]:,}B "
+           f"(최소 {sizes[0]:,}B · 최대 {sizes[-1]:,}B)"]
+    if tiny:
+        out.append(f"  ⚠ 2KB 미만 .md {len(tiny)}개: " + ", ".join(sorted(tiny)[:8])
+                   + ("…" if len(tiny) > 8 else ""))
+    if suspects:
+        out.append(f"  ‼️ **의심 문구 {len(suspects)}건** — 승인 전에 직접 열어보라:")
+        out += [f"    - {s}" for s in suspects[:6]]
+        if len(suspects) > 6:
+            out.append(f"    - (외 {len(suspects) - 6}건)")
+    return "\n".join(out)
 
 
 def resolve_approval_target(explicit_id: str | None, gates: list[dict]) -> tuple[str | None, str]:

@@ -232,6 +232,53 @@ def test_verifier_profiles_falls_back_when_no_pipeline():
         gk.COMPANY_ROOT = orig
 
 
+# ── artifact_inspection (승인문 보강 · docs/11 §7 ⑧) ──────────────────────────
+# ⚠️ 이건 게이트가 아니라 **사람에게 보여줄 숫자**다. M-2026-005 stage 8 승인 요청은
+#    "검증 통과했으니 집필 시작할까요" 였고, 그 시점 분석 11편 중 8편이 껍데기였다.
+#    승인문이 검증 판정만 옮기면 **사람에게 가는 정보가 이미 오염돼 있다.**
+def _mk_mission(files: dict) -> str:
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    for rel, body in files.items():
+        p = _os.path.join(d, rel)
+        _os.makedirs(_os.path.dirname(p), exist_ok=True)
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(body)
+    return d
+
+
+def test_inspection_flags_self_declared_simulation():
+    d = _mk_mission({"analysis/a.md": "# A\n- **Evidence:** [Simulated deep analysis based on x.]\n"})
+    out = gk.artifact_inspection(d)
+    assert "의심 문구" in out and "a.md" in out
+
+
+def test_inspection_reports_tiny_markdown_files():
+    d = _mk_mission({"analysis/a.md": "# A\n" + "x " * 20})
+    out = gk.artifact_inspection(d)
+    assert "2KB 미만" in out
+
+
+def test_inspection_is_quiet_on_healthy_artifacts():
+    """★ 반대 방향 — 정상 산출물에 경고를 붙이면 승인문이 늑대소년이 된다."""
+    d = _mk_mission({"report.md": "# R\n" + ("본문 내용이 충분히 길다. " * 400)})
+    out = gk.artifact_inspection(d)
+    assert "의심 문구" not in out and "2KB 미만" not in out
+    assert "산출물 실사" in out
+
+
+def test_inspection_skips_raw_and_private_directories():
+    """`raw/` 는 원문이라 크고, `_private/` 는 공개 대상이 아니다 — 실사 분포를 왜곡한다."""
+    d = _mk_mission({"raw/big.md": "x" * 5000, "_private/secret.md": "[TBD]", "report.md": "y" * 3000})
+    out = gk.artifact_inspection(d)
+    assert "의심 문구" not in out
+    assert "파일 1개" in out
+
+
+def test_inspection_returns_empty_for_missing_dir():
+    assert gk.artifact_inspection("/nonexistent/mission/root") == ""
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

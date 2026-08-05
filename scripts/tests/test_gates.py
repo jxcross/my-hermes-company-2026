@@ -43,6 +43,7 @@ legal_safety = _load("legal_safety")
 symbol_truth = _load("symbol_truth")
 api_coverage = _load("api_coverage")
 doc_links = _load("doc_links")
+analysis_substance = _load("analysis_substance")
 objective_coverage = _load("objective_coverage")
 bloom_distribution = _load("bloom_distribution")
 course_consistency = _load("course_consistency")
@@ -1632,6 +1633,154 @@ def test_status_exclusion_is_policy_overridable():
     srcs = [{"status": "quarantined"}, {"status": "selected"}]
     inc, _ = source_balance.included_sources(srcs, {"status_excluded_prefixes": ["quarantine"]})
     assert len(inc) == 1
+
+
+# ── analysis_substance (신설 · docs/11 §7 ⑧) ────────────────────────────────
+# ⚠️ 이 게이트는 **실미션이 이미 뚫고 지나간 자리**에 세운 것이다. 그래서 테스트는
+#    "일부러 깨뜨린 픽스처로 FAIL" 뿐 아니라 **정상 픽스처로 PASS** 도 반드시 본다
+#    (legalforge 게이트 2종이 어떤 입력에도 FAIL 이었던 반대 방향 사고 · docs/13 §5).
+_REAL_SHARD = """# Analysis: foo2024
+
+## Core Claims & Evidence Structure
+
+### Claim 1: CoVe reduces hallucination on list tasks.
+- **Evidence:** Wikidata precision rises 0.17 to 0.36 for the two-step variant (Table 1),
+  and hallucinated entities drop 2.95 to 0.68 (Section 4.3) which is the headline result.
+- **Evidence:** MultiSpanQA F1 improves 0.39 to 0.48, a 23% relative gain (Table 2) that the
+  authors attribute to factored verification rather than to longer decoding.
+- **Evidence:** Longform FACTSCORE moves 55.9 to 71.4 under Factor+Revise (Table 3), the
+  largest delta reported anywhere in the paper.
+
+- **Evidence:** The ablation in Section 5 separates planning from execution and shows that
+  the factored variant carries almost all of the gain, while the joint variant repeats the
+  original hallucination because the draft stays in context during verification.
+- **Evidence:** Short verification questions are answered correctly about 70% of the time
+  against roughly 17% for the same facts inside the longform baseline (Figure 6), which is
+  the mechanism the authors propose for the whole effect.
+
+## Relation to our research questions
+- Q1-2 maps to the factored verification design; Q2-1 maps to the ordering of verification
+  questions relative to the draft, which Section 4.3 treats as the critical variable.
+
+## Limitations
+- Inference cost grows with the number of verification calls (Section 7).
+"""
+
+_HOLLOW_SHARD = """# Analysis: foo2024
+
+## Core Claims & Evidence Structure
+
+### Claim 1: [Synthesized from relevance note]
+- **Evidence:** [Simulated deep analysis based on relevance impacts.]
+"""
+
+# ⚠️ 자가선언 문구도 없고 분량 하한도 넘기는 껍데기 — `madaan2023` 이 정확히 이 모양이었고,
+#    문구 탐지와 분량만 뒀으면 **통과했다.** 위치 지정 인용이 이걸 가른다.
+_PLAUSIBLE_SHARD = """# Analysis: foo2024
+
+## Core Claims & Evidence Structure
+
+### Claim 1: Iterative refinement via self-feedback improves reasoning and coding results.
+- **Evidence:** The paper demonstrates that by generating feedback on their own outputs the
+  models correct errors in logic, syntax and stylistic consistency over multiple steps.
+- **Evidence:** The methodology relies entirely on internal capabilities, which makes it
+  applicable wherever external verification or tool access happens to be restricted.
+- **Evidence:** Serves as the primary closed-loop counter-example to externally grounded
+  refinement approaches discussed elsewhere in the surveyed literature set.
+- **Evidence:** The authors describe a feedback loop of output, feedback and refinement that
+  repeats until a stopping criterion is reached in the general case.
+- **Evidence:** The discussion notes that refinement quality depends on the model being able
+  to recognise its own errors, and that this recognition degrades as the task moves further
+  from the training distribution in ways the authors describe qualitatively.
+- **Evidence:** Reported gains hold across reasoning, coding and creative writing, and the
+  authors argue the loop is broadly applicable wherever a stopping criterion can be defined
+  without recourse to an external oracle of any kind.
+
+## Relation to our research questions
+- Q1-3 concerns externally grounded critique, and this work is the internal counterpart;
+  Q3-1 concerns the limits of self-correction, which the paper treats as an open question.
+
+## Limitations
+- The authors note the approach cannot introduce facts the model does not already hold.
+"""
+
+
+def _subst_fixture(shards: dict, selected=("foo2024",), policy=None):
+    """미션 루트를 흉내낸 임시 디렉터리. --policy 의 dirname 이 루트가 된다."""
+    import tempfile, json as _json, os as _os
+    d = tempfile.mkdtemp()
+    _os.makedirs(_os.path.join(d, "analysis"), exist_ok=True)
+    for name, body in shards.items():
+        with open(_os.path.join(d, "analysis", name), "w", encoding="utf-8") as f:
+            f.write(body)
+    pol = _os.path.join(d, "pipeline.json")
+    with open(pol, "w", encoding="utf-8") as f:
+        _json.dump({"policy": {"analysis_substance_policy": policy or {}}}, f)
+    src = _os.path.join(d, "sources.yaml")
+    with open(src, "w", encoding="utf-8") as f:
+        f.write("sources:\n" + "".join(
+            f"  - id: {i}\n    status: selected\n" for i in selected))
+    return pol, src
+
+
+def _run_subst(shards, selected=("foo2024",), policy=None):
+    import subprocess, sys as _sys, os as _os
+    pol, src = _subst_fixture(shards, selected, policy)
+    script = _os.path.join(GATES, "analysis_substance.py")
+    return subprocess.run([_sys.executable, script, "--policy", pol, "--sources", src],
+                          capture_output=True, text=True).returncode
+
+
+def test_substance_passes_a_real_analysis():
+    """★ 반대 방향 확인 — 정상 산출물을 통과시키지 못하는 게이트는 못 쓴다."""
+    assert _run_subst({"foo2024.md": _REAL_SHARD}) == 0
+
+
+def test_substance_fails_self_declared_simulation():
+    """M-2026-005 를 정확히 잡는가."""
+    assert _run_subst({"foo2024.md": _HOLLOW_SHARD}) == 1
+
+
+def test_substance_fails_plausible_shard_without_locators():
+    """★ 자가선언도 없고 분량도 충분한 껍데기 — 위치 지정 인용이 유일한 판별자다."""
+    assert _run_subst({"foo2024.md": _PLAUSIBLE_SHARD}) == 1
+
+
+def test_substance_fails_on_empty_shard_dir():
+    """★ 공집합에서 PASS 하지 않는다 — 이 저장소에서 같은 버그가 11회 반복됐다."""
+    assert _run_subst({}) == 1
+
+
+def test_substance_fails_when_a_selected_source_has_no_shard():
+    """'11건 선언, 4건 실물' 을 잡는 개수 항등."""
+    assert _run_subst({"foo2024.md": _REAL_SHARD}, selected=("foo2024", "bar2025")) == 1
+
+
+def test_substance_ignores_the_merged_index_file():
+    """`_index.md` 는 샤드가 아니다 — 분모에 넣으면 항상 FAIL 이 된다."""
+    assert _run_subst({"foo2024.md": _REAL_SHARD, "_index.md": "# Index\n- [foo2024](foo2024.md)\n"}) == 0
+
+
+def test_substance_locator_check_can_be_disabled_explicitly():
+    """해당 없는 아키타입은 **명시적으로** 끈다(암묵적 opt-out 은 리뷰에서 안 보인다)."""
+    assert _run_subst({"foo2024.md": _PLAUSIBLE_SHARD},
+                      policy={"min_locator_citations": 0}) == 0
+
+
+def test_substance_upper_bound_catches_runaway_output():
+    """분량 게이트는 상한과 하한을 **짝으로** 둔다."""
+    assert _run_subst({"foo2024.md": _REAL_SHARD}, policy={"max_words": 10}) == 1
+
+
+def test_bracket_marker_does_not_fire_on_ordinary_simulation_prose():
+    """아키타입 P 는 주제 자체가 시뮬레이션이다 — 맨 단어로 잡으면 정상 산출물이 걸린다."""
+    text = "The authors run a Monte Carlo simulation of the solver (Section 3)."
+    assert analysis_substance.find_markers(text, []) == []
+
+
+def test_locator_regex_counts_korean_and_english_forms():
+    n = len(analysis_substance.LOCATOR_RE.findall("표 3 과 Table 4, §2 및 p. 17 참조"))
+    assert n == 4, n
 
 
 if __name__ == "__main__":
