@@ -302,6 +302,65 @@ def test_block_failure_aborts_instead_of_leaving_a_gateless_pipeline():
     raise AssertionError("block 실패를 통과시켰다(fail-open)")
 
 
+# ── 보드 스코프 (신설) ──────────────────────────────────────────────────────
+def test_board_flag_is_injected_in_prefix_before_subcommand():
+    """★ `--board` 는 전역 플래그다 — 서브커맨드 앞에 와야 한다.
+
+    ⚠️ 그리고 **`kan()` 의 args 가 아니라 `hermes_prefix()` 에** 넣어야 한다.
+       `_capture_instantiate` 의 fake_kan 이 `args[0]`·`args[1]` 위치로 서브커맨드를
+       어설션하기 때문이다 — args 에 넣으면 그 테스트들이 통째로 깨진다.
+    """
+    old = it.BOARD
+    it.BOARD = "m-2026-006"
+    try:
+        pre = it.hermes_prefix()
+    finally:
+        it.BOARD = old
+    assert pre[-3:] == ["kanban", "--board", "m-2026-006"], pre
+
+
+def test_no_board_flag_when_default():
+    old = it.BOARD
+    it.BOARD = None
+    try:
+        assert "--board" not in it.hermes_prefix()
+    finally:
+        it.BOARD = old
+
+
+def test_board_slug_regex_matches_hermes_normalisation():
+    """Hermes 는 슬러그를 소문자로 정규화하고 이 형식만 받는다."""
+    assert it.BOARD_SLUG_RE.match("m-2026-006")
+    assert it.BOARD_SLUG_RE.match("default")
+    assert not it.BOARD_SLUG_RE.match("M-2026-006")   # 대문자 — 미리 소문자로 바꿔야 한다
+    assert not it.BOARD_SLUG_RE.match("-leading")
+    assert not it.BOARD_SLUG_RE.match("has space")
+
+
+def test_pipeline_json_records_the_board():
+    """★ 보드 메타는 hermes-home/ 아래라 gitignore 된다 — 커밋되는 pipeline.json 이
+    '이 미션이 어느 보드에서 돌았는가' 의 유일한 영속 기록이다(task JSON 에 board 필드가 없다)."""
+    tpl = {"name": "t", "stages": [{"id": 1, "name": "S", "profile": "default", "sam_gate": True}]}
+    old = it.BOARD
+    it.BOARD = "m-2026-006"
+    try:
+        pj = it.build_pipeline_json(tpl, "M-2026-006", "주제", {1: "t_x"})
+    finally:
+        it.BOARD = old
+    assert pj["board"] == "m-2026-006"
+
+
+def test_pipeline_json_board_defaults_to_default():
+    tpl = {"name": "t", "stages": [{"id": 1, "name": "S", "profile": "default", "sam_gate": True}]}
+    old = it.BOARD
+    it.BOARD = None
+    try:
+        pj = it.build_pipeline_json(tpl, "M-X", "주제", {1: "t_x"})
+    finally:
+        it.BOARD = old
+    assert pj["board"] == "default"
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

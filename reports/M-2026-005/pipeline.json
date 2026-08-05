@@ -29,6 +29,17 @@
         "web": 0
       },
       "hard_block_if_missing": false
+    },
+    "analysis_substance_policy": {
+      "shard_dir": "analysis",
+      "exclude": [
+        "_index.md"
+      ],
+      "min_words": 150,
+      "max_words": 20000,
+      "min_evidence_bullets": 3,
+      "min_locator_citations": 2,
+      "require_shard_per_selected": true
     }
   },
   "stages": [
@@ -116,7 +127,8 @@
       "gate": {
         "objective": [
           "recency_check",
-          "source_balance"
+          "source_balance",
+          "analysis_substance"
         ],
         "llm": "fact_checker_verdict",
         "draft": null

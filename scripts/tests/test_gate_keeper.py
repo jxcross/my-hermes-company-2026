@@ -279,6 +279,102 @@ def test_inspection_returns_empty_for_missing_dir():
     assert gk.artifact_inspection("/nonexistent/mission/root") == ""
 
 
+# ── 보드 스코프 (신설 · argv 구성 회귀) ──────────────────────────────────────
+# ⚠️ 이 파일에는 원래 `run`·`kanban_json`·`poll_once` 를 건드리는 테스트가 **하나도
+#    없었다.** 보드 도입은 정확히 그 층을 바꾸므로 커버리지를 먼저 만든다.
+def _capture_argv(monkey_target=None):
+    """gk.subprocess.run 을 가로채 argv 를 기록한다."""
+    import types
+    calls = []
+
+    class _P:
+        returncode = 0
+        stdout = "[]"
+        stderr = ""
+
+    orig = gk.subprocess.run
+    gk.subprocess.run = lambda argv, **kw: (calls.append(list(argv)), _P())[1]
+    return calls, (lambda: setattr(gk.subprocess, "run", orig))
+
+
+def test_board_flag_precedes_the_subcommand():
+    """★ `--board` 는 **전역 플래그**다 — 서브커맨드 뒤에 오면 argparse 가 거절한다.
+
+    `hermes kanban --board X list` ✓ / `hermes kanban list --board X` ✗
+    """
+    calls, restore = _capture_argv()
+    try:
+        with gk.board_scope("m-2026-006"):
+            gk.run(["list", "--json"], check=False)
+    finally:
+        restore()
+    argv = calls[0]
+    assert argv[:4] == ["hermes", "kanban", "--board", "m-2026-006"], argv
+    assert argv[4] == "list", argv
+
+
+def test_default_board_adds_no_flag():
+    """기본 보드에서는 플래그를 붙이지 않는다 — 기존 동작과 완전히 같아야 한다."""
+    calls, restore = _capture_argv()
+    try:
+        with gk.board_scope("default"):
+            gk.run(["list", "--json"], check=False)
+        with gk.board_scope(None):
+            gk.run(["list", "--json"], check=False)
+    finally:
+        restore()
+    for argv in calls:
+        assert "--board" not in argv, argv
+
+
+def test_board_scope_restores_previous_scope():
+    """중첩 스코프가 새면 다음 미션의 카드를 엉뚱한 보드에서 조회한다."""
+    with gk.board_scope("a"):
+        with gk.board_scope("b"):
+            assert gk.current_board() == "b"
+        assert gk.current_board() == "a"
+    assert gk.current_board() == "default"
+
+
+def test_legacy_pipeline_without_board_falls_back_to_default():
+    """★ 하위 호환 — 기존 미션의 pipeline.json 에는 board 키가 없다."""
+    import tempfile, json as _json, os as _os
+    d = tempfile.mkdtemp()
+    _os.makedirs(_os.path.join(d, "reports", "M-OLD"), exist_ok=True)
+    with open(_os.path.join(d, "reports", "M-OLD", "pipeline.json"), "w", encoding="utf-8") as f:
+        _json.dump({"mission": "M-OLD", "stages": []}, f)
+    old = gk.COMPANY_ROOT
+    gk.COMPANY_ROOT = d
+    try:
+        assert gk.board_of("M-OLD") == "default"
+    finally:
+        gk.COMPANY_ROOT = old
+
+
+def test_active_boards_falls_back_loudly_when_listing_fails():
+    """★ 조회 실패에 조용히 default 로 축소하면 그게 fail-open 이다 — 로그가 남아야 한다."""
+    logs = []
+    orig_log, orig_json, orig_pl = gk.log, gk.kanban_json, gk.load_all_pipelines
+    gk.log = lambda m: logs.append(m)
+    gk.kanban_json = lambda args: None
+    gk.load_all_pipelines = lambda: [{"board": "m-2026-006"}, {"mission": "M-OLD"}]
+    try:
+        got = gk.active_boards()
+    finally:
+        gk.log, gk.kanban_json, gk.load_all_pipelines = orig_log, orig_json, orig_pl
+    assert got == ["default", "m-2026-006"], got
+    assert any("boards list 조회 실패" in m for m in logs), logs
+
+
+def test_active_boards_skips_archived():
+    orig = gk.kanban_json
+    gk.kanban_json = lambda args: [{"slug": "default"}, {"slug": "old", "archived": True}]
+    try:
+        assert gk.active_boards() == ["default"]
+    finally:
+        gk.kanban_json = orig
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -44,11 +45,66 @@ def log(m: str) -> None:
     print(m, flush=True)
 
 
+# ── 보드 스코프 ─────────────────────────────────────────────────────────
+# 미션마다 Kanban 보드를 새로 만든다(Sam 지시 2026-08-05 — 여러 미션이 한 보드에
+# 섞여 복잡했다). Hermes 게이트웨이 디스패처는 **이미 다중 보드**라(매 틱 보드를
+# 열거하고 새 보드를 재시작 없이 집는다) 런타임 쪽 변경은 필요 없다.
+#
+# ⚠️ `--board` 는 **전역 플래그다 — 서브커맨드 앞에 와야 한다.**
+#      hermes kanban --board <slug> create …   ✓
+#      hermes kanban create … --board <slug>   ✗ (인자 파싱 실패)
+#    그래서 주입 지점은 `hermes_prefix()` 한 곳이다.
+# ⚠️ `kan()` 의 `args` 에 넣으면 안 된다 — 테스트가 `args[0]`·`args[1]` 위치로
+#    서브커맨드를 어설션한다(test_instantiate_template.py `_capture_instantiate`).
+BOARD: str | None = None
+
+# Hermes 의 슬러그 규칙(`kanban_db.py` `_normalize_board_slug`). 소문자로 정규화된다.
+BOARD_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-_]{0,63}$")
+
+
 # ── Hermes CLI ──────────────────────────────────────────────────────────
 def hermes_prefix() -> list[str]:
-    if shutil.which("hermes"):
-        return ["hermes", "kanban"]
-    return ["docker", "exec", "hermes-solomon", "hermes", "kanban"]
+    base = ["hermes", "kanban"] if shutil.which("hermes") \
+        else ["docker", "exec", "hermes-solomon", "hermes", "kanban"]
+    if BOARD:
+        base += ["--board", BOARD]      # ★ 반드시 서브커맨드 **앞**
+    return base
+
+
+def ensure_board(slug: str, mission: str, dry: bool = False) -> None:
+    """보드가 없으면 만든다. 있으면 그대로 쓴다(재실행 안전).
+
+    ⚠️ `--switch` 를 쓰지 않는다 — 그것은 `<root>/kanban/current` 를 바꿔 **이후 모든
+       CLI 호출의 기본 보드**가 된다. 사람이 무심코 친 `hermes kanban list` 도,
+       게이트키퍼의 폴백 경로도 따라 움직인다. `default` 를 영구 기본값으로 두고
+       보드 지정은 **항상 명시적으로** 한다 — 그래야 버그가 나도 "default 에서 돌았다"
+       라는 **보이는 실패**가 되지 사라지지 않는다.
+    """
+    # 조회는 보드 스코프 밖이다(보드 목록 자체는 특정 보드의 것이 아니다).
+    prefix = ["hermes", "kanban"] if shutil.which("hermes") \
+        else ["docker", "exec", "hermes-solomon", "hermes", "kanban"]
+    proc = subprocess.run(prefix + ["boards", "list", "--json"],
+                          capture_output=True, text=True)
+    existing = set()
+    if proc.returncode == 0:
+        try:
+            existing = {b.get("slug") for b in json.loads(proc.stdout or "[]")}
+        except json.JSONDecodeError:
+            pass
+    if slug in existing:
+        log(f"  보드 {slug} 이미 있음 — 재사용")
+        return
+    if dry:
+        log(f"  (dry-run) boards create {slug}")
+        return
+    proc = subprocess.run(
+        prefix + ["boards", "create", slug, "--name", mission, "--icon", "🧭",
+                  "--description", f"미션 {mission} 전용 보드"],
+        capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise InstantiateError(
+            f"boards create {slug} 실패(rc={proc.returncode}): {proc.stderr.strip()[:200]}")
+    log(f"  보드 {slug} 생성")
 
 
 def kan(args: list[str], check: bool = True) -> subprocess.CompletedProcess:
@@ -431,6 +487,11 @@ def build_pipeline_json(tpl: dict, mid: str, topic: str, ids: dict[int, str]) ->
         out_stages.append(entry)
     return {
         "mission": mid, "template": tpl["name"], "topic": topic,
+        # ⚠️ 보드 슬러그를 **여기에** 남긴다. 보드 메타데이터는 `hermes-home/kanban/boards/`
+        #    아래라 gitignore 되고, task JSON 에는 board 필드가 아예 없다. 커밋되는
+        #    pipeline.json 이 "이 미션이 어느 보드에서 돌았는가" 의 유일한 영속 기록이다.
+        #    gate_keeper 도 여기서 읽는다.
+        "board": BOARD or "default",
         "policy_file": f"reports/{mid}/SCOPE.md",
         "sources_file": f"reports/{mid}/raw/sources.yaml",
         "policy": tpl.get("policy", {}),
@@ -455,7 +516,21 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true", help="카드 생성 없이 계획만 출력")
     ap.add_argument("--render", choices=["mermaid", "ascii", "none"], default="none",
                     help="DAG 미리보기 출력(협상용)")
+    ap.add_argument("--board", default=None,
+                    help="Kanban 보드 슬러그(기본: 미션 id 소문자). 'default' 를 주면 "
+                         "기존 공용 보드를 쓴다.")
     args = ap.parse_args()
+
+    # ── 보드 결정 ──────────────────────────────────────────────────────
+    # 슬러그를 **먼저** 검증한다. Hermes 쪽에서 거절당하면 이미 카드를 몇 장 만든
+    # 뒤가 되고, 그러면 반쪽짜리 그래프를 롤백해야 한다.
+    global BOARD
+    slug = (args.board or args.mission).strip().lower()
+    if not BOARD_SLUG_RE.match(slug):
+        log(f"✗ 보드 슬러그 형식 오류: {slug!r} "
+            "— ^[a-z0-9][a-z0-9\\-_]{0,63}$ 이어야 한다")
+        return 2
+    BOARD = None if slug == "default" else slug
 
     tpl = resolve(load_template(args.template), args.mission)
 
@@ -483,8 +558,15 @@ def main() -> int:
         if args.dry_run:   # 미리보기 전용
             return 0
 
+    log(f"보드: {BOARD or 'default'}"
+        + ("  (미션 전용)" if BOARD else "  (공용 — 여러 미션이 섞인다)"))
+
     created: dict[int, str] = {}
     try:
+        # ⚠️ 카드보다 **보드를 먼저** 만든다. 반대로 하면 카드가 default 로 새고,
+        #    보드는 별도 DB 라 나중에 옮길 수 없다(이관 명령이 없다).
+        if BOARD:
+            ensure_board(BOARD, args.mission, args.dry_run)
         instantiate(tpl, args.mission, args.topic or f"{args.mission} 미션", args.dry_run,
                     created)
     except InstantiateError as e:

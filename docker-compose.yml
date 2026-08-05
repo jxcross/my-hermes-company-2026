@@ -50,7 +50,12 @@ services:
 
   # 반려 게이트 자동화(게이트키퍼) — 검증 task(6·9) 판정이 FAIL 이면 산출물 재작업
   # 루프(리비전→재검증)를 강제하고, 다음 단계(7·10)를 PASS 전까지 보류한다.
-  #  - 같은 kanban.db(./hermes-home) 를 공유해 보드를 폴링(scripts/gate_keeper.py).
+  #  - 같은 kanban 데이터(./hermes-home)를 공유해 **활성 보드를 전부** 폴링한다
+  #    (scripts/gate_keeper.py `active_boards()`). 미션마다 보드를 새로 만들므로
+  #    (기본 보드 default + 미션별 보드) 단일 보드 가정을 두면 다른 보드의 미션은
+  #    검증 게이트가 영영 안 돌고 로그도 안 남는다.
+  #    ⚠️ 여기에 HERMES_KANBAN_BOARD 를 걸지 마라 — 사이드카를 **한 보드에 고정**하는
+  #       것이라 정확히 반대 효과다. 보드 지정은 호출마다 `--board` 로 한다.
   #  - entrypoint 를 python 으로 덮어 s6/gateway 대신 게이트키퍼만 실행(이미지 내 hermes
   #    CLI 로 kanban 조작·Slack 통지). 활성 게이트만 처리 → 완료 미션 재처리 안 함.
   hermes-gatekeeper:

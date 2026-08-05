@@ -30,6 +30,7 @@ full 11단계 파이프라인의 검증 게이트를 강제한다.
 """
 from __future__ import annotations
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -73,12 +74,51 @@ def log(msg: str) -> None:
     print(f"[gate-keeper] {msg}", flush=True)
 
 
+# ── 보드 스코프 ─────────────────────────────────────────────────────────
+# 미션마다 Kanban 보드를 새로 만든다(Sam 지시 2026-08-05). 게이트키퍼는 원래
+# **단일 보드 가정**이었고, 그대로 두면 다른 보드의 미션은 `poll_once` 의 목록에
+# 아예 안 잡혀 **검증 게이트가 영영 안 돌고 downstream 이 blocked 로 남는다 —
+# 그리고 로그 한 줄도 안 남는다**(`VERIFIERS` 하드코딩 결함과 같은 모양 · docs/11 §7).
+#
+# ⚠️ `--board` 는 **전역 플래그 — 서브커맨드 앞**이다.
+#      hermes kanban --board <slug> list --json   ✓
+#      hermes kanban list --board <slug>          ✗
+#    그래서 주입 지점은 argv 를 만드는 `run()` 한 곳뿐이다.
+# ⚠️ kwarg 가 아니라 **모듈 전역 + contextmanager** 를 쓴다. 호출이 3단계까지 중첩되고
+#    (`poll_once → handle_fail → revision_round_count → kanban_json`), 그중 둘은 함수를
+#    **참조로** 넘긴다(`classify_children(children, task_status)`). kwarg 로 하면 그 자리에
+#    partial/lambda 를 끼워야 하는데, `classify_children` 의 2인자 계약은 테스트 4종이
+#    어설션한다. Hermes 자신도 같은 모양을 쓴다(`kanban_db.py` `_CURRENT_BOARD_OVERRIDE`).
+# ⚠️ 이 모듈은 단일 스레드다(main → tick 순차). 스레드가 생기면 ContextVar 로 바꿔라.
+_BOARD: str | None = None
+
+
+@contextlib.contextmanager
+def board_scope(slug: str | None):
+    """이 블록 안의 모든 kanban 호출을 <slug> 보드로 보낸다. None/'default' = 기본 보드."""
+    global _BOARD
+    prev = _BOARD
+    _BOARD = None if (slug in (None, "", "default")) else slug
+    try:
+        yield
+    finally:
+        _BOARD = prev
+
+
+def current_board() -> str:
+    return _BOARD or "default"
+
+
 # ── Hermes CLI 래퍼 ─────────────────────────────────────────────────────
 def run(args: list[str], check: bool = True) -> subprocess.CompletedProcess:
-    """hermes kanban <args> 실행."""
-    proc = subprocess.run(HERMES + args, capture_output=True, text=True)
+    """hermes kanban [--board <slug>] <args> 실행."""
+    argv = list(HERMES)
+    if _BOARD:
+        argv += ["--board", _BOARD]      # ★ 반드시 서브커맨드 **앞**
+    proc = subprocess.run(argv + args, capture_output=True, text=True)
     if check and proc.returncode != 0:
-        log(f"WARN cmd failed ({proc.returncode}): kanban {' '.join(args)} :: {proc.stderr.strip()[:200]}")
+        log(f"WARN cmd failed ({proc.returncode}) [board={current_board()}]: "
+            f"kanban {' '.join(args)} :: {proc.stderr.strip()[:200]}")
     return proc
 
 
@@ -90,6 +130,36 @@ def kanban_json(args: list[str]):
         return json.loads(proc.stdout)
     except json.JSONDecodeError:
         return None
+
+
+def active_boards() -> list[str]:
+    """폴 대상 보드. 권위는 `boards list --json` 이다.
+
+    ⚠️ `pipeline.json` 의 board 필드만으로 열거하면 **밖에서 만든 보드를 못 본다.**
+       가장 현실적인 경로가 인스턴스화 자체다 — 번역기는 카드를 먼저 만들고
+       `pipeline.json` 을 **마지막에** 쓴다. 그 사이에 죽으면 카드는 있는데
+       pipeline.json 이 없는 보드가 남고, 그 미션은 게이트키퍼에게 **영원히 보이지
+       않는다**(로그도 안 남는다 — 이 파일이 고치려는 그 결함과 같은 모양).
+
+    ⚠️ 조회 실패 시 조용히 `default` 로 축소하지 않는다 — 그것이 fail-open 이다.
+       pipeline.json 합집합으로 내려가되 **반드시 로그를 남긴다.**
+    """
+    with board_scope(None):   # 보드 목록 자체는 특정 보드의 것이 아니다
+        boards = kanban_json(["boards", "list", "--json"])
+    if isinstance(boards, list):
+        slugs = [b.get("slug") for b in boards
+                 if isinstance(b, dict) and b.get("slug") and not b.get("archived")]
+        if slugs:
+            return slugs
+    known = {"default"} | {(pl.get("board") or "default") for pl in load_all_pipelines()}
+    log(f"WARN boards list 조회 실패 — pipeline.json 기준으로 축약 열거: {sorted(known)}")
+    return sorted(known)
+
+
+def board_of(mission: str) -> str:
+    """미션이 도는 보드. 구 미션의 pipeline.json 에는 board 키가 없다 → default."""
+    pl = load_pipeline(mission)
+    return (pl or {}).get("board") or "default"
 
 
 def notify(text: str, dry: bool) -> None:
@@ -400,6 +470,18 @@ def classify_children(children: list, status_of) -> tuple[list, list]:
 
 # ── 폴 1회 ───────────────────────────────────────────────────────────────
 def poll_once(processed: set, dry: bool) -> None:
+    """활성 보드를 **전부** 돈다.
+
+    ⚠️ 예전에는 여기서 `kanban list --json` 을 한 번만 불렀고, 그것은 기본 보드만
+       본다는 뜻이었다. 미션마다 보드를 새로 만들면 그 미션들은 **아예 목록에 안 잡히고,
+       검증 게이트가 영영 안 돌고, downstream 이 blocked 로 남고, 로그도 안 남는다.**
+    """
+    for slug in active_boards():
+        with board_scope(slug):
+            _poll_board(slug, processed, dry)
+
+
+def _poll_board(slug: str, processed: set, dry: bool) -> None:
     tasks = kanban_json(["list", "--json"]) or []
     verifiers = verifier_profiles()   # 템플릿 선언 기준(폴백=VERIFIERS) — 위 함수의 ⚠️ 참조
     for t in tasks:
@@ -408,7 +490,9 @@ def poll_once(processed: set, dry: bool) -> None:
         if t.get("status") != "done":
             continue
         vid = t.get("id")
-        key = f"{vid}:{t.get('completed_at')}"
+        # ⚠️ 키에 보드를 넣는다. task id 는 보드마다 독립적으로 발급되므로
+        #    보드가 다르면 같은 id 가 존재할 수 있다.
+        key = f"{slug}:{vid}:{t.get('completed_at')}"
         if key in processed:
             continue
         show = kanban_json(["show", vid, "--json"])
@@ -505,15 +589,30 @@ def pending_sam_gates(pipelines: list[dict]) -> list[dict]:
             if not s.get("sam_gate"):
                 continue
             tid = s.get("task_id")
-            if tid and task_status(tid) == "blocked":
+            if not tid:
+                continue
+            # ⚠️ 미션마다 보드가 다르다. 기본 보드에서 조회하면 다른 보드의 게이트는
+            #    상태가 None 으로 나와 **#approvals 에 영영 안 올라간다.**
+            board = pl.get("board") or "default"
+            with board_scope(board):
+                st = task_status(tid)
+            if st == "blocked":
                 out.append({"task_id": tid, "mission": pl.get("mission"), "name": s.get("name"),
+                            "board": board,
                             "upstream": s.get("upstream_task_ids") or []})
     return out
 
 
-def all_upstream_done(upstream: list[str]) -> bool:
-    """상위(upstream) task 가 모두 done/archived 여야 이 게이트가 '활성'(승인 차례)."""
-    return all(task_status(u) in ("done", "archived") for u in upstream) if upstream else True
+def all_upstream_done(upstream: list[str], board: str | None = None) -> bool:
+    """상위(upstream) task 가 모두 done/archived 여야 이 게이트가 '활성'(승인 차례).
+
+    ⚠️ upstream 은 같은 보드에 있다. board 를 안 주면 기본 보드를 조회해 **전부 None** 이
+       나오고, 그러면 이 게이트는 영원히 '활성 아님' 으로 판정된다(조용한 정지).
+    """
+    if not upstream:
+        return True
+    with board_scope(board):
+        return all(task_status(u) in ("done", "archived") for u in upstream)
 
 
 def load_all_pipelines() -> list[dict]:
@@ -732,7 +831,8 @@ def approval_poll(state: dict, dry: bool) -> None:
     if not (APPROVAL_ENABLED and SLACK_BOT_TOKEN):
         return
     pipelines = load_all_pipelines()
-    gates = [g for g in pending_sam_gates(pipelines) if all_upstream_done(g["upstream"])]
+    gates = [g for g in pending_sam_gates(pipelines)
+             if all_upstream_done(g["upstream"], g.get("board"))]
 
     # ── #4: 활성(상위 done) 대기 Sam-게이트를 #approvals 에 1회 게시(내용 포함) ──
     posted = state["approval_posted"]
@@ -741,7 +841,9 @@ def approval_poll(state: dict, dry: bool) -> None:
         if g["task_id"] in posted:
             continue
         summary = gate_summary(g, pl_by_mission.get(g["mission"]) or {})
-        text = (f":large_yellow_circle: *[승인 요청]* {g['mission']} · {g['name']}  (`{g['task_id']}`)\n"
+        board_note = f" · board `{g.get('board') or 'default'}`"
+        text = (f":large_yellow_circle: *[승인 요청]* {g['mission']} · {g['name']}  "
+                f"(`{g['task_id']}`{board_note})\n"
                 f"{summary}\n"
                 f"— 승인: `승인` (또는 `승인 {g['task_id']}`) · 반려/보완은 여기서 논의(게이트 대기 유지). 권한: Sam.")
         if dry:
@@ -771,7 +873,8 @@ def approval_poll(state: dict, dry: bool) -> None:
         if not ok:
             continue
         # 현재 대기 게이트를 재조회(같은 폴에서 앞선 승인이 이미 unblock 했을 수 있음).
-        cur = [g for g in pending_sam_gates(load_all_pipelines()) if all_upstream_done(g["upstream"])]
+        cur = [g for g in pending_sam_gates(load_all_pipelines())
+               if all_upstream_done(g["upstream"], g.get("board"))]
         target, why = resolve_approval_target(explicit, cur)
         if not target:
             # 모호(2+개)만 재시도 여지 남김(Sam 이 곧 id 특정) — seen 미기록.
@@ -784,8 +887,12 @@ def approval_poll(state: dict, dry: bool) -> None:
             log(f"[dry] Sam 승인(ts={ts}) → unblock {target} ({why})")
             seen.add(ts)
             continue
-        run(["unblock", target, "--reason", f"Sam Slack 승인(ts={ts}, {why})"])
-        log(f"Sam 승인 감지(ts={ts}) → unblock {target} ({why})")
+        # ⚠️ unblock 은 **그 게이트가 사는 보드**에서 해야 한다. 기본 보드에서 부르면
+        #    "그런 task 없다" 로 조용히 실패하고, Sam 은 승인했는데 아무 일도 안 일어난다.
+        tgt_board = next((g.get("board") for g in cur if g["task_id"] == target), None)
+        with board_scope(tgt_board):
+            run(["unblock", target, "--reason", f"Sam Slack 승인(ts={ts}, {why})"])
+        log(f"Sam 승인 감지(ts={ts}) → unblock {target} [board={tgt_board or 'default'}] ({why})")
         notify(f"✅ Sam 승인 반영 — {target} unblock ({why}).", dry)
         seen.add(ts)
 
