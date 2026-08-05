@@ -25,6 +25,23 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#46 — v0.2.0 태깅 및 릴리스 (Stage 1 실동작 + 템플릿 미션 시스템 + 아키타입 20종)</h2>
+    <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "먼저 태깅 및 릴리스 적용하라."</div>
+    <div class="label">작업 단계:</div>
+    <ol class="steps">
+      <li>기존 규약 확인 — 태그는 <code>v0.1.0</code> 1건(annotated) · <code>CHANGELOG.md</code> 는 Keep a Changelog + SemVer 형식 · GitHub 릴리스 존재. <code>v0.1.0</code> 이후 커밋 <b>54건</b>.</li>
+      <li><b>버전을 <code>v0.2.0</code> 으로 판단</b>: Stage 1 파이프라인 실동작·템플릿 시스템·아키타입 20종은 기능 추가(minor)이나, <b>20종 중 19종이 <code>maturity: draft</code></b>(라이브 미션 미실행)이므로 <code>v1.0.0</code> 은 실제보다 과장이다. 프로젝트 자신의 성숙도 사다리(draft→tested→proven)와 일치시켰다.</li>
+      <li><code>CHANGELOG.md</code> 에 <code>[v0.2.0]</code> 항목 작성 — Added(Stage 1 운영 · 템플릿 시스템 · 게이트 자동화 · 아키타입 20종) / Verified(E2E 510케이스 · 단위 251종) / Fixed(gate_keeper fail-open · 아키타입 S 의 draft 규약 불일치 · 렌더러 표시 버그 · Slack 오진 정정) / Notes.</li>
+      <li>annotated 태그 <code>v0.2.0</code> 생성 + <code>origin</code> 푸시.</li>
+      <li><code>gh release create v0.2.0</code> — 릴리스 노트에 마일스톤 요약·아키타입 목록·공개 범위 규율·<b>"변환 20건에서 20건 모두 원본에 결함"</b> 교훈·미결 항목 포함.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      태그 <code>v0.2.0</code>(ae934e0) 푸시 완료 · 릴리스 게시 <a href="https://github.com/jxcross/my-hermes-company-2026/releases/tag/v0.2.0">releases/tag/v0.2.0</a>(Latest). <code>main</code> 원격 동기 완료.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#45 — slideforge → 아키타입 T(학회 발표 슬라이드) · <b>변환 20/20 완료</b> · 재사용 4종 + 아키타입 S 실미션 결함 수정</h2>
     <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "docs/13 §6 진행 대장 확인하고 slideforge 변환 진행하라."(진행 대장 #20 · 마지막)</div>
