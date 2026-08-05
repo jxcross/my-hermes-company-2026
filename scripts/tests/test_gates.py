@@ -74,6 +74,11 @@ budget_integrity = _load("budget_integrity")
 call_alignment = _load("call_alignment")
 proposal_traceability = _load("proposal_traceability")
 
+comment_fidelity = _load("comment_fidelity")
+comment_coverage = _load("comment_coverage")
+change_consistency = _load("change_consistency")
+response_quality = _load("response_quality")
+
 
 # ── prisma_counts ────────────────────────────────────────────────────────
 def test_counts_parse():
@@ -1330,6 +1335,90 @@ def test_id_list_parses_bracket_and_bare():
     assert proposal_traceability.id_list("[g1, g2]") == ["g1", "g2"]
     assert proposal_traceability.id_list("g1") == ["g1"]
     assert proposal_traceability.id_list("") == []
+
+
+# ── 아키타입 R: comment_fidelity ─────────────────────────────────────────
+def test_normalize_strips_list_markers_on_both_sides():
+    """파싱하며 목록 기호를 떼는 것은 정상이다 — 양쪽에서 똑같이 떼야 정상 산출물이 통과한다."""
+    raw = comment_fidelity.normalize("1. The experiments are limited;\n   validation is missing.")
+    cited = comment_fidelity.normalize("The experiments are limited; validation is missing.")
+    assert cited in raw
+
+
+def test_numbered_items_counts_only_consecutive():
+    """`1. 2. 3.` 은 항목이지만 본문의 연도·수치 나열은 항목이 아니다."""
+    assert comment_fidelity.numbered_items("1. first\n2. second\n3. third\n") == 3
+    assert comment_fidelity.numbered_items("산문형 리뷰입니다. 번호가 없습니다.\n") == 0
+    assert comment_fidelity.numbered_items("1. only one\n5. out of order\n") == 1
+
+
+def test_verbatim_sections_split_by_id():
+    got = comment_fidelity.verbatim_sections("## R1.1\n첫 지적\n\n## R1.2\n둘째 지적\n")
+    assert sorted(got) == ["R1.1", "R1.2"] and "첫 지적" in got["R1.1"]
+
+
+# ── 아키타입 R: comment_coverage ─────────────────────────────────────────
+def test_body_words_excludes_frontmatter_and_changes_block():
+    """빈 응답(프론트매터만)은 0 어절이어야 한다 — 원본은 이런 파일을 '응답'으로 셌다."""
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    p1 = _os.path.join(d, "R1.1.md")
+    open(p1, "w", encoding="utf-8").write("---\ncomment_id: R1.1\nverdict: accept\n---\n")
+    assert comment_coverage.body_words(p1) == 0
+    p2 = _os.path.join(d, "R1.2.md")
+    open(p2, "w", encoding="utf-8").write(
+        "---\nverdict: accept\n---\n답변 본문 세 어절\n\n```changes\n- action: replace\n```\n")
+    assert comment_coverage.body_words(p2) == 4   # changes 블록은 답변이 아니다
+
+
+def test_response_id_prefers_frontmatter_then_filename():
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    p1 = _os.path.join(d, "anything.md")
+    open(p1, "w", encoding="utf-8").write("---\ncomment_id: R2.3\n---\n본문\n")
+    assert comment_coverage.response_id(p1) == "R2.3"
+    p2 = _os.path.join(d, "R1.1.md")
+    open(p2, "w", encoding="utf-8").write("본문만 있다\n")
+    assert comment_coverage.response_id(p2) == "R1.1"
+    p3 = _os.path.join(d, "notes.md")
+    open(p3, "w", encoding="utf-8").write("메모\n")
+    assert comment_coverage.response_id(p3) is None
+
+
+# ── 아키타입 R: change_consistency ───────────────────────────────────────
+def test_log_line_accepts_bullet_forms():
+    """원본은 `- R1.1: …` 을 0건으로 읽어 **정상 변경기록을 반려**했다(실측)."""
+    for line in ("R1.1: 고쳤다", "- R1.1: 고쳤다", "* R1.1: 고쳤다", "1. R1.1: 고쳤다",
+                 "  - R1.1: 고쳤다"):
+        m = change_consistency.LOG_LINE_RE.match(line)
+        assert m and m.group(1) == "R1.1", line
+
+
+def test_log_line_rejects_empty_description():
+    assert change_consistency.LOG_LINE_RE.match("- R1.1:") is None
+
+
+def test_strip_tags_removes_change_markers():
+    import re as _re
+    tag = _re.compile(r"\[CHANGE-(R\d+\.\d+)\s*:[^\]]*\]")
+    got = change_consistency.strip_tags("[CHANGE-R1.1: 실험 추가] 본문이 남는다", tag)
+    assert change_consistency.normalize(got) == "본문이 남는다"
+
+
+# ── 아키타입 R: response_quality ─────────────────────────────────────────
+def test_evidence_markers_require_a_locator_not_a_substring():
+    """한국어 부분 일치 함정 — `적절히` 안에 `절` 이 있다(docs/13 §5)."""
+    assert not response_quality.has_any("적절히 수정했습니다", response_quality.DEFAULT_EVIDENCE)
+    assert not response_quality.has_any("100% 동의합니다", response_quality.DEFAULT_EVIDENCE)
+    assert response_quality.has_any("3.2절에 근거가 있다", response_quality.DEFAULT_EVIDENCE)
+    assert response_quality.has_any("see Table 4", response_quality.DEFAULT_EVIDENCE)
+
+
+def test_banned_phrase_matching_is_literal():
+    assert response_quality.has_phrase("리뷰어가 오해하신 듯합니다",
+                                       response_quality.DEFAULT_BANNED) == ["리뷰어가 오해"]
+    assert response_quality.has_phrase("리뷰어의 지적에 감사드립니다",
+                                       response_quality.DEFAULT_BANNED) == []
 
 
 if __name__ == "__main__":

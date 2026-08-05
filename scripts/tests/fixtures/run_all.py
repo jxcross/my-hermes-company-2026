@@ -27,6 +27,7 @@ HARNESSES = [
     ("repro", "O 재현 패키지"),
     ("sim", "P 시뮬레이션 실험"),
     ("proposal", "Q 연구제안서"),
+    ("rebuttal", "R 리뷰어 응답서"),
 ]
 
 
