@@ -1606,6 +1606,32 @@ def test_file_scope_is_one_segment():
     assert claim_provenance.citations_at(whole, text.index("3.2")) == {"e3"}
 
 
+# ── status 제외 어휘 (2026-08-05 · M-2026-005 라이브 발견) ──────────────────
+def test_rejected_sources_are_not_counted():
+    """★ 결함 재현: 템플릿은 curator 에게 `status=selected/rejected` 로 판정하라고 지시하는데
+    게이트는 `("failed","excluded")` 두 단어만 걸렀다 → **버린 자료가 정책 카운트에 잡힌다.**
+    하한을 정확히 맞춘 수집에서 한 건만 버려져도 실제로는 미달인데 PASS 가 난다."""
+    srcs = [{"status": "selected"}, {"status": "rejected"}, {"status": "Excluded"},
+            {"status": "failed"}, {"status": "duplicate_of_s3"}, {}]
+    inc, exc = source_balance.included_sources(srcs, {})
+    assert len(inc) == 2, [s.get("status") for s in inc]      # selected + 무status(기본 selected)
+    assert len(exc) == 4, [s.get("status") for s in exc]
+
+
+def test_unknown_status_words_are_included_not_dropped():
+    """모르는 단어는 **포함**으로 둔다 — M-2026-003 은 `new`·`reuse_existing_wiki` 를 정상 값으로 썼다.
+    deny-list 를 allow-list 로 뒤집으면 그 미션들이 조용히 0건이 된다."""
+    srcs = [{"status": "new"}, {"status": "reuse_existing_wiki"}]
+    inc, exc = recency_check.included_sources(srcs, {})
+    assert len(inc) == 2 and not exc
+
+
+def test_status_exclusion_is_policy_overridable():
+    srcs = [{"status": "quarantined"}, {"status": "selected"}]
+    inc, _ = source_balance.included_sources(srcs, {"status_excluded_prefixes": ["quarantine"]})
+    assert len(inc) == 1
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

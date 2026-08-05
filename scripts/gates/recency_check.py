@@ -62,6 +62,28 @@ def resolve_year(policy: dict, abs_key: str, off_key: str, default_off: int, now
     return now_year + default_off
 
 
+# ⚠️ **제외 어휘는 하나가 아니다.** 예전 코드는 `("failed","excluded")` 두 단어만 걸렀는데,
+# `academic-paper` 템플릿은 curator 에게 **`status=selected/rejected` 로 판정하라**고 지시한다.
+# 그래서 **선별에서 버린 자료가 정책 카운트에 그대로 잡혔다**(실측 2026-08-05 · M-2026-005).
+# 게이트가 재는 것이 '수집한 것'이지 '선별한 것'이 아니게 된다 — 하한을 정확히 맞춘 수집에서
+# 한 건만 버려져도 실제로는 미달인데 PASS 가 난다.
+# 문서(템플릿 지시)와 코드(게이트)가 서로 다른 어휘를 말하면 규약을 지킨 쪽이 손해를 본다
+# (docs/13 §5 의 거짓 FAIL 과 같은 계열이되 여기서는 **거짓 PASS** 다).
+# → 접두 기준 deny-list 로 넓히고 정책으로 뺀다. 모르는 단어는 **포함**으로 둔다
+#   (M-2026-003 의 `new`·`reuse_existing_wiki` 처럼 정상적으로 쓰는 값이 있다).
+DEFAULT_EXCLUDED_STATUS = ("failed", "excluded", "rejected", "dropped", "duplicate", "skipped")
+
+
+def included_sources(sources: list, policy: dict) -> tuple[list, list]:
+    """(포함, 제외) — status 가 제외 접두로 시작하면 카운트에서 뺀다."""
+    pref = tuple(str(x).strip().lower()
+                 for x in (policy.get("status_excluded_prefixes") or DEFAULT_EXCLUDED_STATUS))
+    inc, exc = [], []
+    for s in sources:
+        (exc if str(s.get("status", "selected")).strip().lower().startswith(pref) else inc).append(s)
+    return inc, exc
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--policy", required=True)
@@ -82,7 +104,10 @@ def main() -> int:
     seminal_exceptions = bool(policy.get("seminal_exceptions", True))
 
     # 선별된 소스만(status failed/excluded 제외)
-    cited = [s for s in sources if str(s.get("status", "selected")).lower() not in ("failed", "excluded")]
+    cited, dropped = included_sources(sources, policy)
+    if dropped:
+        print(f"status 제외 {len(dropped)}건: "
+              + ", ".join(sorted({str(s.get('status')) for s in dropped})))
 
     # draft 인용 필터(매칭되면 적용, 아니면 전체)
     if args.draft:
