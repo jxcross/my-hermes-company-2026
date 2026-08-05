@@ -58,15 +58,41 @@ def kan(args: list[str], check: bool = True) -> subprocess.CompletedProcess:
     return proc
 
 
-def create_task(title: str, assignee: str, workspace: str, body: str) -> str:
-    args = ["create", title, "--assignee", assignee, "--workspace", workspace, "--body", body, "--json"]
+class InstantiateError(RuntimeError):
+    """인스턴스화 중단 — 반쪽짜리 그래프를 남기지 않기 위해 호출부가 롤백한다."""
+
+
+def kan_or_abort(args: list[str], what: str) -> subprocess.CompletedProcess:
+    """실패하면 1회 재시도하고, 그래도 실패하면 **중단**한다.
+
+    ⚠️ 예전에는 `kan()` 이 WARN 만 찍고 넘어갔다. 실측(2026-08-05 · M-2026-005 첫 시도):
+       `block ... --kind needs_input` 이 `rc=-7` 로 죽었는데 번역기가 그대로 진행해
+       **검증 게이트가 빠진 파이프라인**이 만들어졌다. 게이트가 하나 빠진 그래프는
+       없는 것보다 나쁘다 — 있는 줄 알고 돌리기 때문이다."""
+    proc = kan(args, check=False)
+    if proc.returncode != 0:
+        log(f"  ↻ 재시도: {what} (rc={proc.returncode})")
+        proc = kan(args, check=False)
+    if proc.returncode != 0:
+        raise InstantiateError(f"{what} 실패(rc={proc.returncode}): {proc.stderr.strip()[:200]}")
+    return proc
+
+
+def create_task(title: str, assignee: str, workspace: str, body: str,
+                parents: list[str] | None = None) -> str:
+    args = ["create", title, "--assignee", assignee, "--workspace", workspace, "--body", body]
+    for p in parents or []:
+        args += ["--parent", p]
+    args += ["--json"]
     proc = kan(args, check=False)
     try:
         d = json.loads(proc.stdout)
-        return d.get("id") or d.get("task", {}).get("id")
+        tid = d.get("id") or d.get("task", {}).get("id")
     except json.JSONDecodeError:
-        log(f"ERROR create 실패: {title} :: {proc.stderr.strip()[:200]}")
-        return ""
+        tid = None
+    if not tid:
+        raise InstantiateError(f"create 실패: {title} :: {proc.stderr.strip()[:200]}")
+    return tid
 
 
 # ── 템플릿 로드 · 불변식 ──────────────────────────────────────────────────
@@ -308,52 +334,68 @@ def render_ascii(tpl: dict, mid: str) -> str:
 
 
 # ── 인스턴스화 ─────────────────────────────────────────────────────────────
-def instantiate(tpl: dict, mid: str, topic: str, dry: bool) -> dict:
+def instantiate(tpl: dict, mid: str, topic: str, dry: bool,
+                ids: dict[int, str] | None = None) -> dict:
+    """`ids` 를 넘기면 실패 시 호출부가 **이미 만든 카드를 롤백**할 수 있다."""
     stages = tpl["stages"]
     ws = f"dir:{CONTAINER_REPO}/reports/{mid}"
-    ids: dict[int, str] = {}
+    ids = {} if ids is None else ids
 
     log(f"▶ 미션 {mid} 인스턴스화: {topic}  (template={tpl['name']})")
-    # 1) 생성(모두 일반 생성 — 게이트는 아래서 block)
+
+    # ── stage 마다 생성→(게이트)→링크를 **한 번에** 끝낸다 ────────────────────
+    # ⚠️ **디스패처와의 경합**(실측 2026-08-05 · M-2026-005 첫 시도에서 실제로 터졌다):
+    #    예전에는 11장을 모두 만든 뒤 → 전부 block → 전부 link 했다. 그 사이 카드들은
+    #    **부모 없는 `ready`** 라 게이트웨이 디스패처가 집어간다. 실제로 상류 산출물이
+    #    하나도 없는 상태에서 워커 6개(2·3·5·6·9·10)가 동시에 돌기 시작했다.
+    #
+    # Hermes CLI 의 제약을 실측으로 확인하고 그에 맞춰 배치했다:
+    #    · `create --parent <미완료 부모>` → **`todo` 로 태어난다** = 디스패처가 못 집는다(창 0)
+    #    · `block` 은 **`ready` 에서만** 걸린다 — `todo` 면 "cannot block" 으로 거부된다
+    #    · `--initial-status blocked` 는 **실제로 blocked 를 만들지 않는다**(ready 로 태어난다)
+    #    · 한 번 걸린 needs_input block 은 **부모가 완료돼도 생존한다**
+    #  → 게이트 있는 stage: 부모 없이 만들고(ready) **즉시** block 한 뒤 link (창 = CLI 1회)
+    #    게이트 없는 stage: 부모와 함께 만든다(todo) = 창 0
     for s in stages:
         title = f"{mid} · {s['id']} {s['name']}"
         body = fanout_body(s, s.get("body", "")) if s.get("parallel") else s.get("body", "")
-        if dry:
-            fo = f"  {fanout_label(s)}" if s.get("parallel") else ""
-            log(f"  [dry] create '{title}' @{s['profile']}{fo}")
-            ids[s["id"]] = f"<t{s['id']}>"
-        else:
-            tid = create_task(title, s["profile"], ws, body)
-            ids[s["id"]] = tid
-            log(f"  create {tid}  '{title}' @{s['profile']}")
-
-    # 2) 게이트 block — ★링크 전(ready 상태)에★ needs_input 로 건다.
-    #    링크 후엔 상위 대기(todo)라 block 이 거부되고, generic --initial-status blocked 는
-    #    부모 완료 시 auto-promote 되어 불안정. 링크 전 needs_input 는 부모 완료 후에도
-    #    blocked 가 생존한다(실측). 두 종류의 게이트:
-    #      - sam_gate           : Sam 이 #approvals 에서 unblock (Scoping·Deliver)
-    #      - 검증자 downstream   : 게이트키퍼가 검증 PASS 시 unblock (Synthesis·Wiki)
-    for s in stages:
+        ups = [ids[u] for u in (s.get("upstream") or [])]
         if s.get("sam_gate"):
             reason = f"Sam 승인 대기: {s['name']}"
         elif is_gated_downstream(s, stages):
             reason = f"검증 게이트 대기: {s['name']} (게이트키퍼가 PASS시 unblock)"
         else:
-            continue
+            reason = None
+
         if dry:
-            log(f"  [dry] block {ids[s['id']]} --kind needs_input ({reason})")
-        else:
-            kan(["block", ids[s["id"]], reason, "--kind", "needs_input"])
-
-    # 3) 링크(upstream→stage)
-    for s in stages:
-        for uid in s.get("upstream") or []:
-            if dry:
-                log(f"  [dry] link {ids[uid]} → {ids[s['id']]}")
+            fo = f"  {fanout_label(s)}" if s.get("parallel") else ""
+            tid = f"<t{s['id']}>"
+            ids[s["id"]] = tid
+            if reason:
+                log(f"  [dry] create '{title}' @{s['profile']}{fo}  (부모 없이 → 즉시 block)")
+                log(f"  [dry] block {tid} --kind needs_input ({reason})")
+                for u in ups:
+                    log(f"  [dry] link {u} → {tid}")
             else:
-                kan(["link", ids[uid], ids[s["id"]]])
+                pl = f" --parent {' --parent '.join(ups)}" if ups else ""
+                log(f"  [dry] create '{title}' @{s['profile']}{pl}{fo}")
+            continue
 
-    # 4) pipeline.json (게이트키퍼가 읽는 게이트 설정)
+        if reason:
+            tid = create_task(title, s["profile"], ws, body)      # ready 로 태어난다
+            ids[s["id"]] = tid
+            kan_or_abort(["block", tid, reason, "--kind", "needs_input"],
+                         f"block {tid}({s['name']})")             # ★즉시★ — 창을 최소화
+            for u in ups:
+                kan_or_abort(["link", u, tid], f"link {u}→{tid}")
+            log(f"  create {tid}  '{title}' @{s['profile']}  🚦{reason}")
+        else:
+            tid = create_task(title, s["profile"], ws, body, parents=ups)  # 부모와 함께(todo)
+            ids[s["id"]] = tid
+            log(f"  create {tid}  '{title}' @{s['profile']}"
+                + (f"  ←{','.join(ups)}" if ups else "  (상류 없음 — 즉시 실행 대상)"))
+
+    # pipeline.json (게이트키퍼가 읽는 게이트 설정)
     pipeline = build_pipeline_json(tpl, mid, topic, ids)
     if dry:
         log("  [dry] pipeline.json (미기록):")
@@ -441,7 +483,19 @@ def main() -> int:
         if args.dry_run:   # 미리보기 전용
             return 0
 
-    instantiate(tpl, args.mission, args.topic or f"{args.mission} 미션", args.dry_run)
+    created: dict[int, str] = {}
+    try:
+        instantiate(tpl, args.mission, args.topic or f"{args.mission} 미션", args.dry_run,
+                    created)
+    except InstantiateError as e:
+        # 반쪽짜리 그래프는 없는 것보다 나쁘다 — 게이트가 빠진 채로 돌게 된다.
+        log(f"✗ 인스턴스화 실패: {e}")
+        made = [t for t in created.values() if t]
+        if made:
+            log(f"  ↩ 롤백: 이미 만든 카드 {len(made)}장을 archive 한다 — {', '.join(made)}")
+            for tid in reversed(made):
+                kan(["archive", tid], check=False)
+        return 1
     if not args.dry_run:
         log("✔ 인스턴스화 완료. Scoping 승인 후 게이트키퍼가 검증 게이트를 관리한다.")
     return 0

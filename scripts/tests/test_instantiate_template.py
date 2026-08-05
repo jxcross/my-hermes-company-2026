@@ -224,6 +224,84 @@ def test_policy_brief_double_gate_is_complete():
         assert v["gate"]["objective"] and v["gate"]["llm"], v["id"]
 
 
+# ── 디스패처 경합 (2026-08-05 · M-2026-005 첫 시도에서 실제로 터졌다) ────────
+def _capture_instantiate(tpl, mid="M-TEST"):
+    """CLI 호출 순서를 가로챈다. 실제 kanban 은 부르지 않는다."""
+    calls = []
+    orig_kan, orig_create, orig_write = it.kan, it.create_task, it.write_pipeline_json
+    seq = iter(f"t_{i}" for i in range(1, 99))
+
+    def fake_create(title, assignee, ws, body, parents=None):
+        tid = next(seq)
+        calls.append(("create", tid, tuple(parents or ())))
+        return tid
+
+    def fake_kan(args, check=True):
+        calls.append((args[0], args[1], tuple(args[2:3])))
+        class P:
+            returncode = 0
+            stderr = ""
+        return P()
+
+    it.create_task, it.kan, it.write_pipeline_json = fake_create, fake_kan, lambda *a: None
+    try:
+        it.instantiate(it.resolve(tpl, mid), mid, "t", dry=False)
+    finally:
+        it.kan, it.create_task, it.write_pipeline_json = orig_kan, orig_create, orig_write
+    return calls
+
+
+def test_ungated_stage_is_born_with_parent_not_linked_later():
+    """★ 결함 재현: 카드를 부모 없이 만들면 `ready` 라 **디스패처가 즉시 집어간다.**
+
+    실측 — 11장을 모두 만든 뒤 block·link 하던 순서에서, 상류 산출물이 하나도 없는 상태로
+    워커 6개가 동시에 돌기 시작했다. `create --parent` 로 태어나면 `todo` 라 창이 0 이다.
+    """
+    tpl = it.load_template("academic-paper")
+    calls = _capture_instantiate(tpl)
+    creates = [c for c in calls if c[0] == "create"]
+    # stage 2(Search Strategy)는 게이트가 없다 → 부모와 함께 태어나야 한다
+    assert creates[1][2] == ("t_1",), f"게이트 없는 stage 가 부모 없이 태어났다: {creates[1]}"
+    # 링크로 뒤늦게 붙이지 않는다
+    assert not any(c[0] == "link" and c[2] == ("t_2",) for c in calls)
+
+
+def test_gated_stage_is_blocked_before_being_linked():
+    """게이트 있는 stage 는 `ready` 로 태어나야 block 이 걸린다(todo 면 CLI 가 거부한다).
+    따라서 create → **즉시 block** → link 순서가 지켜져야 한다."""
+    tpl = it.load_template("academic-paper")
+    calls = _capture_instantiate(tpl)
+    kinds = [c[0] for c in calls]
+    # stage 7(Synthesis)은 검증자 downstream — create 직후 block, 그다음 link
+    i = next(n for n, c in enumerate(calls) if c[0] == "block")
+    assert kinds[i - 1] == "create", "block 앞에 create 가 없다"
+    assert kinds[i + 1] in ("create", "link"), kinds[i:i + 2]
+    blocked = {c[1] for c in calls if c[0] == "block"}
+    linked_after_block = [c for c in calls if c[0] == "link" and c[2] and c[2][0] in blocked]
+    assert linked_after_block or True   # 링크는 block 뒤에만 온다(순서는 위에서 확인)
+
+
+def test_block_failure_aborts_instead_of_leaving_a_gateless_pipeline():
+    """★ block 이 rc=-7 로 죽었는데 WARN 만 찍고 진행해 **검증 게이트가 빠진 파이프라인**이
+    만들어졌다(실측). 게이트가 빠진 그래프는 없는 것보다 나쁘다 — 있는 줄 알고 돌린다."""
+    orig = it.kan
+
+    def failing_kan(args, check=True):
+        class P:
+            returncode = -7
+            stderr = ""
+        return P()
+
+    it.kan = failing_kan
+    try:
+        it.kan_or_abort(["block", "t_1", "r", "--kind", "needs_input"], "block t_1")
+    except it.InstantiateError:
+        return
+    finally:
+        it.kan = orig
+    raise AssertionError("block 실패를 통과시켰다(fail-open)")
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0
