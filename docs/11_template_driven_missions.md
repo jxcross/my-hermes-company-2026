@@ -124,6 +124,35 @@ scout를 `academic/industry/patents/news` **4워커로 분화** + `source_type` 
    - ~~**Slack 승인→Kanban unblock 미배선**~~ · ~~**pre-blocked Sam 게이트 무알림**~~ → **[해소 2026-08-04, 커밋 예정]** gate_keeper에 **Sam 승인 게이트 자동화**(Web API 폴링, Socket Mode 비의존) 추가: **#4** 활성 Sam-게이트(상위 done·blocked)를 `#approvals`에 **판단 내용 포함 자동 승인요청 게시**(1회, 멱등; `task_id` + `gate_summary` — 진입 게이트=주제·파이프라인 계획·정책, 산출 게이트=보고서 요약·검증 결과·공개 대상) · **#3** `SLACK_ALLOWED_USERS`(Sam)의 승인 메시지 감지→해당 게이트 `kanban unblock`(바레 `승인`=단일 대기 게이트, `승인 <task_id>`=명시; 부정형/타인 스킵; 기동 시 과거 메시지 baseline seen 처리로 소급 방지). 단위테스트 10종 + 라이브 E2E(요청 게시→Sam `승인`→unblock) 검증. `scripts/gate_keeper.py` `approval_poll`.
    - **[잔여] Slack Socket Mode 인바운드 flapping** — 2026-08-02부터 15초마다 "transport disconnected"(2085+회, WebSocket 전송 타임아웃=네트워크성; app/bot 토큰은 유효). **force-recreate 후 재연결·현재 안정**이나 재발 가능. 승인 흐름은 Web API 폴링이라 이에 **비의존**. 대화형 인바운드(Solomon chat)만 영향 → 네트워크·중복연결 모니터.
    - ~~**속도** — 순차 실행·병렬화 미구현이 최대 병목.~~ → **[해소 2026-08-03 Phase 2-①]** subagent 스테이지 내 팬아웃(3·5·8) 구현. 메커니즘·검증은 §5·§3.B. 잔여: 라이브 파일럿 M-2026-004 실행으로 실측 속도 이득·shard 병합 확인, `max_concurrent_children`(기본3)를 수집 5워커에 맞춰 튜닝(선택, hermes-home/config 로컬).
+
+   **[2026-08-05 실미션 재개 — 아키타입 B(M-2026-005) 착수에서 나온 결함 3건]**
+   변환 20/20 이후 `draft` 19종을 하나씩 라이브로 돌리는 단계에서, **첫 인스턴스화 한 번에**
+   배선·운영 층의 결함이 세 개 나왔다. 셋 다 **E2E 픽스처로는 잡을 수 없는 종류**다 —
+   게이트의 판정이 아니라 **카드가 만들어지는 방식**과 **프로세스의 수명**에 관한 것이기 때문이다.
+
+   - **① 인스턴스화가 디스패처와 경합한다(가장 심각).** 번역기는 카드 N장을 **모두 만든 뒤**
+     block·link 했다. 그 사이 카드들은 **부모 없는 `ready`** 라 게이트웨이 디스패처가 집어간다.
+     실측: 상류 산출물이 하나도 없는 상태에서 **워커 6개(2·3·5·6·9·10)가 동시에 실행**됐다
+     (Wiki Update 가 수집보다 먼저 돌기 시작했다). Hermes CLI 제약을 실측으로 확인하고 배치를
+     바꿨다 — `create --parent <미완료 부모>` 는 **`todo` 로 태어나고**(창 0), `block` 은
+     **`ready` 에서만** 걸리며(`todo` 면 "cannot block"), `--initial-status blocked` 는
+     **실제로 blocked 를 만들지 않는다**. → stage 마다 생성→(게이트)→링크를 한 번에 끝낸다.
+   - **② `block` 실패를 WARN 으로 넘겨 게이트가 빠진 파이프라인이 남았다.** 같은 실행에서
+     `block ... --kind needs_input` 이 `rc=-7` 로 죽었는데 번역기가 계속 진행했다.
+     **게이트가 하나 빠진 그래프는 없는 것보다 나쁘다** — 있는 줄 알고 돌린다.
+     → 1회 재시도 후 **중단**하고 이미 만든 카드를 **롤백(archive)** 한다.
+   - **③ `archive`·`reclaim` 은 실행 중인 워커 프로세스를 죽이지 않는다.** 폭주한 scout 를
+     reclaim 하고 카드를 archive 했는데도 그 프로세스는 **8분 41초째 살아서** 자료를 수집했고,
+     미션 디렉터리를 지우고 재인스턴스화하자 **새 미션의 `raw/` 에 그대로 쓰기 시작**했다
+     (20파일 · 워커 shard `sources.peer_reviewed.yaml` 까지). 폐기된 그래프의 워커가
+     **검증 사슬 밖에서** 새 미션의 증거를 만든다 — 게이트는 파일의 **출처**를 묻지 않으므로
+     이것은 게이트로 잡을 수 없다. → 미션을 폐기·재시작할 때는 카드 archive 만으로 부족하다:
+     `docker exec hermes-solomon ps -eo pid,args | grep 'kanban task <archived_id>'` 로
+     **프로세스를 확인하고 죽여라.**
+   - 부수 수정: `gate_keeper.VERIFIERS` 하드코딩 → **`pipeline.json` 이 선언한 검증자**를 읽는다.
+     `webapp-build` stage 8 의 검증자가 `tester` 라 게이트키퍼가 그 stage 를 아예 보지 않았다
+     (downstream 이 blocked 인 채 영구 정지 · 로그도 남지 않는다).
+
 2. **일반화** — 린터·매처·manifest. B/D 템플릿 추가.
 3. **매칭 자동화** — Solomon이 미션→템플릿 선택.
 
