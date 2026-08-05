@@ -1,0 +1,5 @@
+# Introduction
+
+This report provides a comprehensive synthesis of current research advancements in the mitigation of hallucinations and the enhancement of text attribution within Large Language Models (LLMs). Drawing from an analysis of 11 pivotal research papers, this document evaluates the methodologies emerging to address one of the most significant bottlenecks in LLM deployment: the generation of factually incorrect or unsupported content.
+
+The investigation focuses on the fundamental tension inherent in modern mitigation strategies—the critical trade-off between **information accuracy** (measured through attribution and precision) and **content preservation** (ensuring the original intent and semantic similarity of the text remain intact). By examining various frameworks, from verification-based pipelines like Chain-of-Verification (CoVe) to retrofitting systems such as RARR, this report delineates the state-of-the-art landscape, highlighting both the performance gains in precision and the associated risks of unintended textual degradation.
