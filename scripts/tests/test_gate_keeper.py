@@ -192,6 +192,46 @@ def test_approval_artifact_of_missing_returns_none():
     assert gk.approval_artifact_of({"task_id": "t_x"}, pl) is None
 
 
+# ── 검증자 profile 인식 (2026-08-05 · 실미션 착수 전 발견) ───────────────────
+def test_verifier_profiles_reads_template_declaration():
+    """★ 결함 재현: 검증자 profile 이 하드코딩이면 템플릿이 선언한 새 검증자를 못 본다.
+
+    실측 — `webapp-build` stage 8(`Test & Verify`)의 검증자는 `tester` 다. 하드코딩
+    `{fact-checker, reviewer}` 만 보면 그 stage 가 done 이 돼도 게이트키퍼가 쳐다보지 않아
+    downstream 이 blocked 인 채 영구 정지한다(리비전 루프도 로그도 없다).
+    """
+    import tempfile, os as _os, json as _json
+    d = tempfile.mkdtemp()
+    orig = gk.COMPANY_ROOT
+    gk.COMPANY_ROOT = d
+    try:
+        mroot = _os.path.join(d, "reports", "M-TEST")
+        _os.makedirs(mroot)
+        pl = {"mission": "M-TEST", "stages": [
+            {"id": 7, "name": "Implementation", "profile": "developer", "verifier": False},
+            {"id": 8, "name": "Test & Verify", "profile": "tester", "verifier": True},
+        ]}
+        with open(_os.path.join(mroot, "pipeline.json"), "w", encoding="utf-8") as f:
+            _json.dump(pl, f)
+        got = gk.verifier_profiles()
+        assert "tester" in got, f"템플릿이 선언한 검증자를 못 봤다: {got}"
+        assert {"fact-checker", "reviewer"} <= got, "폴백 집합이 사라졌다"
+        assert "developer" not in got, "검증자가 아닌 stage 의 profile 을 끌어왔다"
+    finally:
+        gk.COMPANY_ROOT = orig
+
+
+def test_verifier_profiles_falls_back_when_no_pipeline():
+    """pipeline.json 이 없는 구 미션에서도 기존 동작을 유지한다."""
+    import tempfile
+    orig = gk.COMPANY_ROOT
+    gk.COMPANY_ROOT = tempfile.mkdtemp()
+    try:
+        assert gk.verifier_profiles() == {"fact-checker", "reviewer"}
+    finally:
+        gk.COMPANY_ROOT = orig
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

@@ -40,7 +40,7 @@ import urllib.parse
 import urllib.request
 
 # ── 설정 ────────────────────────────────────────────────────────────────
-VERIFIERS = {"fact-checker", "reviewer"}         # 검증자 profile
+VERIFIERS = {"fact-checker", "reviewer"}         # 검증자 profile(폴백 — 진실은 pipeline.json)
 STATE_PATH = os.environ.get("GATE_KEEPER_STATE", "/opt/data/gate_keeper_state.json")
 SLACK_TARGET = os.environ.get("GATE_KEEPER_SLACK", "slack")  # bare = home(#mission-log)
 COMPANY_ROOT = os.environ.get("GATE_KEEPER_COMPANY_ROOT", "/work/company")  # repo 마운트 경로
@@ -181,6 +181,28 @@ def stage_tag(title: str) -> str:
     """게이트 단계 태그. '· 9 Independent Review'·'· G9R Re-Verify' 모두 'G9'."""
     m = re.search(r"·\s*G?(\d+)", title or "")
     return f"G{m.group(1)}" if m else "G"
+
+
+def verifier_profiles() -> set[str]:
+    """검증자 profile 집합 — **템플릿이 선언한 것을 진실로 삼는다.**
+
+    ⚠️ 하드코딩(`VERIFIERS`)만 쓰면 템플릿이 새 검증자 profile 을 선언했을 때 게이트키퍼가
+       그 stage 를 **아예 쳐다보지 않는다.** downstream 은 `blocked` 인 채 영구 정지하고,
+       리비전 루프도 생성되지 않으며, **로그도 남지 않아** 원인 파악이 어렵다.
+       실측(2026-08-05): 템플릿 20종의 `verifier: true` stage 는 fact-checker 29 · reviewer 24 ·
+       **`tester` 1**(`webapp-build` stage 8 `Test & Verify`) — 그 미션은 stage 9 에서 조용히 멎는다.
+
+    `pipeline.json` 이 stage 마다 `verifier`·`profile` 을 기록하므로 그것을 읽는다.
+    리비전 재검증 카드는 pipeline.json 에 없지만 **검증자와 같은 profile 로 생성**되므로
+    profile 단위 집합이면 함께 잡힌다(task_id 단위로 보면 놓친다).
+    하드코딩은 pipeline.json 이 없는 구 미션을 위한 폴백으로만 남긴다.
+    """
+    out = set(VERIFIERS)
+    for pl in load_all_pipelines():
+        for s in pl.get("stages", []):
+            if s.get("verifier") and s.get("profile"):
+                out.add(str(s["profile"]).strip())
+    return out
 
 
 def load_pipeline(mission: str) -> dict | None:
@@ -379,8 +401,9 @@ def classify_children(children: list, status_of) -> tuple[list, list]:
 # ── 폴 1회 ───────────────────────────────────────────────────────────────
 def poll_once(processed: set, dry: bool) -> None:
     tasks = kanban_json(["list", "--json"]) or []
+    verifiers = verifier_profiles()   # 템플릿 선언 기준(폴백=VERIFIERS) — 위 함수의 ⚠️ 참조
     for t in tasks:
-        if t.get("assignee") not in VERIFIERS:
+        if t.get("assignee") not in verifiers:
             continue
         if t.get("status") != "done":
             continue
