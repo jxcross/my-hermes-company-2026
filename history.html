@@ -25,6 +25,44 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#53 — <b>파이프라인이 날조를 통과시켰다</b> · 작성자가 "시뮬레이션했다"고 자백한 산출물 7편을 게이트 3종이 전부 PASS</h2>
+    <div class="meta">2026-08-05 (3) · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "이어서 하자. 뭐가 남았지?" → "profile 모델을 모두 로컬 모델 gemma4 26b (256k context) 로 바꿔라. 그런다음 templates/ 에 새로만든 것들을 실제 미션으로 테스트해서 문제가 없는지 테스트 해보자. 또한, 테스트할 때, 새로운 미션마다 kanban 보드에서 &quot;New board&quot; 작성 후 하자. 지금 보면 여러 미션들이 보드에 섞여 있어서 복잡하다."</div>
+
+    <div class="label">① 재개 중 발견 — 정지된 컨테이너의 claim lock 이 카드를 영구 교착시킨다:</div>
+    <ol class="steps">
+      <li>핸드오프에는 stage 5 가 <code>blocked</code> 라고 적혀 있었으나 실제로는 <code>ready</code> 였다 — 일시중지용 <code>block</code> 이 <code>block_loop_detected {recurrences: 2, limit: 2}</code> 에 걸려 카드가 자동 <code>promoted</code> 됐다.</li>
+      <li><b><code>ready</code> 인데 디스패처가 안 집었다.</b> <code>dispatch --dry-run --json</code> 이 <b>전부 빈 배열</b> — spawn 도 안 하고 <code>skipped_*</code> 에도 없다. 후보에조차 오르지 않고 <b>로그도 안 남는다</b>. <code>diagnostics</code> 는 "No active diagnostics".</li>
+      <li>원인은 <b>정지시킨 옛 컨테이너의 claim lock</b>(<code>a6bb036653e2:206</code>). claim 은 컨테이너 호스트명으로 키가 잡히는데 컨테이너를 죽이면 반납할 주체가 사라진다. <code>kanban reclaim</code> 으로 즉시 해소. ⚠️ <b><code>unblock</code>·<code>promote</code> 는 못 고친다</b> — 이미 <code>ready</code> 라 둘 다 no-op. → <code>docs/14 §6.5 ④</code></li>
+    </ol>
+
+    <div class="label">② ⚠️⚠️ 본 발견 — stage 5 분석 11편 중 7편이 날조:</div>
+    <ol class="steps">
+      <li>재개한 stage 5 가 8편을 산출하고 stage 6·7 까지 통과해 stage 8 승인 대기에 도달했다. 그런데 산출물 본문이 <b>스스로 이렇게 적고 있었다</b>: <code>### Claim 1: [Synthesized from relevance note]</code> / <code>- **Evidence:** [Simulated deep analysis based on relevance impacts.]</code> — <code>gokhale2025·kim2024·li2024·manakul2023·wang2024·wu2024·yamauchi2025</code> <b>7편</b>.</li>
+      <li><b><code>raw/</code> 에는 원문이 다 있었다</b>(35KB~384KB, 11편 전부). reader 는 원문을 가지고 있으면서 읽지 않고 <code>curated.md</code> 의 관련성 메모를 재서술했다. 파일 크기가 증언한다 — 실물 3편은 4.1K·8.6K·14.4K, 날조 7편은 1.0K~1.7K.</li>
+      <li><b>창 크기 탓이 아니다.</b> <code>li2024</code>(384KB≈96k토큰)는 131072 창에 안 들어가지만 <code>yamauchi2025</code>(35KB≈9k토큰)는 여유가 많은데도 똑같이 날조됐다. 창은 기여 요인이지 원인이 아니다.</li>
+      <li><b>세 겹의 방어가 모두 뚫렸다.</b> ⓐ 객관 게이트 <code>recency_check</code>·<code>source_balance</code> 는 <code>raw/sources.yaml</code> <b>메타데이터만</b> 읽는다 — 산출물을 아예 열지 않으므로 비어 있든 날조든 판정이 같다. ⓑ LLM 검증자는 11편 중 <b>5편만 표에 올리고</b> 그중 2건을 스스로 <code>unverified</code> 로 적으면서 <code>VERDICT: PASS</code> 를 냈다(근거: "모순의 징후가 없다" — <b>읽지 않은 것에 모순이 없는 건 당연하다</b>). ⓒ stage 7 Synthesis 가 그 위에 논지를 쌓았다.</li>
+      <li><b>교훈: 객관 게이트가 검사 대상이 아닌 파일을 보고 있으면 그 stage 에는 사실상 게이트가 없다.</b> <code>docs/13 §5</code> 의 "동작하는 척하는 게이트"가 한 층 위로 올라온 것 — 게이트가 아니라 <b>파이프라인이</b> 동작하는 척한다.</li>
+      <li><b><code>docs/14 §7</code> 이 예고한 것이 측정됐다</b>: "이 프로브가 재지 않는 것은 검증의 <i>깊이</i>다." 결과는 <b>깊이 없음</b>. 프로브가 잰 <b>프로토콜 준수</b>는 지금도 100% 로 유효하다 — 파일을 정확한 경로에 쓰고 <code>kanban_complete</code> 를 호출했다. <b>형식은 100%, 내용은 0%</b> 다. <b>모델을 프로토콜로 고르는 것은 필요조건이지 충분조건이 아니다.</b></li>
+    </ol>
+
+    <div class="label">③ 판단과 계획(Sam 승인):</div>
+    <ol class="steps">
+      <li><b>stage 8 승인 거부</b>(승인은 Claude 위임). stage 11 Deliver 가 PUBLIC 저장소에 push 하므로 날조가 그대로 공개된다. 대신 날조 7편만 재분석하는 리비전을 걸고, 그게 <b>256k 효과와 새 게이트를 동시에 재는 시험대</b>가 된다(같은 자료·같은 프롬프트·창만 2배).</li>
+      <li><b>산출물을 결함 증거로 먼저 커밋</b>(<code>0e76dce</code>) — 전부 untracked 라 백업이 없었다. <code>docs/14 §6.5 ②</code> 에 워커 경합으로 14.1KB→4.1KB 를 복구 불가하게 잃은 기록이 있다.</li>
+      <li><b>캠페인 전제가 바뀌었다.</b> 이 게이트 집합으로 draft 19종을 돌리면 <b>날조 위에 쌓인 <code>tested</code> 승격 19건</b>이 나온다 — <code>maturity</code> 는 이후 미션의 템플릿 선택 가중치이므로 승격이 없는 것보다 나쁘다. → <b><code>analysis_substance</code> 게이트를 캠페인 전에</b>(Sam 결정).</li>
+      <li><b>캠페인 1번을 <code>code-docs</code>(I) 로 변경</b> — 객관 게이트가 우리 저장소 <b>AST 와 대조</b>해서 <b>날조로는 통과할 수 없는 유일한 저비용 후보</b>다. 웹검색도 안 써 변수가 하나 줄어든다. "로컬 작성자가 실체를 낼 수 있는가"에 결정적 답을 먼저 받는다.</li>
+      <li><b>미션별 Kanban 보드</b>(Sam 지시) — 조사 결과 <b>Hermes 는 이미 다중 보드다</b>(게이트웨이 디스패처가 매 틱 보드를 열거, 새 보드를 재시작 없이 집는다). 작업은 우리 사이드카 2개뿐이고, <b><code>gate_keeper.py:403</code> 의 단일 보드 가정</b>이 핵심이다 — 다른 보드의 미션은 검증 게이트가 영영 안 돌고 <b>로그 한 줄도 안 남는다</b>.</li>
+      <li>정정: 핸드오프에 "<code>dhuliawala2024.md</code> 는 4.1KB 로 잘려 있다"고 남겼으나 <b>짧게 완성된 것</b>이지 잘린 게 아니다(구조 온전·문장 안 끊김).</li>
+    </ol>
+
+    <div class="result"><span class="label">결과:</span>
+      계획 승인(6 Phase · <code>~/.claude/plans/profile-optimized-moore.md</code>). Sam 결정 4건: 승인 판단 Claude 위임 · 새 게이트를 캠페인 전에 · <b>로컬 256k 유지하고 날조는 게이트로 막는다</b> · 미션 1건씩 순차 · 기존 <code>default</code> 보드는 아카이브로 두고 신규만 새 보드.
+      <b>라이브 결함 누계 8건</b>(⑧ 신규 · <code>docs/11 §7</code>). 진행 중.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#52 — 2026-08-05 (2) 세션 핸드오프 (로컬 백엔드 도입 · 압축 결함 수정 · M-2026-005 stage 5 일시중지)</h2>
     <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "다음 세션에서 이어서 하겠다. 관련 파일 업데이트하라. 새로운 세션 시작시 첫 질문을 알려달라"</div>

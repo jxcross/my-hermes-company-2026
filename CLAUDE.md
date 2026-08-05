@@ -70,49 +70,84 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 
 ---
 
-## ▶ 이어서 할 일 (2026-08-05 세션 종료 시점)
+## ▶ 이어서 할 일 (2026-08-05 (3) 세션)
 
-**① M-2026-005 stage 5 재개 — 최우선.**
+**⚠️⚠️ 최우선 사실: 파이프라인이 날조를 통과시켰다. 이게 다른 모든 것에 우선한다.**
+M-2026-005 는 stage 5·6·7 을 **통과해** stage 8 승인 대기에 있는데, **stage 5 분석 11편 중
+7편이 날조다**(본문에 `[Simulated deep analysis based on relevance impacts.]` 라고 스스로 적혀
+있다). `raw/` 에 원문이 다 있는데 읽지 않고 `curated.md` 메모를 재서술했다. 창 크기 탓이
+아니다 — 35KB 원문도 똑같이 날조됐다. **게이트 3종이 전부 통과시켰다**: 객관 게이트는
+`sources.yaml` 메타데이터만 읽고, LLM 검증자는 11편 중 5편만 대조하고 `VERDICT: PASS` 를
+냈다. 상세·교훈은 **`docs/11 §7 ⑧`**·**`docs/14 §7 1.5`**. 증거는 커밋 `0e76dce`.
+
+**→ stage 8(`t_3748d855`)을 승인하지 마라.** stage 11 Deliver 가 PUBLIC 저장소에 push 한다.
+
+**계획서: `~/.claude/plans/profile-optimized-moore.md` (Sam 승인). 6 Phase.**
+
+**① Phase 2 — 프로필 11종 256k 전환**(Sam 지시). `gemma4:26b` 의 천장이 정확히 262144 다.
+⚠️ **파생본 이름을 반드시 `gemma4-26b-256k` 로 바꿔라** — `--build-models` 는 존재를 **이름으로만**
+판정해서(`set_backend.py:382`), 상수만 올리면 "이미 있음"을 찍고 서버는 131072 를 계속 서빙한다.
 ```bash
-docker compose up -d
-python3 scripts/usage_report.py                     # exit 0 확인
-docker exec hermes-solomon hermes kanban unblock t_b07b1739 \
-  --reason "stage 5 재개. 이미 있는 analysis/dhuliawala2024.md·gao2023.md·min2023.md 는 덮지 말고 나머지 자료만 처리하라. 각 자료마다 analysis/<id>.md 를 쓰고 전부 끝나면 analysis/_index.md 로 병합한 뒤 kanban_complete 를 호출하라."
-# 압축 재발 감시 — 이 숫자가 늘면 창 설정이 부족한 것이다(docs/14 §3.2)
-watch -n 60 'grep -c "Compacting context" hermes-home/kanban/logs/t_b07b1739.log; ls reports/M-2026-005/analysis | wc -l'
+python3 scripts/tests/test_set_backend.py     # 먼저
+python3 scripts/set_backend.py --build-models # 모델 먼저(config 가 없는 모델을 가리키지 않게)
+python3 scripts/set_backend.py --backend ollama
+docker compose up -d --force-recreate
+ollama ps                                     # ★ CONTEXT=262144 실측 · SIZE 기록(docs/14 §5 갱신)
 ```
-⚠️ **`analysis/dhuliawala2024.md` 는 4.1KB 로 잘려 있다**(내가 낸 사고 — `docs/14 §6.5` ②).
-다른 2편은 8.6KB·14.4KB 다. 재생성이 필요하면 그 항목만 다시 돌려라.
 
-**② 그 다음: stage 6 Cross-Verify** — 로컬 검증자(`gemma4-26b-128k`)의 **첫 실미션 판정**이다.
-`probe_protocol.py` 는 판정 *포맷*만 쟀고 **검증의 *깊이*는 못 잰다** — 여기서 확인한다.
-게이트키퍼가 `VERDICT: FAIL` 을 잡아 재작업 루프를 거는지도 처음 실전 검증된다.
+**② Phase 3 — `analysis_substance` 게이트 신설**(캠페인 전제). 자가선언 시뮬레이션 문구 탐지 ·
+샤드 개수 == `sources.yaml` 의 `selected` 개수 항등 · 분량 상하한 쌍. **빈 입력에서 FAIL 해야
+한다**(공집합 버그 11회 반복). + `lint_gate_drafts.py`(하네스 draft 정합) + `preflight_gates.py`
+(A~F 하네스 부재의 대체). ⚠️ 이 게이트를 넣으면 stage 의 **공유 `--draft`** 가 바뀐다 —
+`docs/13 §5` 의 `exit 2` 조합을 먼저 확인하라.
 
-**③ 미완 백로그 1건: 성장 지표 대시보드**(재작업률·wiki 재사용률·단계별 소요시간).
-Sam 이 지적한 "미션 진행상황을 전혀 모르겠다"에 대한 답이기도 하다.
+**③ Phase 4 — M-2026-005 복구.** 날조 7편만 재분석하는 리비전 카드를 stage 8 앞에 링크.
+⚠️ `t_3748d855` 에 **`block` 을 쓰지 마라**(이미 blocked · 2회면 `triage`, 비-LLM 탈출구 없음) —
+`comment` 로 사유를 남겨라. 이 단계가 **256k 효과와 새 게이트를 동시에 측정한다**(같은 자료·
+같은 프롬프트·창만 2배). 여전히 날조면 **모델 문제로 확정**이고 ⑥ 전에 티어를 다시 논의한다.
 
-**④ 2026-08-09 14:07 이후**: `python3 scripts/usage_report.py --backend codex` 로 리셋을
-확인하고, codex 로 되돌릴지 로컬을 유지할지 판단한다(로컬은 한도가 없지만 느리다).
+**④ Phase 5 — 미션별 Kanban 보드**(Sam 지시). Hermes 는 **이미 다중 보드다**(게이트웨이
+디스패처가 매 틱 보드를 열거 · 새 보드를 재시작 없이 집는다). 작업은 우리 사이드카 2개뿐:
+`instantiate_template.py`(`--board`) 와 **`gate_keeper.py`**(`:403` 단일 보드 가정 — 다른 보드의
+미션은 **검증 게이트가 영영 안 돌고 로그 한 줄도 안 남는다**). ⚠️ `--board` 는 **전역 플래그 —
+서브커맨드 앞**이다. 기존 `default` 보드는 아카이브로 유지, 신규 미션만 새 보드.
+
+**⑤ Phase 6 — 실미션 캠페인, 1건씩 순차.** 순서: **`code-docs`(I) 먼저** — 객관 게이트가 우리
+저장소 **AST 와 대조**해서 날조로는 통과할 수 없는 유일한 저비용 후보다 → `policy-brief`(G) →
+`lecture-course`(J) → `systematic-review`(B′) → `lit-monitor`(E) → `patent-spec`(F).
+⚠️ G 전에 `policy.py` 의 `DRAFTS` 누락, J 전에 `lecture.py` 의 `source_balance` 누락을 고쳐라.
+
+**⑥ 미완 백로그 1건: 성장 지표 대시보드**(재작업률·wiki 재사용률·단계별 소요시간).
+
+**⑦ 2026-08-09 14:07 이후**: `python3 scripts/usage_report.py --backend codex` 로 리셋 확인.
+③의 재분석 결과가 나쁘면 **작성자·검증자 티어를 codex 로 되돌리는 판단의 근거**가 된다.
 
 ---
 
 ## ‼️ 현재 진행 중 — 실미션 테스트 (`draft` 19종 → `tested`)
 
-**1차 M-2026-005(아키타입 B `academic-paper`)는 stage 4 에서 정지 중이다 — 원인은 파이프라인이
-아니라 [API 사용량 한도 소진](docs/11_template_driven_missions.md)**(`openai-codex` HTTP 429 ·
-plan=team · **리셋 2026-08-09 14:07**). 미션은 깨끗이 세워져 있다(running 0 · ready 0 ·
-stage 1~3 산출물 온전 · 정지 사유는 카드 코멘트에 기록). **재개 = 리셋 확인 → `t_b62286c9` unblock
-→ stage 4 부터.**
+**1차 M-2026-005(아키타입 B `academic-paper`)는 stage 8 승인 대기다 — 그리고 그 산출물은
+믿을 수 없다.** 경과: stage 4 에서 [API 한도 소진](docs/11_template_driven_missions.md)으로
+정지(429 · 리셋 2026-08-09 14:07) → **로컬 Ollama 백엔드**(`docs/14`)로 전환해 stage 4 통과
+(원인이 파이프라인이 아니라 429 였다는 진단이 확인됨) → stage 5 가 **압축 퇴화 분기**로 멈춰
+창을 131072 로 올려 고침 → stage 5·6·7 통과.
 
-**→ [2026-08-05] 한도에 묶이지 않는 경로를 만들었다: 로컬 Ollama 백엔드**(`docs/14`).
-로컬 백엔드로 **stage 4 를 통과**했다(이전에 4회 크래시하던 지점 — 원인이 파이프라인이 아니라
-429 였다는 진단이 이걸로 확인됐다). **현재 상태: stage 5 에서 Sam 요청으로 일시중지**
-(분석 3/11 · 카드 `blocked` · 컨테이너 정지). stage 5 는 처음에 **압축 퇴화 분기**로 멈췄고
-창을 131072 로 올려 고쳤다(위 ⚠️⚠️).
+**⚠️⚠️ 그런데 stage 5 분석 11편 중 7편이 날조다.** 본문이 스스로 그렇게 적고 있다:
+`**Evidence:** [Simulated deep analysis based on relevance impacts.]`. `raw/` 에 원문이
+다 있는데(35KB~384KB) 읽지 않고 `curated.md` 의 관련성 메모를 재서술했다.
+**창 크기 탓이 아니다** — 384KB 원문도, 35KB 원문도 똑같이 날조됐다.
 
-**재개**: `docker compose up -d` → `hermes kanban unblock t_b07b1739 --reason "…기존 분석 3편
-(dhuliawala2024·gao2023·min2023)을 덮지 말고 나머지만…"` → 압축 재발 여부를
-`grep -c "Compacting context" hermes-home/kanban/logs/t_b07b1739.log` 로 감시.
+**게이트 3종이 전부 통과시켰다.** 객관 게이트(`recency_check`·`source_balance`)는
+`raw/sources.yaml` **메타데이터만** 읽어 산출물을 아예 열지 않는다. LLM 검증자는 11편 중
+**5편만 표에 올리고** 그중 2건을 스스로 `unverified` 로 적으면서 `VERDICT: PASS` 를 냈다
+(근거: "모순의 징후가 없다" — 읽지 않은 것에 모순이 없는 건 당연하다). stage 7 Synthesis 가
+그 위에 논지를 쌓았다.
+
+> **교훈: 객관 게이트가 검사 대상이 아닌 파일을 보고 있으면 그 stage 에는 사실상 게이트가 없다.**
+> 상세 `docs/11 §7 ⑧` · 모델 선정과의 관계는 `docs/14 §7 1.5`. 증거 커밋 `0e76dce`.
+
+**→ `t_3748d855`(stage 8) 승인 금지.** 복구 = 날조 7편 재분석 리비전 → `analysis_substance`
+포함 재검증 통과 후 승인. 이게 **256k 와 새 게이트의 첫 실전 측정**이다.
 
 ⚠️ **일시중지는 컨테이너를 세워라**(`docs/14 §6.5`). `kanban block` 을 두 번 하면 카드가
 **`triage`** 로 가는데 거기엔 **비-LLM 탈출구가 없다**(`unblock`·`promote` 모두 거부 ·
@@ -120,32 +155,38 @@ stage 1~3 산출물 온전 · 정지 사유는 카드 코멘트에 기록). **�
 집는다** — 실제로 워커 2개가 동시에 떠 완료 산출물 1건을 덮어썼다(14.1KB→4.1KB, git 에 없어
 복구 불가).
 
-**계획서**: 4-티어 실행 순서·미션 1건 절차·승인 규약은 `history.html #47`·`#48` 참조.
-1차 `academic-paper`(골격 검증 · **진행 중, stage 4 정지**) → 2차 `code-docs`(AST 게이트 ·
-우리 저장소 대상) → 3차 `systematic-review`(이식 게이트). Tier 3·4(비용·외부 실행·저장소
-수정)는 **Sam 재확인**.
+**계획서**: `~/.claude/plans/profile-optimized-moore.md`(2026-08-05 (3) Sam 승인 · 6 Phase).
+캠페인 순서를 **`code-docs`(I) 먼저**로 바꿨다 — 객관 게이트가 우리 저장소 **AST 와 대조**해서
+**날조로는 통과할 수 없는 유일한 저비용 후보**이기 때문이다. 그 다음 `policy-brief`(G) →
+`lecture-course`(J) → `systematic-review`(B′) → `lit-monitor`(E) → `patent-spec`(F).
+Tier 3·4(비용·외부 실행·저장소 수정 — K·M·O·P)는 **Sam 재확인**. 4-티어 원안은
+`history.html #47`·`#48`.
 
 ### 재개 절차
 ```bash
 # 백엔드에 따라 점검 대상이 다르다 — ollama=서버·모델 존재 · codex=한도 소진
 python3 scripts/set_backend.py --show           # 현재 백엔드 확인
 python3 scripts/usage_report.py                 # exit 0 이어야 재개 가능
-docker compose ps                               # 2개 Up
+docker compose up -d && docker compose ps       # 2개 Up
 docker exec hermes-solomon hermes kanban list | grep M-2026-005
-docker exec hermes-solomon hermes kanban unblock t_b62286c9 \
-  --reason "한도 리셋 확인 후 재개 — stage 4 Dedup·Relevance 진행"
+# ⚠️ 컨테이너를 세웠다 켰으면 stale claim lock 을 먼저 풀어라(docs/14 §6.5 ④).
+#    카드가 ready 인데 디스패처가 영영 안 집고, 로그도 안 남는다.
+docker exec hermes-solomon hermes kanban reclaim <tid>
+docker exec hermes-solomon hermes kanban dispatch --dry-run --json   # spawned 에 뜨는지
 ```
-그 뒤 stage 4→5→**6 Cross-Verify(객관 게이트 첫 실미션 판정)**→7→**8 집필 개시 승인**→
-9→10→**11 Deliver 승인**. 승인은 내가 직접 한다(Sam 위임).
-⚠️ stage 4 는 `peer_reviewed` 를 **하한 6에 정확히 맞춘** 상태에서 선별한다 — 한 건이라도
-`rejected` 로 버리면 stage 6 이 반려한다(그게 정상 동작이다. 방금 그 게이트를 고쳤다).
+남은 경로: **stage 5 리비전(날조 7편 재분석)** → 재검증 → **8 집필 개시 승인** → 9 → 10 →
+**11 Deliver 승인**. 승인은 내가 직접 한다(Sam 위임).
+⚠️ stage 4 는 `peer_reviewed` 를 **하한 6에 정확히 맞춘** 상태에서 선별했다 — 한 건이라도
+`rejected` 로 버리면 stage 6 이 반려한다(그게 정상 동작이다).
 
-**⚠️ 라이브가 결함 7건을 냈다 — 그중 6건은 E2E 픽스처 510케이스가 원리적으로 볼 수 없는 층이다**
+**⚠️ 라이브가 결함 8건을 냈다 — 그중 7건은 E2E 픽스처 510케이스가 원리적으로 볼 수 없는 층이다**
 (`docs/11 §7`). ①인스턴스화가 디스패처와 경합해 **상류 없이 워커 6개 실행** ②`block` 실패를
 WARN 으로 넘겨 **게이트 빠진 파이프라인** ③**`archive` 가 워커를 안 죽여** 폐기된 그래프가
 새 미션에 20파일을 씀 ④`VERIFIERS` 하드코딩 ⑤**승인 `--reason` 이 산출물 주제를 오염**
 ⑥`status: rejected` 가 정책 카운트에 잡힘 ⑦**실패 표면 증상과 근본 원인이 두 층 떨어짐**(429 가
-카드에 안 남는다). ①②④⑥은 수정·커밋, ③⑤는 절차 규약, ⑦은 후속 과제.
+카드에 안 남는다) ⑧**작성자가 "시뮬레이션했다"고 자백한 산출물을 게이트 3종이 전부 통과**
+(가장 심각 — 객관 게이트가 검사 대상이 아닌 파일을 보고 있었다).
+①②④⑥은 수정·커밋, ③⑤는 절차 규약, ⑦은 후속 과제, **⑧은 진행 중**(`analysis_substance`).
 
 **테스트 중 게이트 승인은 Claude 가 직접 한다**(Sam 위임 2026-08-05). ⚠️ **승인 사유는 다음
 워커가 읽는다** — 파이프라인에 대한 지시로 쓰고, 운영 메모는 `[운영 메모 · 산출물 지시 아님]`
@@ -208,8 +249,9 @@ docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/fixt
 curl -s -o /dev/null -w '%{http_code}\n' --max-time 8 https://slack.com/api/auth.test           # ⚠️ 현재 000(도달 불가)
 ```
 
-**→ 다음은 M-2026-005 stage 5 재개다**(아래 '이어서 할 일' 참조). codex 한도는
-**2026-08-09 14:07** 리셋 — 그 뒤에는 `set_backend.py --backend codex` 로 되돌릴지 판단한다.
+**→ 다음 할 일은 위 '▶ 이어서 할 일' 을 보라.** ⚠️ **가장 먼저 읽을 것: 파이프라인이 날조를
+통과시켰다**(`docs/11 §7 ⑧`). codex 한도는 **2026-08-09 14:07** 리셋 — 그 뒤에는
+`set_backend.py --backend codex` 로 되돌릴지 판단한다(재분석 품질이 판단 근거).
 
 **§2④ 를 먼저 하라(이번 세션의 가장 큰 교훈):** 게이트를 새로 만들기 전에 `ls scripts/gates/`(62종)로 **이미 가진 것과 하는 일이 겹치는지** 보라. 재사용은 *하는 일*이 같을 때지 *이름*이 비슷할 때가 아니다(O 는 2종 재사용 · P 는 이름이 비슷한 `run_completeness` 를 일부러 재사용하지 않았다). **Q 에서 `legal_safety` 에 연 `publication_policy` 축이 바로 다음 변환(R)에서 그대로 쓰였다 — 쌍둥이 게이트를 만드는 대신 축을 여는 판단의 실증이다.**
 

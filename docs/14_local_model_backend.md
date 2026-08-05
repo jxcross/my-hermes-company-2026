@@ -305,7 +305,7 @@ launchctl setenv OLLAMA_KEEP_ALIVE 30m
 로컬 점검도 **LLM 을 호출하지 않는다** — `/api/tags` 는 메타데이터 조회다. "한도를 확인하려고
 한도를 쓰면 안 된다"는 원래 규율이 그대로 유지된다.
 
-## 6.5 ⚠️ 미션을 세울 때의 함정 두 개 (2026-08-05 실측 — 내가 둘 다 밟았다)
+## 6.5 ⚠️ 미션을 세울 때의 함정 (2026-08-05 실측 — 내가 전부 밟았다)
 
 **① `kanban block` 을 두 번 하면 카드가 `triage` 로 가고, 거기엔 비-LLM 탈출구가 없다.**
 `block --help` 에 적혀 있다 — *"Repeated same-kind re-blocks after unblock route the task to
@@ -335,6 +335,36 @@ docker compose stop hermes-solomon hermes-gatekeeper                 # 디스패
 ⚠️ **미션 산출물은 커밋되기 전까지 백업이 없다.** 워커가 덮어쓰면 그걸로 끝이다
 (위 ②가 정확히 그랬다). 단계가 끝날 때마다 커밋하는 것을 고려하라.
 
+**④ 컨테이너를 세우면 claim lock 이 DB 에 남는다 — 카드가 `ready` 인데 디스패처가 영영 안 집는다.**
+③ 대로 컨테이너를 세우고 다음 세션에 `docker compose up -d` 로 재개했더니, 카드는 `ready` 인데
+**아무 일도 일어나지 않았다.** 진단 명령이 전부 정상을 가리킨다:
+
+```bash
+hermes kanban list          # ▶ t_b07b1739  ready  reader   ← 정상으로 보인다
+hermes kanban diagnostics   # No active diagnostics on this board.
+hermes kanban dispatch --dry-run --json
+#   {"spawned": [], "skipped_nonspawnable": [], "skipped_per_profile_capped": [], …}
+#   ↑ spawn 도 안 하고 skip 목록에도 없다. 후보에조차 안 오른다. 로그도 남지 않는다.
+```
+
+원인은 **정지된 옛 컨테이너의 claim lock**이다. claim 은 컨테이너 호스트명으로 키가 잡히는데
+(`a6bb036653e2:206`), 컨테이너를 죽이면 lock 을 반납할 주체가 사라진다. 새 컨테이너는
+호스트명이 다르므로 그 lock 을 자기 것으로 인식하지 못하고, 카드는 `ready` 인 채로 영원히
+후보에서 빠진다. `hermes kanban show <tid>` 의 `Runs` 마지막 항목이 `reclaimed`/`crashed` 인데
+상태는 `ready` 이면 이 상황이다.
+
+```bash
+hermes kanban reclaim <tid>       # ← 이것만 고친다
+hermes kanban dispatch --dry-run --json   # spawned 에 뜨는지 확인
+```
+
+⚠️ **`unblock` 도 `promote` 도 이걸 고치지 못한다** — 상태가 이미 `ready` 라 둘 다 no-op 이고,
+"명령은 성공했는데 여전히 안 돈다" 만 남는다. ①과 같은 계열의 실패다: **보드는 멀쩡해
+보이는데 아무 일도 일어나지 않고, 그 이유가 어디에도 안 적힌다.**
+
+→ 재개 절차에 넣어라: `docker compose up -d` → **`hermes kanban reclaim <tid>`** →
+`unblock`(필요하면) → `dispatch --dry-run` 으로 후보에 올랐는지 확인.
+
 ## 7. 알려진 한계 · 다음
 
 1. **프로토콜 준수는 재서 확인했다(§2.1) — 다만 재현되지 않은 실패가 하나 있다.**
@@ -343,7 +373,29 @@ docker compose stop hermes-solomon hermes-gatekeeper                 # 디스패
    막았다 — 가드레일이 일했다). 그런데 **프로브 3과제 × 5회 반복에서는 재현되지 않았다.**
    즉 드물게 나오는 실패이지 상시 결함이 아니다. 실미션에서 같은 계열의 실패
    (`kanban_complete` 미호출 = `protocol violation`)가 나오면 §2.1 프로브부터 다시 돌려라.
-   객관 게이트 62종은 산출물을 보므로 그대로 작동한다.
+   ~~객관 게이트 62종은 산출물을 보므로 그대로 작동한다.~~ → **틀렸다. 아래 1.5 를 보라.**
+
+   **1.5. ⚠️⚠️ 프로브가 못 잰 것이 무엇이었는지 이제 안다 — 그리고 그게 실미션을 망쳤다
+   (2026-08-05 · `docs/11 §7 ⑧`).**
+   §2.1 프로브는 **도구 프로토콜 준수**를 쟀다: 인자를 충실히 채우는가, 부작용을 내지 않는가,
+   종료를 호출하는가, `VERDICT` 포맷이 맞는가. 채택 모델은 전 항목 100% 였고 **그 측정은
+   지금도 유효하다.** 그러나 프로브가 재지 않은 축이 있었다 — **성실성**이다.
+
+   M-2026-005 stage 5 에서 `reader` 는 `raw/` 에 원문(35KB~384KB)을 **다 가지고 있으면서
+   읽지 않고** `curated.md` 의 관련성 메모를 재서술한 뒤, 본문에 이렇게 적었다:
+   `**Evidence:** [Simulated deep analysis based on relevance impacts.]` — 11편 중 **7편**이다.
+   프로토콜은 완벽하게 지켰다. 파일을 정확한 경로에 쓰고 `kanban_complete` 를 호출했다.
+   **형식은 100%, 내용은 0% 다.**
+
+   그리고 위 취소선 문장이 왜 틀렸는지가 핵심이다. **객관 게이트가 산출물을 본다는 것은
+   게이트마다 참이 아니다.** 그 stage 의 게이트(`recency_check`·`source_balance`)는
+   `raw/sources.yaml` **메타데이터만** 읽었다 — 산출물을 아예 열지 않는다. LLM 검증자는
+   11편 중 5편만 대조하고 `VERDICT: PASS` 를 냈다.
+
+   > **모델을 프로토콜로 고르는 것은 필요조건이지 충분조건이 아니다.**
+   > 프로브는 "이 모델이 우리 배관에 연결되는가"를 재고, 그 이상은 재지 않는다.
+   > 성실성은 **모델 선정이 아니라 게이트로** 다뤄야 한다 — 게이트는 결정적이고,
+   > 모델이 바뀌어도 남는다. → `analysis_substance` 신설(`docs/11 §7 ⑧`).
 2. **`reasoning_effort: medium` 은 그대로 뒀다.** custom 프로바이더는 이 값을 top-level
    `reasoning_effort` 로 넘긴다 — 인식하지 못하는 엔드포인트는 무시한다
    (`custom/__init__.py` build_api_kwargs_extras).

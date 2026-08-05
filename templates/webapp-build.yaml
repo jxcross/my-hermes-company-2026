@@ -24,15 +24,15 @@
 name: webapp-build
 category: engineering
 display_name: 문서 주도 웹앱 개발
-maturity: draft            # + 신규 profile 미생성 상태 = 아직 실행 불가
+maturity: draft            # 실미션 완주 0회. profile·게이트는 준비됐다(2026-08-04)
 keywords: [웹앱, 웹개발, 프론트엔드, 백엔드, 앱만들, 서비스개발, PRD, webapp]
-requires_profiles: [architect, developer, tester]   # ← Sam 승인 후 생성 필요
+requires_profiles: [architect, developer, tester]   # 생성 완료 — profiles-src/ 참조
 goal_kr: 한 줄 구상에서 출발해 명세 문서 → 설계 → 구현 → E2E 검증까지 완주한 웹앱을 산출한다.
 invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop, sources_cited]
 
 policy:
   # 웹개발에는 recency/source_balance 가 맞지 않는다. 대신 완료조건 정책을 선언한다.
-  # (객관 게이트 doc_consistency·test_run 은 미구현 — docs/13 §7 후속 과제)
+  # 객관 게이트 doc_consistency·test_run 은 scripts/gates/ 에 구현돼 있다.
   completion_policy:
     require_task_checkboxes: true    # 실행계획의 모든 task 에 완료조건 체크박스
     require_e2e_green: true          # E2E 전 시나리오 통과 전까지 Deliver 금지
