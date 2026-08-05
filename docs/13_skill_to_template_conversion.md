@@ -989,9 +989,9 @@ license_consistent = len(declared_set) <= 1   # all same or all missing
 |---|---|
 | HEAD | simforge → P · 그 앞: reproforge→O · datasetforge→N · agentforge→M · secforge→L · migrateforge→K |
 | 변환 | **16/20** · 다음 = **proposalforge**(§6 대장 #17 — 신규 profile 0 예상) |
-| 미커밋 | 없음 (push 완료) |
+| 미커밋 | 없음 (push 완료 · `question_history.md` 는 이 작업과 무관한 기존 변경) |
 | 컨테이너 | `hermes-solomon` · `hermes-gatekeeper` 2개 Up |
-| Slack | **현재 정상**(컨테이너 Web API `ok=true` · team=my-hermes-company). 단 **간헐 재발 중** — 게이트키퍼 WARN(DNS 실패→타임아웃)이 하루 동안 산발했고 마지막 WARN 후 복구됨. 호스트·컨테이너 모두 `slack.com` HTTP 200. **네트워크성**이며 토큰·설정 문제 아님(진단 순서 `docs/10 §4.3`) |
+| Slack | ⚠️ **현재 도달 불가(재발 · 2026-08-05 세션 종료 시점)**. `docs/10 §4.3` 1순위 진단 실측: 호스트·컨테이너 모두 `slack.com` **HTTP 000**(타임아웃)인데 `google.com`·`github.com` 은 **HTTP 200** → **네트워크성이며 토큰·설정 문제 아님**(2026-08-03·08-04 와 같은 증상, 그때는 와이파이 변경으로 복구됐다). 게이트키퍼 WARN 6시간 107건(= `conversations.history` 폴링 실패). **Kanban 이 전부 done 이고 활성 게이트가 없어 실무 영향은 없다** — 승인 대기 중인 미션이 없기 때문. 실미션 재개 전에 도달성부터 확인할 것 |
 | Kanban | 전부 `done`(54/54) · 활성 게이트 없음 · 잔여 테스트 카드 없음 |
 | 테스트 | **205종 통과**(29 템플릿 + 21 게이트키퍼 + 155 게이트) · 린터 16/16 · **E2E 하네스 10종 272케이스 전건 통과**(`scripts/tests/fixtures/run_all.py`) |
 | 라이브 미션 | **A(trend-report)만 실증**(M-2026-003·004). 나머지 15종은 `draft` — Sam 지시로 **전체 변환 후** 하나씩 실행 |

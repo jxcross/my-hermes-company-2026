@@ -27,7 +27,7 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 - **미션 산출물**: 보고서→`reports/M-2026-NNN/`, 지식→llm-wiki repo(raw/entities/concepts/reflections, 재사용률 추적). Kanban 게이트: 미션=부모·단계=자식, `link`=순차, `block --kind needs_input`=Sam 게이트, `--workspace dir:/work/company/reports/<mission>`.
 - **반려 게이트 자동화(게이트키퍼)**: 사이드카 컨테이너 **`hermes-gatekeeper`**(`docker-compose.yml`, `scripts/gate_keeper.py`). 검증 task(6·9) 판정이 `VERDICT: FAIL`이면 산출물 재작업 루프(리비전→재검증) 자동 생성 + downstream(7·10) PASS 전까지 보류. **활성 게이트만** 처리(완료 미션 스킵, 재시작 안전). **Sam 승인 게이트도 자동화**(`approval_poll`, Web API): 활성 Sam-게이트를 `#approvals`에 자동 게시 + Sam의 `승인`/`승인 <task_id>` 감지→`kanban unblock`(SLACK_ALLOWED_USERS만). 상세 `docs/10 §4.4`·`docs/11 §7`.
 - 웹 대시보드 `http://localhost:9129`, Slack `#ceo-office`/`#approvals`/`#mission-log`. 기동 `docker compose up -d`(게이트키퍼 포함) · `.env`/compose 변경 시 `--force-recreate`.
-- **미해결 이슈**: ~~Slack 도달 불가(2026-08-04 오전 재발)~~ → **[해소 2026-08-04 오후]** 네트워크 복구·게이트키퍼 폴링 정상. ~~Slack 아웃바운드 실패~~ → **[해소 2026-08-03]** 근본원인은 **네트워크가 slack.com 도달 불가**(force-recreate 오진). 와이파이 변경 후 복구·전송 검증 완료. Slack 이상 시 **1순위 진단=`curl https://slack.com/api/auth.test` 도달성**(status의 `configured`는 토큰존재만 의미). 진단 runbook·홈채널ID(`C0BM8FK3RTM`)는 `docs/10 §4.3`. · 반려 게이트 미강제(9→10 무조건 링크). Scoping은 Solomon이 자율분해하므로 수동 카드와 충돌 주의.
+- **미해결 이슈**: ⚠️ **Slack 도달 불가 — 2026-08-05 재발(미해소)**. 실측: 호스트·컨테이너 모두 `slack.com` HTTP **000**(타임아웃) · `google.com`·`github.com` 은 200 → **네트워크성**(08-03·08-04 와 같은 증상, 그때는 와이파이 변경으로 복구). Kanban 전부 done·활성 게이트 0 이라 **당장의 실무 영향은 없다**. ~~Slack 도달 불가(2026-08-04 오전 재발)~~ → **[해소 2026-08-04 오후]** 네트워크 복구·게이트키퍼 폴링 정상. ~~Slack 아웃바운드 실패~~ → **[해소 2026-08-03]** 근본원인은 **네트워크가 slack.com 도달 불가**(force-recreate 오진). 와이파이 변경 후 복구·전송 검증 완료. Slack 이상 시 **1순위 진단=`curl https://slack.com/api/auth.test` 도달성**(status의 `configured`는 토큰존재만 의미). 진단 runbook·홈채널ID(`C0BM8FK3RTM`)는 `docs/10 §4.3`. · 반려 게이트 미강제(9→10 무조건 링크). Scoping은 Solomon이 자율분해하므로 수동 카드와 충돌 주의.
 
 ## ‼️ 로컬 전용 (git에 없음 — PC마다 재구성 필요)
 - **`.env`**: Slack 토큰 등 시크릿. Sam이 안전하게 보관 후 새 PC에서 재작성(`cp .env.example .env`).
@@ -72,7 +72,19 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 
 **⚠️ 보안 미결(변함없음)**: 진단 중 `SLACK_BOT_TOKEN` 값이 세션 로그에 노출됨 → **재발급(rotate) 권장**(Slack 앱 Regenerate → `.env` 갱신 → `docker compose up -d --force-recreate hermes-solomon hermes-gatekeeper`).
 
-**새 세션 시작 시:** `git log --oneline -6`(HEAD 근처: migrateforge→secforge→agentforge→datasetforge→reproforge→simforge)과 `docker compose ps`(2개 Up)·`python3 scripts/lint_template.py --all` 로 상태 확인 → **`docs/13 §6` 대장**을 읽고 → 다음 대상(proposalforge)부터 §2 레시피대로 진행.
+**새 세션 시작 시(3분 점검):**
+```bash
+git log --oneline -6            # HEAD: simforge→P · 그 앞 reproforge→O · datasetforge→N · agentforge→M
+docker compose ps               # hermes-solomon · hermes-gatekeeper 2개 Up
+docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/lint_template.py --all'   # 16/16
+docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/fixtures/run_all.py' # 10/10 하네스
+curl -s -o /dev/null -w '%{http_code}\n' --max-time 8 https://slack.com/api/auth.test           # ⚠️ 현재 000(도달 불가)
+```
+→ **`docs/13 §6` 대장**을 읽고 → 다음 대상(**proposalforge** #17)부터 **§2 레시피 8단계**대로 진행.
+
+**§2④ 를 먼저 하라(이번 세션의 가장 큰 교훈):** 게이트를 새로 만들기 전에 `ls scripts/gates/`(46종)로 **이미 가진 것과 하는 일이 겹치는지** 보라. 재사용은 *하는 일*이 같을 때지 *이름*이 비슷할 때가 아니다(O 는 2종 재사용 · P 는 이름이 비슷한 `run_completeness` 를 일부러 재사용하지 않았다).
+
+**이식 시 1순위 확인 항목(공집합이 6회 반복됐다):** 입력이 **비었을 때** 그 게이트가 PASS 하는지부터 보라 — `len(s) <= 1` · `all(...)` · `not any(...)` · `glob` 결과 0건 · 항목 0개는 전부 공집합에서 참이다.
 
 **⚠️ 아키타입 K(`code-migration`)는 미션 밖의 실제 코드를 바꾸고 커밋한다.** 대상 저장소는 `HERMES_WRITE_SAFE_ROOT` 안이어야 하고, **`/work/company` 자신을 대상으로 삼으면 안 된다**(파이프라인이 자기 코드를 고치게 된다). 코드 변경 개시 직전에 Sam 승인 게이트가 있다.
 

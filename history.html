@@ -25,6 +25,27 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#40 — 2026-08-05 세션 핸드오프 (변환 16/20 · 아키타입 M~P 4종 추가)</h2>
+    <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "다음 세션에서 이어서 진행할 것이다. 관련 파일들을 업데이트하라. 다음 세션 시작시 첫 질문을 알려달라."</div>
+    <div class="label">세션 성과 요약:</div>
+    <ol class="steps">
+      <li><b>아키타입 4종 추가 변환</b>(#36~#39): M `agent-eval`(AI 시스템 평가) · N `dataset-release`(데이터셋 배포) · O `repro-package`(재현 패키지) · P `sim-experiment`(시뮬레이션 실험). <b>12/20 → 16/20</b>. 객관 게이트 <b>30종 → 46종</b>, E2E 하네스 <b>6종 103케이스 → 10종 272케이스</b>.</li>
+      <li><b>변환 16건에서 16건 모두 결함 발견</b>(연속 기록 유지). 이번 4건에서 새로 드러난 유형: <b>방향 없는 비교 게이트</b>(30%p 퇴보가 "유의한 개선"으로 PASS) · <b>샘플링하는 게이트</b>(샤드 100개 중 첫 1개만 스캔) · <b>실패한 실행을 성공으로 판정</b>(`build: FAILED` 보고서의 숫자만 읽음) · <b>해시를 존재만 확인</b>(`0`×64 를 적어도 통과) · <b>필드/인자 하나를 빼면 검사가 사라짐</b>(`expected:` 삭제 시 3개 중 1개만 검사) · <b>`--help` 에까지 나오는 죽은 CLI 옵션</b> · <b>공집합이 통과</b>(6회 반복 — 이제 이식 시 1순위 확인 항목).</li>
+      <li><b>★ 원본에 스크립트가 아예 없는 게이트를 8종 신설</b>: 하드게이트라고 선언해 놓고 판정자가 LLM 크리틱 하나뿐인 경우가 반복됐다(agentforge Gate 1 · datasetforge 크리틱 2종 · reproforge doc-clarity · simforge Gate 1·3). 원본 CLAUDE.md 가 <b>규약으로만 적어 둔 문장</b>을 코드로 옮기는 것이 이번 세션 작업의 절반이었다.</li>
+      <li><b>🔒 환경 제약을 "공시"로 다루는 규율 확립</b>: 컨테이너에 <b>docker 데몬·pandas/pyarrow·matplotlib/numpy 가 없다</b>(전부 실측). 검증하지 못하는 경로가 생기면 <b>막거나 · 공시를 강제하거나 · 제약을 없앤다</b> — 조용히 넘어가는 네 번째 선택지는 "검증됐다"는 인상만 남긴다. N 은 <b>막았고</b>(읽을 수 없는 데이터 파일이 있으면 FAIL), O·P 는 <b>공시하게 했다</b>(`docker_verified: false` · `figures_generated: false` + release-notes 명시).</li>
+      <li><b>🔒 공개 범위가 정책 축으로 승격</b>(N): 산출물이 데이터 자체인 아키타입에서는 "무엇이 커밋되는가"가 미션마다 다르다. `publication_policy.mode` 기본 `local_only` — 데이터는 `_private/` 에만, `repo_commit` 은 Sam 이 <b>두 번</b> 승인. 게이트가 선언 mode 와 실제 산출 위치의 일치를 강제한다.</li>
+      <li><b>♻️ 재사용 판단이 양방향으로 성립</b>: O 에서 `license_compat`(N)·`secret_redaction`(L)을 <b>재사용했고</b>(§2④ 가 처음으로 두 건 성립), P 에서 `run_completeness`(M)를 <b>재사용하지 않았다</b>(선언의 모양이 다르다). <b>재사용은 '하는 일'이 같을 때지 '이름'이 비슷할 때가 아니다.</b></li>
+      <li><b>하네스가 자체 결함 3건을 잡았다</b>: 픽스처의 truncate-before-read(M) · 문서 H1 제목이 절 별칭과 겹쳐 정상 문서를 반려(O) · 설계점을 표에서도 지우면 회계가 내부적으로 일관해져 통과(P). <b>정상 픽스처로 PASS 를 확인하는 절반</b>이 세 번 다 값을 했다.</li>
+      <li><b>신규 profile 0개 — 7연속</b>(I·K·L·M·N·O·P). 대장의 "예상 있음"이 계속 빗나갔다. 아키타입 D 때 만든 `architect`·`developer`·`tester` 3종이 D·K·M·N·O·P 를 모두 받쳤다 — <b>profile 11종은 포화로 본다.</b></li>
+      <li><b>⚠️ Slack 도달 불가 재발</b>(세션 종료 시점 · 미해소): `docs/10 §4.3` 1순위 진단 실측 — 호스트·컨테이너 모두 <code>slack.com</code> <b>HTTP 000</b>(타임아웃)인데 <code>google.com</code>·<code>github.com</code> 은 <b>200</b> → <b>네트워크성이며 토큰·설정 문제 아님</b>(08-03·08-04 와 같은 증상, 그때는 와이파이 변경으로 복구). 게이트키퍼 WARN 6시간 107건은 <code>conversations.history</code> 폴링 실패다. <b>Kanban 전부 done·활성 게이트 0 이라 당장의 실무 영향은 없다.</b></li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      린터 <b>16/16</b> · 테스트 <b>205종</b>(29 템플릿 + 21 게이트키퍼 + 155 게이트) · <b>E2E 10종 272케이스 전건 통과</b> · 미커밋 0 · Kanban 54/54 done. <b>재개 지점 = <code>docs/13 §6</code> 진행 대장</b>(§8.0 스냅샷 갱신). <b>다음 작업 = proposalforge 변환</b>(#17, 신규 profile 0 예상). <b>미결</b>: Slack 도달성(네트워크성 · 실미션 재개 전 확인) · SLACK_BOT_TOKEN 재발급(Sam) · 실미션은 전체 변환 후 하나씩(Sam 지시) · 매처(C)·성장 지표 대시보드·미션 진행상황 Slack 실시간 보고 · 아키타입 A~F의 E2E 하네스 소급 작성(우선순위 낮음).
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#39 — simforge → 아키타입 P(시뮬레이션 실험) · <b>해시를 존재만 확인하던 무결성 게이트</b>를 재계산으로 바꾸다</h2>
     <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "다음 진행하라."(docs/13 진행 대장 #16, simforge).</div>
