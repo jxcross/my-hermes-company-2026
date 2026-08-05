@@ -37,6 +37,7 @@ name: security-audit
 category: engineering
 display_name: 보안 감사(OWASP·CWE·CVE·STRIDE, 보조)
 maturity: draft
+keywords: [보안, 취약점, 감사, 침투, 위협, OWASP, CVE, STRIDE, security, vulnerability]
 goal_kr: 소스·의존성·설정을 대상으로 OWASP Top 10·CWE·의존성 CVE·STRIDE 위협모델을 점검하고, 조치 가능한 보안 보고서를 산출한다(정식 감사 아님·수정 없음).
 requires_profiles: [architect]
 invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop]

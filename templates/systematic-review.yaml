@@ -23,6 +23,7 @@ name: systematic-review
 category: research
 display_name: PRISMA 체계적 문헌고찰
 maturity: draft
+keywords: [체계적, 문헌고찰, 메타분석, PRISMA, 리뷰논문, 스크리닝, systematic review]
 goal_kr: 연구질문(PICO)에서 출발해 PRISMA 2020을 준수하는 체계적 문헌고찰 원고를 산출한다.
 invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop, sources_cited]
 

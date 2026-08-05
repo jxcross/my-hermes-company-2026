@@ -1,0 +1,375 @@
+{
+  "_note": "templates/*.yaml 에서 생성한 스냅샷이다. 손으로 고치지 마라 — 판정은 항상 템플릿 원본에서 다시 만든다(match_template.py --rebuild).",
+  "count": 20,
+  "templates": [
+    {
+      "name": "academic-paper",
+      "file": "academic-paper.yaml",
+      "category": "research",
+      "display_name": "학술 논문 초고",
+      "maturity": "draft",
+      "keywords": [
+        "논문",
+        "학술",
+        "초고",
+        "저널",
+        "투고",
+        "연구논문",
+        "paper",
+        "manuscript"
+      ],
+      "stages": 11
+    },
+    {
+      "name": "agent-eval",
+      "file": "agent-eval.yaml",
+      "category": "research",
+      "display_name": "AI 시스템 구축·평가(RAG/Agentic, 논문용)",
+      "maturity": "draft",
+      "keywords": [
+        "평가",
+        "벤치마크",
+        "rag",
+        "에이전트평가",
+        "실험비교",
+        "지표",
+        "eval",
+        "benchmark"
+      ],
+      "stages": 14
+    },
+    {
+      "name": "code-docs",
+      "file": "code-docs.yaml",
+      "category": "engineering",
+      "display_name": "코드베이스 문서화(API·아키텍처·ADR·튜토리얼)",
+      "maturity": "draft",
+      "keywords": [
+        "코드문서",
+        "문서화",
+        "api문서",
+        "아키텍처",
+        "adr",
+        "튜토리얼",
+        "docstring",
+        "reference"
+      ],
+      "stages": 10
+    },
+    {
+      "name": "code-migration",
+      "file": "code-migration.yaml",
+      "category": "engineering",
+      "display_name": "코드베이스 마이그레이션(버전·타입·프레임워크)",
+      "maturity": "draft",
+      "keywords": [
+        "마이그레이션",
+        "이관",
+        "업그레이드",
+        "리팩터",
+        "포팅",
+        "버전올리",
+        "migration",
+        "upgrade"
+      ],
+      "stages": 10
+    },
+    {
+      "name": "conference-slides",
+      "file": "conference-slides.yaml",
+      "category": "research",
+      "display_name": "학회 발표 슬라이드(Marp 덱 + 발표자 노트 + handout)",
+      "maturity": "draft",
+      "keywords": [
+        "슬라이드",
+        "발표",
+        "학회발표",
+        "덱",
+        "발표자료",
+        "marp",
+        "핸드아웃",
+        "slides",
+        "talk"
+      ],
+      "stages": 15
+    },
+    {
+      "name": "dataset-release",
+      "file": "dataset-release.yaml",
+      "category": "research",
+      "display_name": "데이터셋 큐레이션·배포(데이터시트 3표준)",
+      "maturity": "draft",
+      "keywords": [
+        "데이터셋",
+        "데이터",
+        "배포",
+        "공개",
+        "큐레이션",
+        "데이터시트",
+        "라이선스",
+        "dataset",
+        "release"
+      ],
+      "stages": 14
+    },
+    {
+      "name": "lecture-course",
+      "file": "lecture-course.yaml",
+      "category": "education",
+      "display_name": "강의 자료(계획서·슬라이드·과제·퀴즈)",
+      "maturity": "draft",
+      "keywords": [
+        "강의",
+        "수업",
+        "커리큘럼",
+        "강의계획서",
+        "과제",
+        "퀴즈",
+        "교육",
+        "syllabus",
+        "course"
+      ],
+      "stages": 12
+    },
+    {
+      "name": "legal-draft",
+      "file": "legal-draft.yaml",
+      "category": "legal",
+      "display_name": "법률 문서 초안(계약서·의견서·자문서·약관)",
+      "maturity": "draft",
+      "keywords": [
+        "계약서",
+        "법률",
+        "약관",
+        "의견서",
+        "자문",
+        "조항",
+        "법령",
+        "contract",
+        "legal"
+      ],
+      "stages": 11
+    },
+    {
+      "name": "lit-monitor",
+      "file": "lit-monitor.yaml",
+      "category": "research",
+      "display_name": "주기 문헌 모니터",
+      "maturity": "draft",
+      "keywords": [
+        "모니터링",
+        "주기",
+        "정기",
+        "신착",
+        "워치리스트",
+        "다이제스트",
+        "구독",
+        "monitor",
+        "digest"
+      ],
+      "stages": 10
+    },
+    {
+      "name": "outreach-content",
+      "file": "outreach-content.yaml",
+      "category": "research",
+      "display_name": "연구 성과 발신(X 스레드·블로그·README 동시 산출)",
+      "maturity": "draft",
+      "keywords": [
+        "홍보",
+        "발신",
+        "블로그",
+        "스레드",
+        "트위터",
+        "readme",
+        "아웃리치",
+        "outreach",
+        "thread"
+      ],
+      "stages": 12
+    },
+    {
+      "name": "patent-spec",
+      "file": "patent-spec.yaml",
+      "category": "legal",
+      "display_name": "특허 명세서 초안",
+      "maturity": "draft",
+      "keywords": [
+        "특허",
+        "명세서",
+        "청구항",
+        "출원",
+        "발명",
+        "선행기술",
+        "patent",
+        "claim"
+      ],
+      "stages": 11
+    },
+    {
+      "name": "policy-brief",
+      "file": "policy-brief.yaml",
+      "category": "policy",
+      "display_name": "정책 브리프(다중 포맷)",
+      "maturity": "draft",
+      "keywords": [
+        "정책",
+        "브리프",
+        "제언",
+        "이해관계자",
+        "정책보고서",
+        "규제",
+        "policy brief"
+      ],
+      "stages": 12
+    },
+    {
+      "name": "repro-package",
+      "file": "repro-package.yaml",
+      "category": "research",
+      "display_name": "재현 패키지 빌드(환경 3종 + 실측 검증)",
+      "maturity": "draft",
+      "keywords": [
+        "재현",
+        "재현성",
+        "패키지",
+        "아티팩트",
+        "설치",
+        "배포판",
+        "reproduce",
+        "artifact"
+      ],
+      "stages": 12
+    },
+    {
+      "name": "research-proposal",
+      "file": "research-proposal.yaml",
+      "category": "research",
+      "display_name": "연구제안서(공고 정합·예산·일정 포함 제출 번들)",
+      "maturity": "draft",
+      "keywords": [
+        "제안서",
+        "연구비",
+        "과제신청",
+        "공고",
+        "예산",
+        "간트",
+        "nrf",
+        "proposal",
+        "grant"
+      ],
+      "stages": 15
+    },
+    {
+      "name": "reviewer-response",
+      "file": "reviewer-response.yaml",
+      "category": "research",
+      "display_name": "리뷰어 응답서(코멘트 전건 대응 + 원고 반영)",
+      "maturity": "draft",
+      "keywords": [
+        "리뷰어",
+        "응답서",
+        "반박",
+        "심사의견",
+        "수정원고",
+        "rebuttal",
+        "response letter"
+      ],
+      "stages": 12
+    },
+    {
+      "name": "security-audit",
+      "file": "security-audit.yaml",
+      "category": "engineering",
+      "display_name": "보안 감사(OWASP·CWE·CVE·STRIDE, 보조)",
+      "maturity": "draft",
+      "keywords": [
+        "보안",
+        "취약점",
+        "감사",
+        "침투",
+        "위협",
+        "owasp",
+        "cve",
+        "stride",
+        "security",
+        "vulnerability"
+      ],
+      "stages": 11
+    },
+    {
+      "name": "sim-experiment",
+      "file": "sim-experiment.yaml",
+      "category": "research",
+      "display_name": "시뮬레이션 실험(DOE 파라미터 스윕)",
+      "maturity": "draft",
+      "keywords": [
+        "시뮬레이션",
+        "실험",
+        "파라미터",
+        "스윕",
+        "솔버",
+        "민감도",
+        "doe",
+        "simulation",
+        "sweep"
+      ],
+      "stages": 14
+    },
+    {
+      "name": "systematic-review",
+      "file": "systematic-review.yaml",
+      "category": "research",
+      "display_name": "PRISMA 체계적 문헌고찰",
+      "maturity": "draft",
+      "keywords": [
+        "체계적",
+        "문헌고찰",
+        "메타분석",
+        "prisma",
+        "리뷰논문",
+        "스크리닝",
+        "systematic review"
+      ],
+      "stages": 11
+    },
+    {
+      "name": "trend-report",
+      "file": "trend-report.yaml",
+      "category": "research",
+      "display_name": "연구·기술 동향보고서",
+      "maturity": "proven",
+      "keywords": [
+        "동향",
+        "트렌드",
+        "최신",
+        "조사",
+        "서베이",
+        "기술동향",
+        "연구동향",
+        "landscape",
+        "trend",
+        "survey"
+      ],
+      "stages": 11
+    },
+    {
+      "name": "webapp-build",
+      "file": "webapp-build.yaml",
+      "category": "engineering",
+      "display_name": "문서 주도 웹앱 개발",
+      "maturity": "draft",
+      "keywords": [
+        "웹앱",
+        "웹개발",
+        "프론트엔드",
+        "백엔드",
+        "앱만들",
+        "서비스개발",
+        "prd",
+        "webapp"
+      ],
+      "stages": 10
+    }
+  ]
+}

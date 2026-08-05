@@ -17,6 +17,7 @@ name: academic-paper
 category: research
 display_name: 학술 논문 초고
 maturity: draft            # draft → (실미션 1회 완주) tested → (2회) proven. docs/12 §6
+keywords: [논문, 학술, 초고, 저널, 투고, 연구논문, paper, manuscript]
 goal_kr: 지정 주제의 학술 논문 초고를 출처 검증된 Markdown 원고로 산출한다(목차 합의 후 집필).
 invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop, sources_cited]
 

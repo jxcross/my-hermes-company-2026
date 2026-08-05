@@ -40,6 +40,7 @@ name: code-migration
 category: engineering
 display_name: 코드베이스 마이그레이션(버전·타입·프레임워크)
 maturity: draft
+keywords: [마이그레이션, 이관, 업그레이드, 리팩터, 포팅, 버전올리, migration, upgrade]
 goal_kr: 기존 코드베이스를 목표 버전·타입 시스템·프레임워크로 옮기되, 원자 커밋으로 되돌릴 수 있게 하고 기준선 대비 행동과 테스트가 나빠지지 않았음을 증명한다.
 requires_profiles: [architect, developer, tester]
 invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop]

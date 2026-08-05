@@ -32,6 +32,7 @@ name: lit-monitor
 category: research
 display_name: 주기 문헌 모니터
 maturity: draft
+keywords: [모니터링, 주기, 정기, 신착, 워치리스트, 다이제스트, 구독, monitor, digest]
 goal_kr: 감시 대상 주제·저자·학회의 신규 논문을 회차마다 수집·선별해 행동 제안이 붙은 다이제스트를 산출한다.
 invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop, sources_cited]
 

@@ -25,6 +25,7 @@ name: webapp-build
 category: engineering
 display_name: 문서 주도 웹앱 개발
 maturity: draft            # + 신규 profile 미생성 상태 = 아직 실행 불가
+keywords: [웹앱, 웹개발, 프론트엔드, 백엔드, 앱만들, 서비스개발, PRD, webapp]
 requires_profiles: [architect, developer, tester]   # ← Sam 승인 후 생성 필요
 goal_kr: 한 줄 구상에서 출발해 명세 문서 → 설계 → 구현 → E2E 검증까지 완주한 웹앱을 산출한다.
 invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop, sources_cited]

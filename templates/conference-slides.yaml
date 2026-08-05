@@ -35,6 +35,7 @@ name: conference-slides
 category: research
 display_name: 학회 발표 슬라이드(Marp 덱 + 발표자 노트 + handout)
 maturity: draft
+keywords: [슬라이드, 발표, 학회발표, 덱, 발표자료, Marp, 핸드아웃, slides, talk]
 goal_kr: 연구 산출물에서 검증된 주장만 뽑아 발표 시간에 맞는 Marp 덱과 발표자 노트·배포 자료를 만들고 공개 근거를 확인해 사람이 바로 발표할 수 있게 낸다.
 requires_profiles: []
 invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop]

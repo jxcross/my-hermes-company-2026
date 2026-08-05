@@ -36,6 +36,7 @@ name: outreach-content
 category: research
 display_name: 연구 성과 발신(X 스레드·블로그·README 동시 산출)
 maturity: draft
+keywords: [홍보, 발신, 블로그, 스레드, 트위터, README, 아웃리치, outreach, thread]
 goal_kr: 연구 산출물에서 검증된 주장만 뽑아 채널 규격에 맞는 발신물을 만들고 공개 근거와 발신 체크리스트를 붙여 사람이 바로 올릴 수 있게 낸다.
 requires_profiles: []
 invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop]

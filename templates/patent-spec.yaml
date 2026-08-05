@@ -27,6 +27,7 @@ name: patent-spec
 category: legal
 display_name: 특허 명세서 초안
 maturity: draft
+keywords: [특허, 명세서, 청구항, 출원, 발명, 선행기술, patent, claim]
 goal_kr: 발명 설명에서 출발해 선행기술 조사·신규성 분석을 거쳐 관할별 특허 명세서 초안을 산출한다(변리사 검토 전제).
 invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop, sources_cited]
 

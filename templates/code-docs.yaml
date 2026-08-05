@@ -31,6 +31,7 @@ name: code-docs
 category: engineering
 display_name: 코드베이스 문서화(API·아키텍처·ADR·튜토리얼)
 maturity: draft
+keywords: [코드문서, 문서화, API문서, 아키텍처, ADR, 튜토리얼, docstring, reference]
 goal_kr: 코드베이스를 읽어 공개 API·모듈 구조·설계 결정을 추출하고, 코드와 대조 검증된 문서 묶음(API 레퍼런스·아키텍처·ADR·튜토리얼)을 산출한다.
 invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop]
 # ⚠️ `sources_cited` 를 선언하지 않는다 — 이 아키타입의 출처는 sources.yaml 이 아니라

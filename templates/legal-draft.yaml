@@ -34,6 +34,7 @@ name: legal-draft
 category: legal
 display_name: 법률 문서 초안(계약서·의견서·자문서·약관)
 maturity: draft
+keywords: [계약서, 법률, 약관, 의견서, 자문, 조항, 법령, contract, legal]
 goal_kr: 거래·사안 맥락에서 출발해 관련 법령·판례를 조사하고 조항 구조를 설계한 뒤, 선택한 종류별 한국법 법률 문서 초안을 산출한다(변호사 검토 전제).
 invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop, sources_cited]
 

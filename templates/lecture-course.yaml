@@ -35,6 +35,7 @@ name: lecture-course
 category: education
 display_name: 강의 자료(계획서·슬라이드·과제·퀴즈)
 maturity: draft
+keywords: [강의, 수업, 커리큘럼, 강의계획서, 과제, 퀴즈, 교육, syllabus, course]
 goal_kr: 주제와 자료에서 출발해 학습목표(Bloom)와 주차 구조·평가 계획을 설계하고, 강의계획서·슬라이드·과제·퀴즈를 산출한다.
 invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop, sources_cited]
 

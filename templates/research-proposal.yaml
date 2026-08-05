@@ -45,6 +45,7 @@ name: research-proposal
 category: research
 display_name: 연구제안서(공고 정합·예산·일정 포함 제출 번들)
 maturity: draft
+keywords: [제안서, 연구비, 과제신청, 공고, 예산, 간트, NRF, proposal, grant]
 goal_kr: 연구 아이디어와 PI 이력에서 출발해 공고 요건에 정합하는 제출 가능한 연구비 제안서 번들(본문·영문초록·예산표·일정·참고문헌)을 낸다.
 requires_profiles: [architect, developer]
 invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, sources_cited, revision_loop]

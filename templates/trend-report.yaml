@@ -28,6 +28,10 @@
 name: trend-report
 category: research
 display_name: 연구·기술 동향보고서
+# 이 파일이 스키마 원본이라 maturity 규약(docs/12 §6)보다 먼저 만들어졌고, 그래서 필드가
+# 없었다. 실적은 사다리를 이미 만족한다 — 실미션 **2회 완주**(M-2026-003 · M-2026-004).
+maturity: proven           # draft → (실미션 1회) tested → (2회) proven
+keywords: [동향, 트렌드, 최신, 조사, 서베이, 기술동향, 연구동향, landscape, trend, survey]
 goal_kr: 지정 주제의 최신 연구·기술 동향을 출처 검증된 Markdown 보고서로 산출한다.
 invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop, sources_cited]
 

@@ -38,6 +38,7 @@ name: reviewer-response
 category: research
 display_name: 리뷰어 응답서(코멘트 전건 대응 + 원고 반영)
 maturity: draft
+keywords: [리뷰어, 응답서, 반박, 심사의견, 수정원고, rebuttal, response letter]
 goal_kr: 리뷰어 보고서의 모든 코멘트에 근거 있는 응답을 달고 수용한 지적을 원고에 실제로 반영해 재제출 가능한 리비전 번들을 낸다.
 requires_profiles: []
 invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop]

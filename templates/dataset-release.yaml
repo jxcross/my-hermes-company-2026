@@ -45,6 +45,7 @@ name: dataset-release
 category: research
 display_name: 데이터셋 큐레이션·배포(데이터시트 3표준)
 maturity: draft
+keywords: [데이터셋, 데이터, 배포, 공개, 큐레이션, 데이터시트, 라이선스, dataset, release]
 goal_kr: 원본 데이터를 정제·스키마화하고 라이선스·개인정보를 검증해 데이터시트 3표준을 갖춘 배포 번들을 낸다.
 requires_profiles: [architect, developer]
 invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop, sources_cited]

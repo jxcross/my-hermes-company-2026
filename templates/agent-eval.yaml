@@ -46,6 +46,7 @@ name: agent-eval
 category: research
 display_name: AI 시스템 구축·평가(RAG/Agentic, 논문용)
 maturity: draft
+keywords: [평가, 벤치마크, RAG, 에이전트평가, 실험비교, 지표, eval, benchmark]
 goal_kr: 도메인 코퍼스로 RAG/Agentic 시스템의 baseline·proposed·ablation 을 구현·평가하고, 통계적으로 뒷받침된 논문용 평가 산출물을 낸다.
 requires_profiles: [architect, developer, tester]
 invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop, sources_cited]

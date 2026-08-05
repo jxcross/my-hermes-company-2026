@@ -42,6 +42,7 @@ name: repro-package
 category: research
 display_name: 재현 패키지 빌드(환경 3종 + 실측 검증)
 maturity: draft
+keywords: [재현, 재현성, 패키지, 아티팩트, 설치, 배포판, reproduce, artifact]
 goal_kr: 연구 산출물의 실행 환경을 3종 파일로 포착하고 실제 설치·실행으로 핵심 수치를 재측정해 남이 따라 돌릴 수 있는 재현 패키지를 낸다.
 requires_profiles: [developer, tester]
 invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop]

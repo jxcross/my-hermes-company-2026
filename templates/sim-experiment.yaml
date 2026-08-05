@@ -41,6 +41,7 @@ name: sim-experiment
 category: research
 display_name: 시뮬레이션 실험(DOE 파라미터 스윕)
 maturity: draft
+keywords: [시뮬레이션, 실험, 파라미터, 스윕, 솔버, 민감도, DOE, simulation, sweep]
 goal_kr: 가설에서 DOE를 설계하고 솔버를 고정해 설계점을 전수 실행한 뒤, 민감도 분석과 재현 가능한 논문용 산출물을 낸다.
 requires_profiles: [architect, tester, developer]
 invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop]
