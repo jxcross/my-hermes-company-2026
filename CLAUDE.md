@@ -72,6 +72,8 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 
 **⚠️ 보안 미결(변함없음)**: 진단 중 `SLACK_BOT_TOKEN` 값이 세션 로그에 노출됨 → **재발급(rotate) 권장**(Slack 앱 Regenerate → `.env` 갱신 → `docker compose up -d --force-recreate hermes-solomon hermes-gatekeeper`).
 
+**세션 종료 상태(2026-08-05):** 변환 **19/20** — 이번 세션에 Q(연구제안서)·R(리뷰어 응답서)·S(성과 발신) 3종 추가. 미커밋 없음(`question_history.md` 는 Sam 소유 로그라 제외). **남은 것은 `slideforge` 1종.** Kanban 전부 done · 활성 게이트 0. ⚠️ Slack 여전히 도달 불가(`slack.com` 000 · `github.com` 200 = 네트워크성) — **변환 작업에는 영향 없고, 실미션 재개 전에 확인 필요.**
+
 **새 세션 시작 시(3분 점검):**
 ```bash
 git log --oneline -6            # HEAD: outreachforge→S · 그 앞 rebuttalforge→R · proposalforge→Q · simforge→P
