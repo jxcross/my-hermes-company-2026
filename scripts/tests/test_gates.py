@@ -64,6 +64,10 @@ result_tolerance = _load("result_tolerance")
 env_consistency = _load("env_consistency")
 install_evidence = _load("install_evidence")
 reproduce_doc = _load("reproduce_doc")
+bit_exact = _load("bit_exact")
+solver_pin = _load("solver_pin")
+doe_completeness = _load("doe_completeness")
+analysis_integrity = _load("analysis_integrity")
 
 
 # ── prisma_counts ────────────────────────────────────────────────────────
@@ -1135,6 +1139,98 @@ def test_body_chars_excludes_code_fences():
 def test_command_file_tokens_extracted():
     got = set(reproduce_doc.FILE_TOKEN_RE.findall("bash reproduce.sh && cat key-results.json"))
     assert got == {"reproduce.sh", "key-results.json"}
+
+
+# ── bit_exact (아키타입 P · 원본 결함 3건) ─────────────────────────────────
+def test_hash_directory_matches_original_algorithm():
+    """원본 `hash_outputs.py` 와 같은 누적 규약(<rel>\\0<sha256>\\n)이어야 한다 —
+    다르면 정상 산출물이 전부 반려된다."""
+    import tempfile, os as _os, hashlib
+    d = tempfile.mkdtemp()
+    _os.makedirs(_os.path.join(d, "sub"))
+    open(_os.path.join(d, "a.json"), "w").write("A")
+    open(_os.path.join(d, "sub", "b.json"), "w").write("B")
+    want = hashlib.sha256()
+    for rel, content in (("a.json", b"A"), ("sub/b.json", b"B")):
+        want.update(rel.encode()); want.update(b"\0")
+        want.update(hashlib.sha256(content).hexdigest().encode()); want.update(b"\n")
+    assert bit_exact.hash_directory(d, []) == want.hexdigest()
+
+
+def test_hash_excludes_volatile_files():
+    """로그·타임스탬프가 해시에 들어가면 어떤 재실행도 bit-exact 가 아니게 된다."""
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    open(_os.path.join(d, "a.json"), "w").write("A")
+    h1 = bit_exact.hash_directory(d, ["*.log"])
+    open(_os.path.join(d, "solver.log"), "w").write("iteration 412")
+    assert bit_exact.hash_directory(d, ["*.log"]) == h1
+
+
+def test_design_point_comparison_is_numeric():
+    """`0.10` 과 `0.1` 은 같은 설계점이다 — 문자열로 비교하면 거짓 드리프트가 뜬다."""
+    assert bit_exact.num_eq("0.10", 0.1)
+    assert bit_exact.num_eq(100, "100")
+    assert not bit_exact.num_eq(0.1, 0.25)
+    assert bit_exact.num_eq("abc", "abc")
+
+
+# ── solver_pin (원본에 스크립트가 없던 Gate 1) ──────────────────────────────
+def test_unpinned_tags_rejected():
+    tags = solver_pin.DEFAULT_UNPINNED
+    assert solver_pin.is_unpinned("latest", tags)
+    assert solver_pin.is_unpinned("main", tags)
+    assert solver_pin.is_unpinned("openfoam:latest", tags)
+    assert not solver_pin.is_unpinned("11.0", tags)
+    assert not solver_pin.is_unpinned("3f2a91c8d4", tags)
+
+
+def test_token_value_detected_but_env_var_name_allowed():
+    """`auth_env_var: EDISON_API_TOKEN` 은 이름이므로 통과, 값은 차단."""
+    assert solver_pin.TOKEN_VALUE_RE.search("api_key: abcdefghijklmnopqrstuvwxyz0123")
+    assert not solver_pin.TOKEN_VALUE_RE.search("auth_env_var: EDISON_API_TOKEN")
+
+
+# ── doe_completeness (원본에 스크립트가 없던 Gate 3) ────────────────────────
+def test_declared_count_fixes_the_denominator():
+    """설계점을 표에서도 지우면 회계가 **내부적으로 일관**해진다 — 픽스처가 잡은 자체 결함.
+    분모를 따로 선언하게 해서 조용한 축소를 막는다."""
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    open(_os.path.join(d, "doe.md"), "w", encoding="utf-8").write(
+        "n_design_points: 6\n\n```runs\n- id: run-01\n  status: done\n```\n")
+    assert doe_completeness.declared_count(d) == 6
+    open(_os.path.join(d, "doe.md"), "w", encoding="utf-8").write("```runs\n- id: run-01\n```\n")
+    assert doe_completeness.declared_count(d) is None
+
+
+def test_output_schema_is_key_set():
+    import tempfile, os as _os, json as _json
+    d = tempfile.mkdtemp()
+    p = _os.path.join(d, "outputs.json")
+    open(p, "w").write(_json.dumps({"drag": 1.0, "lift": 2.0}))
+    assert doe_completeness.schema_of(p) == frozenset({"drag", "lift"})
+    open(p, "w").write("not json")
+    assert doe_completeness.schema_of(p) is None
+
+
+# ── analysis_integrity (신설) ──────────────────────────────────────────────
+def test_declared_independent_vars_parsed():
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    open(_os.path.join(d, "hypothesis.md"), "w", encoding="utf-8").write(
+        "```independent_vars\n- name: mesh\n  range: [1, 2]\n- name: reynolds\n```\n")
+    assert analysis_integrity.declared_vars(d) == ["mesh", "reynolds"]
+
+
+def test_csv_reference_extraction():
+    got = set(analysis_integrity.CSV_REF_RE.findall("표는 `data/drag.csv` 와 data/lift.csv 에"))
+    assert got == {"data/drag.csv", "data/lift.csv"}
+
+
+def test_caveat_terms_cover_korean_and_english():
+    for t in ("근사", "proxy"):
+        assert any(t in c for c in analysis_integrity.DEFAULT_CAVEATS)
 
 
 def test_systems_block_parses_change_field():

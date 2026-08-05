@@ -1,0 +1,190 @@
+# 아키타입 P — 시뮬레이션 실험(DOE 파라미터 스윕) (14단계)
+# 출처: other_projects/harness-templates/research-harnesses/project_simforge
+#       (.claude/skills/simforge/SKILL.md 8-stage + agents 11종). 변환 절차: docs/13
+#
+# 이 아키타입이 만드는 것: **파라미터가 결과에 미치는 영향에 대한 논문용 근거**다. 가설에서
+# 독립·종속 변수를 뽑아 DOE(실험계획)를 세우고, 솔버를 버전까지 고정한 뒤 설계점마다 돌려서
+# 민감도 분석과 그림을 내고 Methods 초안까지 만든다. 산출물은 아키타입 B(academic-paper)의
+# 입력이 된다.
+#
+# ⚠️ **아키타입 M(agent-eval)과 다르다.** M 은 **시스템 둘을 비교**한다(baseline vs proposed ·
+#    통계적 유의성). 여기는 **파라미터 공간을 훑는다**(DOE · 어느 변수가 결과를 움직이는가).
+#    묻는 질문이 다르므로 게이트도 다르다 — 그래서 `run_completeness`(M)를 재사용하지 않고
+#    `doe_completeness` 를 새로 만들었다(§5).
+#
+# ⚠️ **이 환경의 한계를 템플릿이 정면으로 다룬다.**
+#    · **matplotlib·numpy 가 없다**(실측: 둘 다 ModuleNotFoundError). 그림을 만들 수 없다.
+#      → stage 9 는 `plot.py` 와 데이터 CSV 를 산출하고 `figures_generated: false` 를
+#        **공시**한다. `analysis_integrity` 가 공시와 plot.py 실재를 강제한다.
+#    · **docker 데몬이 없다**(아키타입 O 에서 실측). 컨테이너 솔버는 여기서 못 돌린다.
+#    · **솔버 자체가 이 컨테이너에 없다.** 로컬 바이너리를 쓰려면 미션이 그것을 가져와야 하고,
+#      원격 솔버(EDISON 등)면 네트워크로 호출한다. Scoping 이 이 결정을 명시한다.
+#    조용히 넘어가지 않고 **공시하게 만드는 것**이 아키타입 O 에서 세운 규율이다.
+#
+# ⚠️ **stage 6 은 실제 계산 자원을 쓴다**(HPC 시간·원격 솔버 과금). 직전에 Sam 승인 게이트.
+#
+# 변환 판단(요약 — 상세·근거는 docs/13 §2·§5):
+#  - **원본 게이트 3종 중 2종은 스크립트가 아예 없다**(Gate 1 환경 감사 · Gate 3 출력 완결성 —
+#    LLM 크리틱뿐). 원본 CLAUDE.md 가 규약으로 적어 둔 것을 코드로 옮겨 신설했다.
+#  - 유일한 스크립트 게이트(Gate 2 bit-exact)에서 **결함 3건 실측**: `output.hash` 를 존재만
+#    확인(0 을 64자 적어도 통과) · **`--doe` 인자를 광고만 하고 한 번도 쓰지 않음** ·
+#    run 0건이면 PASS.
+#  - **해시를 다시 계산해 대조하는 것은 우리가 할 수 있다** — 파일을 읽는 것은 코드 실행이
+#    아니다(솔버 재실행과 다르다). 원본보다 강한 검사를 실행 없이 얻었다.
+#  - **신규 profile 0개** — 예상대로 `architect`(설계)·`tester`(실행)·`synthesizer`(분석)로 족하다.
+#  - `runs_state.py`(Kanban 대체) · `doe_generate.py`·`latex_export.py`·`hash_outputs.py`·
+#    `sensitivity_analysis.py` 는 **판정하지 않는 산출 도구**라 게이트가 아니다(미션이 만들어 쓴다).
+#
+# 스키마 규약은 templates/trend-report.yaml 머리말 참조.
+
+name: sim-experiment
+category: research
+display_name: 시뮬레이션 실험(DOE 파라미터 스윕)
+maturity: draft
+goal_kr: 가설에서 DOE를 설계하고 솔버를 고정해 설계점을 전수 실행한 뒤, 민감도 분석과 재현 가능한 논문용 산출물을 낸다.
+requires_profiles: [architect, tester, developer]
+invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop]
+# ⚠️ `sources_cited` 를 선언하지 않는다 — 근거가 웹 출처가 아니라 **실행 결과**다
+#    (code-docs·code-migration·security-audit·repro-package 와 같다).
+
+policy:
+  solver_policy:
+    require_fields: [solver_name, solver_version, deps_lock, hardware]
+    unpinned_tags: [latest, main, head, stable, dev, nightly]
+    require_remote_fields: [endpoint, app_version, image_hash, auth_env_var]
+    require_deps_lock_exists: true
+    cross_check_runs: true      # ⚠️ 원본은 "solver.md 가 source of truth" 라 선언만 했다
+
+  doe_policy:
+    min_design_points: 4
+    max_failed_ratio: 0.2       # ⚠️ 실패 자체는 결과다 — 막는 것은 실패를 **숨기는** 것
+    require_failure_reason: true
+    require_schema_consistency: true
+    outputs_file: outputs.json
+    allowed_status: [done, failed]
+
+  repro_policy:
+    exclude: ["*.log", "*.tmp", "timestamp.txt", "*.pyc"]
+    tolerance: bit-exact        # 비결정적 솔버(MPI 등)면 Scoping 에서 조정
+    require_replay: true
+    min_replays: 1
+    require_config_fields: [solver_version, seed]
+
+  analysis_policy:
+    min_samples: 12
+    invariant_epsilon: 0.05     # S_i ≤ S_Ti + eps (S_Ti 는 proxy 라 잡음 여유를 둔다)
+    require_caveat: true        # 근사 한계를 notes 에 밝혀야 한다
+    caveat_terms: [근사, approxim, proxy, 추정치, 표본 분산]
+    data_dir: data
+    figures_manifest: figures.md
+    require_plot_script: true   # ⚠️ matplotlib 이 없는 환경 — plot.py 는 반드시 남긴다
+
+  redaction_policy:
+    require_disclaimer: true
+    disclaimer_terms: ["단일 환경에서 수행", "근사치", "그림은 생성되지 않았"]
+    disclaimer_files: [report.md]
+    block_secrets: true
+    scan_extensions: [".md", ".json", ".py", ".sh", ".yaml", ".yml", ".csv", ".txt"]
+
+stages:
+  - id: 1
+    name: Scoping
+    profile: default          # Solomon
+    sam_gate: true
+    upstream: []
+    body: "미션 스펙을 reports/<MID>/SCOPE.md 와 `hypothesis.md` 에 작성 — 연구 질문 · **독립변수와 범위**(```independent_vars``` 블록: `- name: mesh` / `range: [0.05, 0.2]`) · **종속변수(응답)** · DOE 방법과 표본 수 근거 · 재현성 정책(bit-exact 인가, 비결정적이면 허용오차) · 완료조건. ⚠️ **솔버를 어떻게 돌릴지 먼저 정하라** — ① 로컬 바이너리(미션이 가져와야 한다) ② 원격 솔버(EDISON 등 · 네트워크 호출 · **과금될 수 있다**) ③ 컨테이너(**이 환경에서는 불가 — docker 데몬이 없다**). ⚠️ **이 환경의 한계를 Sam 에게 알려라**: **matplotlib·numpy 가 없어 그림을 만들 수 없다.** 우리는 `plot.py` 와 데이터 CSV 를 내고 그 사실을 공시한다(게이트가 강제한다). 그림이 꼭 필요하면 그것은 이 파이프라인 밖의 작업이다. ⚠️ **설계점 수 × 1회 소요 = 총 계산량**을 미리 어림해 적어라 — stage 6 승인 때 Sam 이 이 숫자를 본다. ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라."
+  - id: 2
+    name: Solver Pin
+    profile: architect
+    upstream: [1]
+    body: "솔버와 실행 환경을 고정해 `solver.md` 에 쓴다. **형식을 정확히 지켜라**(게이트가 파싱한다): `solver_name:` · `solver_version:` · `solver_commit:`(또는 `image_hash:`) · `deps_lock:`(실재하는 파일 경로) · `hardware:`(CPU·코어 수·MPI 구현) · `solver_type: local|remote`. 원격이면 `endpoint:` · `app_version:` · `image_hash:` · `auth_env_var:` 를 함께. ⚠️ **`latest`·`main`·`HEAD` 는 고정이 아니다** — 같은 이름이 시점마다 다른 것을 가리킨다(게이트가 반려한다). 원격 솔버는 **사람이 읽는 태그가 아니라 실제 배포 이미지 해시**를 적어라. ⚠️ **토큰 값을 적지 마라** — 환경변수 **이름만** 적는다(`auth_env_var: EDISON_API_TOKEN`). 이 저장소는 PUBLIC 이다. ⚠️ `deps_lock` 은 실재해야 한다 — 선언만 하고 파일이 없으면 반려된다. ⚠️ **여기서 정한 솔버는 파이프라인 중간에 바뀌지 않는다** — 게이트가 전 run 의 config 를 이 선언과 대조한다."
+  - id: 3
+    name: DOE Design
+    profile: architect
+    upstream: [2]
+    body: "실험계획을 세워 `doe.md` 에 쓰고 설계점마다 `runs/<id>/inputs.json` 을 만든다. 방법 선택 기준: 변수 ≤5개 × 수준 ≤3개면 **완전요인**, 아니면 **라틴 하이퍼큐브**(표본 수와 근거를 적어라). **`n_design_points: <수>` 를 먼저 적고** ```runs``` 블록을 형식대로 쓴다(게이트가 파싱한다):\n```runs\n- id: run-01\n  inputs: runs/run-01/inputs.json\n  design_point: {mesh: 0.1, reynolds: 100}\n  status: pending\n```\n⚠️ **`design_point` 의 값과 `inputs.json` 의 값이 일치해야 한다** — 게이트가 대조한다(**원본은 이 검사를 `--doe` 인자로 광고만 하고 코드에 넣지 않았다**). ⚠️ **`n_design_points:` 는 블록 길이와 대조된다** — 설계점을 표에서도 지우면 회계가 내부적으로 일관해져 아무도 모른다. 분모를 따로 고정해 두는 이유다. ⚠️ 설계점 id 는 `run-NN` 형식으로 유일하게. ⚠️ **경계와 특이점을 일부러 포함하라** — 수렴하지 않을 조건을 미리 빼면 스윕이 예쁜 구간만 보게 된다(실패는 결과이고, 게이트는 실패를 숨기는 것만 막는다)."
+  - id: 4
+    name: Design Verify
+    profile: fact-checker      # ≠ architect
+    verifier: true
+    upstream: [3]
+    gate:
+      objective: [solver_pin]
+      llm: fact_checker_verdict
+      draft: "reports/<MID>"
+    body: "**돌리기 전에** 설계와 환경 고정을 검증한다(객관 게이트는 계획 모드로 솔버 고정만 본다 — run 이 아직 없다). ⚠️ **이 검증이 여기 있는 이유**: 계산 자원을 다 쓴 뒤에 '솔버 버전이 안 적혔다'가 나오면 전부 다시 돌려야 한다. 사람이 읽어야 할 것: ① **DOE 가 가설에 답할 수 있는가** — 독립변수 범위가 실제로 결과를 움직일 만큼 넓은가, 수준 수가 비선형을 잡을 만한가(2수준으로는 곡률을 못 본다). ② **표본 수 근거** — 라틴 하이퍼큐브 n 을 어떻게 정했는가. ③ **교락(confounding)** — 부분요인이면 어느 효과가 섞이는가를 적었는가. ④ **솔버 고정의 실질성** — `deps_lock` 이 실제로 그 환경을 재현하는가, 하드웨어 지문이 결과에 영향을 주는 요소(코어 수·MPI)를 담았는가. ⑤ **비결정성** — 이 솔버가 bit-exact 인가, 아니면 허용오차가 필요한가(MPI 축약 순서 등). 끝에 VERDICT: PASS|FAIL."
+  - id: 5
+    name: Run Plan
+    profile: architect
+    upstream: [4]              # 게이트: 4 PASS 시 게이트키퍼가 unblock
+    body: "실행 계획을 `run-plan.md` 에 확정한다 — 설계점 수 · **1회 예상 소요와 총 계산량**(코어시간·원격이면 과금 추정) · 동시 실행 수 · 실패 시 재시도 정책 · **재현 검증 대상 run 1건**(bit-exact 게이트가 요구한다 — 대표성 있는 설계점을 고르고 이유를 적어라) · 저장 용량 추정. ⚠️ **이 문서가 Sam 승인의 대상이다** — 무엇을 얼마나 돌리는지, 얼마가 드는지가 한눈에 보여야 한다. ⚠️ 매트릭스는 `doe.md` 의 ```runs``` 블록과 정확히 일치해야 한다."
+  - id: 6
+    name: Run Batch
+    profile: tester
+    sam_gate: true
+    approval_artifact: "reports/<MID>/run-plan.md"
+    upstream: [5]
+    parallel:
+      mode: per_item
+      over: "doe.md 의 ```runs``` 블록에 선언된 설계점. 설계점마다 subagent 1개."
+      shard: "runs/<id>/"
+      merge_to: "runs-summary.md"
+      batch_size: 3
+    body: "⚠️ **Sam 승인 뒤에만 실행한다** — 실제 계산 자원(HPC 시간·원격 솔버 과금)을 쓴다.\n설계점마다 ① `config.json` 을 쓰고(`solver_version`·`solver_commit` 또는 `image_hash`·`seed`·`design_point`·`status`) ② 솔버를 그 입력으로 실행해 출력을 `runs/<id>/outputs/` 에 남기고 ③ 요약 지표를 `runs/<id>/outputs.json` 으로 쓰고 ④ **출력 해시**를 `runs/<id>/output.hash` 에 남긴다. 해시 규약: `outputs/` 를 재귀 순회하며 제외 패턴(`*.log`·`*.tmp`·`timestamp.txt`·`*.pyc`)을 뺀 파일을 **상대경로로 정렬**한 뒤 각 파일 sha256 을 구해 `<상대경로>\\0<sha256>\\n` 을 순서대로 이어 붙인 것의 sha256. ⑤ run-plan 이 지정한 **재현 검증 대상 1건은 한 번 더 돌려** `runs/<id>/output.replay.hash` 를 남긴다. ⑥ 끝에 `runs-summary.md` 로 병합하고 `doe.md` 의 `status:` 를 갱신한다.\n⚠️ **`config.json` 의 솔버 버전은 `solver.md` 와 같아야 한다** — 중간에 바꾸지 마라(게이트가 전 run 을 대조한다). ⚠️ **실패한 설계점은 `status: failed` 와 `failure_reason:` 을 남겨라. 지우지 마라** — 수렴하지 않는 구간을 지우면 그래프만 예뻐진다. ⚠️ **출력 스키마를 run 마다 같게** 하라(키가 다른 출력을 한 표로 묶으면 빈칸이 0 으로 읽힌다). ⚠️ **해시를 손으로 적지 마라** — 계산해서 적어라(게이트가 다시 계산해 대조한다)."
+  - id: 7
+    name: Result Verify
+    profile: fact-checker      # ≠ tester
+    verifier: true
+    upstream: [6]
+    gate:
+      objective: [doe_completeness, bit_exact, solver_pin]
+      llm: fact_checker_verdict
+      draft: "reports/<MID>"
+    body: "실행이 **설계대로, 같은 환경에서, 빠짐없이** 됐는지 검증한다(객관 게이트는 회계·해시·입력 드리프트·솔버 대조를 본다). 사람이 읽어야 할 것: ① **실패의 성격** — 실패가 솔버 설정 탓인가 물리적으로 발산하는 조건인가. 후자면 결과이고 전자면 재작업이다. ② **경계 거동** — 설계 범위 끝에서 값이 튀지 않는가(수치적 불안정을 결과로 오인하기 쉽다). ③ **출력의 물리적 타당성** — 보존량이 지켜지는가, 부호·차원이 맞는가. 게이트는 스키마만 본다. ④ **재현 검증 대상의 대표성** — 가장 쉬운 설계점을 골라 놓고 '재현된다'고 하지 않았는가. ⑤ **비결정성** — bit-exact 가 아니라면 그 사유가 솔버의 성질로 설명되는가. 끝에 VERDICT: PASS|FAIL."
+  - id: 8
+    name: Analyze
+    profile: synthesizer
+    upstream: [7]              # 게이트: 7 PASS 시 unblock
+    body: "run 출력을 응답변수별 `data/<response>.csv` 로 통합하고 민감도 분석을 해 `analysis.md` 에 쓴다. **```sensitivity``` 블록 형식**(응답변수마다 하나 · 게이트가 파싱한다):\n```sensitivity\n{\"response\": \"drag\", \"n_samples\": 27, \"variables\": [{\"name\": \"mesh\", \"S_i\": 0.62, \"S_Ti\": 0.71, \"pearson\": -0.81, \"beta\": -0.73}], \"notes\": \"S_i·S_Ti 는 표본 분산 기반 **근사치**다\"}\n```\n⚠️ **선언한 독립변수를 하나도 빠뜨리지 마라** — 빠뜨린 변수는 '영향 없음'과 다르다(게이트가 대조한다). ⚠️ **`notes` 에 근사 한계를 반드시 적어라** — `S_Ti` 는 proxy 다. 지수만 표에 실리면 읽는 쪽은 참 Sobol 지수로 읽는다(게이트가 강제한다). ⚠️ **`S_i ≤ S_Ti`** 가 크게 깨지면 표본이 부족하거나 계산이 틀린 것이다. ⚠️ **본문이 인용하는 CSV 는 `data/` 에 실재해야 한다**(게이트가 대조한다 — 원본은 규약으로 선언만 했다). ⚠️ 실패한 run 을 조용히 빼고 평균 내지 마라 — 뺐으면 표본 수와 함께 밝혀라."
+  - id: 9
+    name: Visualize
+    profile: developer
+    upstream: [8]
+    body: "⚠️ **이 환경에는 matplotlib·numpy 가 없다**(실측). 그림을 만들 수 없다. 그래서 이 단계가 내는 것은 **남이 그릴 수 있는 것**이다: ① `figures/plot.py` — `data/*.csv` 를 읽어 응답변수마다 주결과 그림과 민감도 막대그림을 그리는 **실행 가능한 스크립트**(matplotlib 기본 스타일 · 300 DPI · PNG+PDF 저장). 의존성과 실행법을 파일 머리에 주석으로. ② `figures.md` — **`figures_generated: false`** 선언(게이트가 요구한다) + 그림별 캡션과 무엇을 보여줄 그림인지 + **왜 생성하지 못했는지**(matplotlib 미설치)와 재현 방법. ⚠️ **만들지 않은 그림을 만들었다고 적지 마라** — `figures_generated: true` 인데 png/pdf 가 없으면 반려된다. ⚠️ 그림이 실제로 필요하면 matplotlib 을 설치한 환경에서 `plot.py` 를 돌리면 된다는 것을 캡션에 적어라. ⚠️ `plot.py` 는 절대 경로·개인 경로를 쓰지 마라."
+  - id: 10
+    name: Analysis Verify
+    profile: reviewer          # ≠ developer
+    verifier: true
+    upstream: [9]
+    gate:
+      objective: [analysis_integrity]
+      llm: reviewer_verdict
+      draft: "reports/<MID>"
+    body: "분석과 시각화 산출물을 독립 검토한다(객관 게이트는 지수 불변식·변수 커버리지·CSV 실재·그림 공시를 본다). 사람이 읽어야 할 것: ① **해석이 지수와 맞는가** — `S_i` 가 낮은데 본문이 '지배적 인자'라 쓰지 않았는가. ② **상호작용** — `S_Ti - S_i` 가 큰 변수의 상호작용을 서술했는가(그것이 파라미터 스윕의 알맹이다). ③ **선형 가정** — `beta`·`pearson` 만으로 결론을 내지 않았는가(비선형이면 상관계수는 낮게 나온다). ④ **표본 수 대비 주장의 강도** — 27점으로 5변수 상호작용을 말할 수 있는가. ⑤ **`plot.py` 가 실제로 돌 만한가** — CSV 열 이름이 맞는가, 읽어 보고 판단하라(우리 환경에선 실행할 수 없다). 끝에 VERDICT: PASS|FAIL."
+  - id: 11
+    name: Paper Artifacts
+    profile: writer
+    upstream: [10]             # 게이트: 10 PASS 시 unblock
+    body: "논문용 산출물을 `reports/<MID>/report/` 에 만든다. ① `report.md` — 가설 · 솔버와 환경(버전·커밋·하드웨어) · DOE 설계와 근거 · **결과표(응답변수별 통계와 민감도 지수)** · 해석 · 한계 · **필수 고지**('본 결과는 단일 환경에서 수행된 실험이며 민감도 지수는 근사치입니다. 그림은 생성되지 않았고 `plot.py` 로 재현합니다.'). ② `report/paper-artifacts/` — `methods.tex`(솔버 고정·DOE·분석 방법을 논문 Methods 절 초안으로) · `results_table.tex`·`.csv` · `sensitivity.tex` · `data/`(인용한 CSV 사본) · `figures/plot.py`. **아키타입 B(academic-paper)가 그대로 받아 쓸 형태**로. ⚠️ **모든 수치는 `analysis.md`·`data/*.csv` 에서 가져오고 손으로 바꾸지 마라.** ⚠️ **그림이 없다는 사실을 각주로 숨기지 마라** — 본문에 적어라. ⚠️ 토큰·절대 경로·엔드포인트 인증 정보를 넣지 마라(게이트가 반려한다)."
+  - id: 12
+    name: Report Review
+    profile: reviewer          # ≠ writer
+    verifier: true
+    upstream: [11]
+    gate:
+      objective: [secret_redaction]
+      llm: reviewer_verdict
+      draft: "reports/<MID>/report"
+    body: "공개 안전성과 논문 적합성을 독립 검토한다: ① **공개 안전성** — 커밋될 산출물에 API 토큰·엔드포인트 자격·절대 경로가 없는가(게이트는 알려진 패턴만 잡는다). ② **논문 적합성** — `methods.tex` 가 남이 재현할 만큼 적혔는가(솔버 버전·커밋·DOE 방법·표본 수·분석 방법). ③ **본문 ↔ 수치 일치** — 표의 모든 값이 `data/*.csv` 와 맞는가. ④ **한계의 정직성** — 단일 환경·근사 지수·그림 미생성·실패한 설계점이 모두 적혀 있는가. ⑤ **과장 없는 결론** — 스윕이 보여 준 것 이상을 주장하지 않는가. 끝에 VERDICT: PASS|FAIL."
+  - id: 13
+    name: Wiki Update
+    profile: curator
+    upstream: [12]             # 게이트: 12 PASS 시 unblock
+    body: "이 실험에서 얻은 것을 llm-wiki 에 반영(entities/concepts) + reflection + 재사용률 갱신 — 이 솔버의 성질(수렴이 깨지는 파라미터 구간·비결정성의 원인·전형적 실행 시간) · 어느 변수가 실제로 결과를 움직였는가 · DOE 설계에서 배운 것(수준 수·교락) · 다음에 같은 솔버를 쓸 때 먼저 볼 것. ⚠️ **wiki 는 별도 저장소이고 공개될 수 있다** — 엔드포인트·자격이 아니라 **일반화된 교훈**만 남겨라."
+  - id: 14
+    name: Deliver
+    profile: default          # Solomon
+    sam_gate: true
+    approval_artifact: "reports/<MID>/report/report.md"
+    upstream: [13]
+    body: "① 번들 조립(커밋 대상): `report/`(report.md · paper-artifacts/) · `solver.md`·`doe.md`·`analysis.md`·`figures.md`·`run-plan.md`·`runs-summary.md` · `data/*.csv` · `runs/*/config.json`·`outputs.json`·`output.hash`. **`runs/*/outputs/` 의 대용량 원출력은 커밋하지 않는다**(용량 — `_private/` 에 두거나 해시로만 참조). ② **⚠️ Sam 승인 요청에 반드시 적어라**: 설계점 수와 성공·실패 · 실제 사용한 계산 자원 · **무엇이 검증됐고 무엇이 안 됐는지**(재현 검증 1건은 실측 · **그림은 생성되지 않음** · 민감도 지수는 근사치) · 주요 발견. ③ 승인 후 커밋 + git push(컨테이너 GITHUB_TOKEN 자격) + Slack 요약. ④ **아키타입 B(academic-paper)로 넘길 준비** — `report/paper-artifacts/` 가 논문 미션의 입력이 된다는 것을 요약에 적어라. ⚠️ Slack 게시는 반드시 `hermes send --to slack:#mission-log \"<요약+커밋링크>\"`(Web API)로 하라."

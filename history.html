@@ -25,6 +25,28 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#39 — simforge → 아키타입 P(시뮬레이션 실험) · <b>해시를 존재만 확인하던 무결성 게이트</b>를 재계산으로 바꾸다</h2>
+    <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "다음 진행하라."(docs/13 진행 대장 #16, simforge).</div>
+    <div class="label">수행 단계:</div>
+    <ol class="steps">
+      <li><b>⚠️ 해시를 존재만 확인한다 — 0 을 64자 적어도 통과</b>(실측): Gate 2(bit-exact)의 hash-only 모드가 하는 일은 <code>output.hash</code> <b>파일이 있는가</b>뿐이다. 실제 출력이 든 <code>outputs/</code> 옆에 <code>0</code>×64 를 적어 넣어도 <code>no hash-mode issues · PASS · exit=0</code>. <b>해시는 무언가를 가리킬 때만 무결성 장치다</b> — 가리키는 대상을 확인하지 않으면 장식이다.</li>
+      <li><b>★ 우리는 해시를 다시 계산해 대조한다</b>: <code>outputs/</code> 를 원본 <code>hash_outputs.py</code> 와 <b>같은 알고리즘</b>(상대경로 정렬 → <code>&lt;rel&gt;\0&lt;sha256&gt;\n</code> 누적)으로 재계산한다. <b>파일을 읽는 것은 코드 실행이 아니므로 게이트가 해도 안전하다</b>(솔버 재실행과 다르다) — <b>원본보다 강한 검사를 실행 없이 얻었다.</b></li>
+      <li><b>⚠️ CLI 옵션으로 광고까지 하는 죽은 검사</b>(실측): docstring 은 "no input drift" 를 검증한다 하고 argparse 에 <code>--doe</code>(<code>help="optional: 03-doe.md for input drift check"</code>)까지 있는데 <b><code>args.doe</code> 를 참조하는 코드가 한 줄도 없다.</b> 존재하지 않는 경로를 줘도 무반응. 죽은 변수 계열 중 <b>가장 그럴듯하다</b> — <code>--help</code> 에 나오므로 쓰는 쪽은 그 검사가 있다고 믿는다. → 설계점 ↔ <code>inputs.json</code> 대조를 실제로 구현했다.</li>
+      <li><b>⚠️ run 0건이면 PASS</b>(실측) — 공집합이 통과하는 계열의 <b>여섯 번째</b>.</li>
+      <li><b>★ Gate 1·Gate 3 은 스크립트가 아예 없다</b>(LLM 크리틱뿐) → <code>solver_pin</code>·<code>doe_completeness</code> 신설. 원본 CLAUDE.md 가 규약으로만 적어 둔 것을 코드로 옮겼다: "<b>02-solver.md 가 source of truth</b>이며 downstream 이 솔버를 바꿀 수 없다"(→ 전 run 의 config 대조) · "<b>No silent failures</b>" · "Output schema consistent across runs". <code>solver_pin</code> 은 <b>계획/실행 두 모드</b>로 돈다(아키타입 K 의 <code>atomic_commit</code> 방식 — run 이 없으면 선언만, 있으면 대조까지).</li>
+      <li><b>★ <code>analysis_integrity</code> 신설</b>: Sobol 불변식(<code>0 ≤ S_i ≤ S_Ti ≤ 1</code>) · 선언한 독립변수 커버리지 · 인용 CSV 실재 · <b>근사 한계 공시 강제</b>. ⚠️ <code>S_Ti</code> 는 proxy 라 부동소수 잡음(실측 2.2e-16) 수준의 위반이 생길 수 있어 <b>허용오차를 두고 결함으로 단정하지 않았다</b> — 대신 "근사치임을 <code>notes</code> 에 밝혀라"를 강제한다(지수만 표에 실리면 읽는 쪽은 참 Sobol 지수로 읽는다).</li>
+      <li><b>⚠️ 표가 스스로를 선언하고 스스로를 만족시킨다</b>(<b>픽스처가 잡은 자체 결함</b>): 설계점을 DOE 표에서도 지우고 run 도 지우니 6→5 로 줄어든 채 <b>회계가 완벽히 일관</b>해져 PASS 했다. 파라미터 스윕에서 이것은 결과를 바꾼다(수렴하지 않는 구간을 없애면 그래프가 예뻐진다). → <code>n_design_points:</code> 를 명시하게 해 <b>분모를 더 이른 선언에 묶었다</b>. code-docs 의 '분모 자기결정'보다 한 단계 위다 — 거기서는 분모를 적게 세었고 여기서는 분모 자체를 다시 썼다.</li>
+      <li><b>♻️ 재사용하지 <em>않은</em> 판단</b>: <code>run_completeness</code>(M)와 이름도 목적도 비슷하지만 <b>선언의 모양이 다르다</b>(M=시스템×seed 행렬 · P=DOE 설계점 목록). 합치면 미션마다 절반만 쓰이는 게이트가 된다. <b>재사용은 '하는 일'이 같을 때지 '이름'이 비슷할 때가 아니다</b> — O 에서 <code>license_compat</code>·<code>secret_redaction</code> 을 재사용한 판단의 짝이다.</li>
+      <li><b>🔒 환경 제약이 또 하나</b>: <b>matplotlib·numpy 가 없다</b>(실측). 그림을 만들 수 없어 <code>plot.py</code> + CSV 를 내고 <code>figures_generated: false</code> 를 <b>공시</b>하게 했다(<code>true</code>인데 png/pdf 가 없으면 FAIL). O 의 <code>docker_verified: false</code> 와 같은 계열의 <b>세 번째 적용</b>.</li>
+      <li><b>깨뜨린 픽스처 43케이스</b>: 정상 5 + 결함 33 + <b>원본 결함 회귀방어 3</b> + 설계 회귀방어 2. 단위 테스트 10종 추가. 신규 profile <b>0개 — 7연속</b>(I·K·L·M·N·O·P).</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      <b>아키타입 P 확보 — 16/20</b>. 린터 16/16. 테스트 <b>29+21+155 = 205종 통과</b> · <b>E2E 10종 272케이스 전건 통과</b>. 객관 게이트 <b>46종</b>. <b>변환 16건 연속 결함 발견</b>. 새 교훈 3건을 docs/13 §5에 기록: <b>체크섬·서명·지문을 다시 계산하는 코드가 있는지 보라</b>(없으면 아무나 적을 수 있는 문자열이고, 읽기만으로 재계산할 수 있는 자리는 자기보고에 맡기지 마라) · <b>docstring 다음으로 argparse 옵션과 본문을 대조하라</b>(받기만 하고 쓰지 않는 인자는 "이 검사는 없다"는 표시) · <b>대조하는 두 값을 같은 주체가 같은 시점에 쓰면 그 대조는 성립하지 않는다</b>(하나를 더 이른 선언에 묶어라). 다음 변환 = proposalforge.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#38 — reproforge → 아키타입 O(재현 패키지) · <b>빌드가 실패해도 "재현됐다"고 판정하던 게이트</b>를 고치다</h2>
     <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "다음 진행하라."(docs/13 진행 대장 #15, reproforge).</div>

@@ -25,6 +25,7 @@ HARNESSES = [
     ("agent", "M AI 시스템 평가"),
     ("dataset", "N 데이터셋 배포"),
     ("repro", "O 재현 패키지"),
+    ("sim", "P 시뮬레이션 실험"),
 ]
 
 
