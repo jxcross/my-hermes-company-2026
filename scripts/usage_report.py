@@ -143,6 +143,58 @@ def ollama_tags(url: str = "") -> tuple[list[str] | None, str]:
     return [m.get("name", "") for m in (data.get("models") or [])], ""
 
 
+def ollama_ps(url: str = "") -> tuple[list[dict] | None, str]:
+    """(현재 **로드된** 모델 목록, 오류). `/api/ps` 는 메타데이터다 — LLM 을 호출하지 않는다."""
+    base = (url or OLLAMA_URL).rstrip("/")
+    try:
+        with urllib.request.urlopen(base + "/api/ps", timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, OSError, ValueError, TimeoutError) as exc:
+        return None, f"{type(exc).__name__}: {exc}"
+    return list(data.get("models") or []), ""
+
+
+def check_runtime(url: str = "") -> dict:
+    """**서버가 실제로 무엇을 서빙하는가** — config 가 주장하는 값과 대조한다.
+
+    ⚠️ 왜 필요한가(docs/14 §3.1 이 실제로 밟은 실패):
+       파생본 이름을 그대로 둔 채 `OLLAMA_NUM_CTX` 만 올리면 `--build-models` 가
+       "이미 있음"을 찍고 **서버는 옛 창을 계속 서빙한다.** config 는 새 값을 주장하고
+       서버는 옛 값을 준다 — 두 층 떨어진 실패라 증상만 보고는 못 찾는다.
+       그래서 **파일이 아니라 서버가 보고하는 값**(`/api/ps`)을 본다.
+
+    ⚠️ 판정하지 못하는 것은 WARN 으로도 만들지 않는다:
+       모델이 아직 로드되지 않았으면 창을 알 수 없다(`loaded: []`) — 그건 정상이다.
+    """
+    host = sb.host_env_state()          # 걸어 놨는가 (launchctl)
+    server = sb.server_env_state()      # **반영됐는가** (서버 기동 배너) ← 이쪽이 권위다
+    loaded, err = ollama_ps(url)
+    ctx_mismatch = []
+    for m in (loaded or []):
+        got = m.get("context_length")
+        if got is not None and got != sb.OLLAMA_NUM_CTX:
+            ctx_mismatch.append({"model": m.get("name", "?"), "serving": got,
+                                 "expected": sb.OLLAMA_NUM_CTX})
+    # 걸어 놨는데 반영이 안 된 것 — 재시작만 하면 되는 상태다. 진단이 처방으로 이어지도록
+    # 이 조합을 따로 이름 붙여 둔다("설정은 맞는데 왜 느리지"가 가장 오래 걸리는 질문이다).
+    pending = []
+    if host["available"] and server["available"]:
+        want_ok = {r["var"] for r in host["vars"] if r["ok"]}
+        pending = [r for r in server["mismatched"] if r["var"] in want_ok]
+    return {
+        "host_env_available": host["available"],
+        "host_env_mismatched": host["mismatched"],
+        "server_env_available": server["available"],
+        "server_env_mismatched": server["mismatched"],
+        "restart_pending": pending,
+        "loaded": [{"name": m.get("name", "?"),
+                    "context_length": m.get("context_length"),
+                    "size_gb": round(m.get("size", 0) / 1e9, 2)} for m in (loaded or [])],
+        "context_mismatch": ctx_mismatch,
+        "error": err,
+    }
+
+
 def check_local(backend: str, url: str = "") -> dict:
     """로컬 백엔드의 착수 가능 여부. 근거는 두 가지뿐이다 — 서버 도달 · 모델 존재."""
     want = sb.backend_models(backend)
@@ -161,6 +213,10 @@ def main_local(args, backend: str) -> int:
     """로컬 백엔드 착수 점검 — 한도가 아니라 **모델이 거기 있는지**를 본다."""
     local = check_local(backend, args.ollama_url)
     ok = local["reachable"] and not local["missing"]
+    # ⚠️ 런타임 점검은 **착수를 막지 않는다**(WARN 전용). 서버 설정이 어긋나도 미션은
+    #    돌아간다 — 다만 조용히 느려지거나(병렬 미설정) 조용히 잘린다(창 불일치).
+    #    막지 않는 대신 **반드시 보이게** 한다.
+    runtime = check_runtime(args.ollama_url) if local["reachable"] else {}
     # 과거 codex 소진 기록은 참고용으로 계속 읽는다(복귀 시점 판단에 쓴다).
     latest, env_failed = scan_limits(log_files())
     now = args.now if args.now is not None else int(dt.datetime.now().timestamp())
@@ -168,6 +224,7 @@ def main_local(args, backend: str) -> int:
         "backend": backend,
         "exhausted": False,          # 로컬은 한도가 없다
         "local": local,
+        "runtime": runtime,          # 서버가 실제로 서빙하는 것(WARN 전용)
         "limit_record": latest,      # 참고: codex 복귀 시 이 시각 이후여야 한다
         "seconds_to_reset": max(0, latest["resets_at"] - now) if latest else 0,
         "env_failed_tasks": env_failed,
@@ -191,6 +248,42 @@ def main_local(args, backend: str) -> int:
         print(f"     → ollama pull {local['missing'][0]}")
     else:
         print(f"  ✓ 서버 도달 · 배치 모델 {len(local['wanted'])}종 모두 설치됨")
+
+    # ── 서버 런타임 설정 (WARN 전용 — 착수는 막지 않는다) ──
+    if runtime:
+        print("── 서버 설정 ──")
+        # ⚠️ 판정의 근거는 **서버 기동 배너**다. launchctl 은 "걸어 놨다"일 뿐이고,
+        #    실제로 그 둘이 어긋난 채 몇 세션이 지나간 적이 있다(docs/14 §5.1).
+        if not runtime["server_env_available"]:
+            print("  ℹ️ Ollama 서버 로그를 읽지 못해 실효 설정을 확인하지 못했다"
+                  " (컨테이너에서 실행 중이면 정상 — 호스트에서 다시 보라)")
+        elif runtime["restart_pending"]:
+            for r in runtime["restart_pending"]:
+                print(f"  ⚠️ {r['var']} — launchctl 은 {r['want']} 인데 **서버는 {r['have']}**")
+            print("     → 걸어 놨지만 **반영되지 않았다.** Ollama 를 재시작하라:")
+            print("       osascript -e 'quit app \"Ollama\"' && sleep 3 && open -a Ollama")
+        elif runtime["server_env_mismatched"]:
+            for r in runtime["server_env_mismatched"]:
+                print(f"  ⚠️ {r['var']} = {r['have']} — 기대값 {r['want']}")
+            print("     → python3 scripts/set_backend.py --host-setup  (그 뒤 Ollama 재시작)")
+        else:
+            print(f"  ✓ 서버 실효 설정 {len(sb.HOST_ENV)}종 일치"
+                  f" (NUM_PARALLEL={sb.HOST_ENV['OLLAMA_NUM_PARALLEL']}"
+                  f" · KV={sb.HOST_ENV['OLLAMA_KV_CACHE_TYPE']})")
+        if runtime["server_env_mismatched"]:
+            print("     ⚠️ NUM_PARALLEL 이 어긋나면 스테이지 내 팬아웃이 **조용히 직렬화**된다"
+                  " — `probe_parallel.py` 로 확인하라")
+        for r in runtime["host_env_mismatched"]:
+            if r.get("why"):
+                print(f"  ⚠️ {r['var']} = {r['have']} — 설정하면 안 된다: {r['why']}")
+        for m in runtime["context_mismatch"]:
+            print(f"  ⚠️ {m['model']} 이 **창 {m['serving']}** 로 서빙 중 — 배치는 {m['expected']}")
+            print("     → 파생본이 옛 창을 물고 있다. 이름(-256k)을 바꿔 다시 만들어라(docs/14 §3.1)")
+        for m in runtime["loaded"]:
+            print(f"  · 로드됨: {m['name']} · 창 {m['context_length']} · {m['size_gb']}GB")
+        if not runtime["loaded"]:
+            print("  · 로드된 모델 없음 — 창은 첫 요청 뒤에 확인할 수 있다")
+
     if latest:
         when = dt.datetime.fromtimestamp(latest["resets_at"]).strftime("%Y-%m-%d %H:%M")
         state = "리셋 전" if latest["resets_at"] > now else "리셋됨"

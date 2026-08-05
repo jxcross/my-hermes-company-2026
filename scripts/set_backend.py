@@ -78,6 +78,41 @@ TIERS: dict[str, list[str]] = {
 #    서버는 옛 창을 계속 서빙한다. config 는 새 값을 주장하고 서버는 옛 값을 서빙하는,
 #    두 층 떨어진 실패가 된다(docs/11 §7 ⑦ 계열 — 표면 증상과 원인이 멀어진다).
 OLLAMA_NUM_CTX = 262144
+
+# ── 호스트 Ollama **서버** 설정 (launchctl) ─────────────────────────────────
+# config 가 아니라 **서버**가 들고 있는 값이다. 프로필 config 를 아무리 맞춰도 서버가
+# 다르게 서빙하면 소용이 없으므로, 기대값을 여기 한 곳에 선언하고 `--host-setup` 이
+# 적용하고 `usage_report.py` 가 착수 전에 대조한다(선언·적용·검사가 같은 표를 본다).
+#
+# ⚠️⚠️ **`OLLAMA_NUM_PARALLEL` 이 없으면 동시 요청이 서버에서 직렬화된다 (실측 2026-08-06)**
+#    `scripts/probe_parallel.py` 로 쟀다. 미설정 상태에서 동시 3요청:
+#      단일 1.44초 · 동시 3개 총 3.94초(**×2.74**) · 종료 오프셋 [1.49, 2.68, 3.94]
+#      = 1.2초 간격의 **계단** · 합산 처리량 73.1 tok/s < 단일 86.7 tok/s(이득이 음수다).
+#    `docs/11 §5` 의 스테이지 내 팬아웃은 subagent 3개가 동시에 `/v1` 을 때리는데,
+#    서버가 큐에 세우면 **아무 오류 없이 3배 느려질 뿐**이다 — 병렬화가 조용히 사라진다.
+#    병렬 파일럿 M-2026-004 는 codex 에서 돌아 이걸 볼 기회가 없었다.
+#
+# ⚠️ `NUM_PARALLEL` 은 **템플릿 `parallel.batch_size`(기본 3)와 같은 수여야 한다.**
+#    둘은 독립 선언이다 — 서버 슬롯이 적으면 초과분이 큐에 서고, 많으면 KV 만 낭비한다.
+#
+# ⚠️ 슬롯마다 KV 캐시가 따로 잡힌다 → `NUM_PARALLEL` 을 올리면 메모리가 배수로 는다.
+#    그래서 `KV_CACHE_TYPE=q8_0`(f16 대비 절반) + `FLASH_ATTENTION=1` 과 **짝으로** 건다.
+HOST_ENV: dict[str, str] = {
+    "OLLAMA_NUM_PARALLEL":      "3",      # = delegation.max_concurrent_children · 템플릿 batch_size
+    "OLLAMA_KV_CACHE_TYPE":     "q8_0",   # 슬롯 3개분 KV 를 감당하기 위한 짝
+    "OLLAMA_FLASH_ATTENTION":   "1",      # q8_0 KV 의 전제
+    "OLLAMA_MAX_LOADED_MODELS": "1",      # 배치가 단일 모델이라 1로 충분(docs/14 §5)
+    "OLLAMA_KEEP_ALIVE":        "30m",
+}
+
+# ⚠️ **일부러 설정하지 않는 것** — 넣으면 안 되는 이유를 남긴다. 비워 두면 다음 사람이
+#    "빠뜨렸나?" 하고 채워 넣는다(외부 가이드가 실제로 이걸 권한다 — docs/14 §5.2).
+HOST_ENV_OMITTED: dict[str, str] = {
+    "OLLAMA_CONTEXT_LENGTH":
+        "서버 전역값이라 모델별 천장(e4b=131072)을 표현하지 못한다. "
+        "창은 Modelfile 파생본(-256k)이 담는다 — §3.1",
+}
+
 # ⚠️ 프로필마다 직접 써야 한다 — `compression.*` 는 **루트 config 에서 상속되지 않는다**
 #    (named 프로필은 HERMES_HOME=<root>/profiles/<name> 이라 자기 config.yaml 만 읽는다).
 #    그리고 <512K 창에서는 0.75 로 하한이 강제되므로 0.75 이하 값은 의미가 없다.
@@ -525,6 +560,165 @@ def cmd_apply(repo_root: str, backend: str, dry_run: bool) -> int:
     return 0
 
 
+# ── 호스트 서버 설정 (launchctl) ────────────────────────────────────────────
+def _launchctl_get(var: str) -> str | None:
+    """`launchctl getenv` 1건. macOS 호스트가 아니면 None(=판정 불가)."""
+    import shutil as _shutil
+    import subprocess as _subprocess
+    if not _shutil.which("launchctl"):
+        return None
+    try:
+        out = _subprocess.run(["launchctl", "getenv", var],
+                              capture_output=True, text=True, timeout=5)
+    except (OSError, _subprocess.SubprocessError):
+        return None
+    return out.stdout.strip()
+
+
+# Ollama 는 기동 시 실효 환경변수를 로그 첫 줄에 `KEY:VALUE` 로 찍는다. **이것이 서버 쪽
+# 유일한 권위 있는 근거다** — launchctl 값은 "걸어 놨다"일 뿐 "반영됐다"가 아니다.
+OLLAMA_SERVER_LOG = os.path.expanduser("~/.ollama/logs/server.log")
+
+
+def _norm_env(var: str, val: str) -> str:
+    """launchctl 표기와 서버 표기를 같은 자로 만든다.
+
+    서버는 `1`을 `true` 로, `30m` 을 `30m0s` 로 되받아 찍는다. 표기 차이를 불일치로
+    오판하면 이 검사는 늘 시끄러워지고, 시끄러운 검사는 곧 무시된다.
+    """
+    v = (val or "").strip().lower()
+    if var == "OLLAMA_FLASH_ATTENTION":
+        if v in ("1", "true"):
+            return "true"
+        return "false" if v in ("0", "false", "") else v
+    if var == "OLLAMA_KEEP_ALIVE" and v.endswith("0s") and len(v) > 2:
+        return v[:-2]           # 30m0s → 30m
+    return v
+
+
+def _last_server_banner(log_path: str | None = None) -> dict[str, str] | None:
+    """서버 기동 배너의 `OLLAMA_*` 값. 없으면 None(=판정 불가).
+
+    ⚠️ 로그는 수십 MB 까지 자란다 — **뒤에서부터** 찾는다(착수 전 점검은 빨라야 한다).
+    """
+    path = log_path or OLLAMA_SERVER_LOG
+    if not os.path.isfile(path):
+        return None
+    needle = "OLLAMA_NUM_PARALLEL:"
+    try:
+        size = os.path.getsize(path)
+        with open(path, "rb") as fh:
+            window, line = 1 << 20, None
+            while True:
+                partial = window < size
+                fh.seek(max(0, size - window))
+                lines = fh.read().decode("utf-8", "replace").splitlines()
+                # 부분 창의 첫 줄은 잘려 있을 수 있다 — 잘린 배너를 온전한 것으로
+                # 읽으면 앞쪽 키가 통째로 사라진 채 "없음"으로 오판된다.
+                if partial and lines:
+                    lines = lines[1:]
+                hits = [ln for ln in lines if needle in ln]
+                if hits:
+                    line = hits[-1]
+                    break
+                if not partial:          # 파일 전체를 봤는데 없다
+                    break
+                window = min(window * 8, size)
+    except OSError:
+        return None
+    if not line:
+        return None
+    out: dict[str, str] = {}
+    for tok in line.split():
+        if tok.startswith("OLLAMA_") and ":" in tok:
+            k, _, v = tok.partition(":")
+            # ⚠️ 배너는 `env="map[K:V K:V]"` 로 감싸여 있다 — **맨 끝 키의 값에 `]"` 가
+            #    붙어 온다.** 안 떼면 그 키 하나만 영원히 '불일치' 로 보인다(실제로
+            #    `NUM_PARALLEL:3]"` != `3` 이 나왔다). 마지막 키가 무엇인지는 정렬 순서라
+            #    모델·버전에 따라 바뀐다 — 값 쪽을 항상 다듬는다.
+            out[k] = v.rstrip(']"\',')
+    return out or None
+
+
+def server_env_state(log_path: str | None = None) -> dict:
+    """기대값 대 **서버가 실제로 들고 있는** 값.
+
+    ⚠️⚠️ **왜 launchctl 로 부족한가 (실측 2026-08-06)**
+       `launchctl getenv` 는 `MAX_LOADED_MODELS=1`·`KEEP_ALIVE=30m` 을 돌려줬는데
+       실행 중인 서버 배너는 `MAX_LOADED_MODELS:0`·`KEEP_ALIVE:5m0s` 였다 —
+       `docs/14 §5` 가 지시한 설정이 **서버에는 한 번도 반영된 적이 없었다.**
+       `launchctl setenv` 는 이후 기동하는 프로세스에만 붙기 때문이다.
+       걸어 놓은 것과 반영된 것은 다르다. 여기서는 반영된 쪽만 본다.
+    """
+    banner = _last_server_banner(log_path)
+    if banner is None:
+        return {"available": False, "vars": [], "mismatched": []}
+    rows = []
+    for var, want in HOST_ENV.items():
+        have = banner.get(var, "")
+        rows.append({"var": var, "want": want, "have": have or "(없음)",
+                     "ok": _norm_env(var, have) == _norm_env(var, want)})
+    return {"available": True, "vars": rows,
+            "mismatched": [r for r in rows if not r["ok"]]}
+
+
+def host_env_state() -> dict:
+    """기대값(HOST_ENV) 대 현재 launchctl 값.
+
+    ⚠️ 컨테이너·리눅스에는 `launchctl` 이 없다 → `available: False` 로 돌려주고
+       **판정하지 않는다.** 확인할 수 없는 것을 FAIL 로 만들면 그 검사는 꺼진다.
+    """
+    probe = _launchctl_get("OLLAMA_MAX_LOADED_MODELS")
+    if probe is None:
+        return {"available": False, "vars": [], "mismatched": []}
+    rows = []
+    for var, want in HOST_ENV.items():
+        have = _launchctl_get(var) or ""
+        rows.append({"var": var, "want": want, "have": have, "ok": have == want})
+    # 넣으면 안 되는 것이 들어가 있는가
+    for var, why in HOST_ENV_OMITTED.items():
+        have = _launchctl_get(var) or ""
+        if have:
+            rows.append({"var": var, "want": "(설정하지 말 것)", "have": have,
+                         "ok": False, "why": why})
+    return {"available": True, "vars": rows,
+            "mismatched": [r for r in rows if not r["ok"]]}
+
+
+def cmd_host_setup(dry_run: bool) -> int:
+    """launchctl 에 HOST_ENV 를 건다. **Ollama 재시작까지 해야 반영된다.**"""
+    import shutil as _shutil
+    import subprocess as _subprocess
+    if not _shutil.which("launchctl"):
+        print("⚠️ `launchctl` 이 없다 — 이 명령은 macOS 호스트에서만 쓴다.", file=sys.stderr)
+        return 2
+
+    print("── 호스트 Ollama 서버 설정 ──" + ("   [dry-run]" if dry_run else ""))
+    for var, want in HOST_ENV.items():
+        have = _launchctl_get(var) or ""
+        mark = "그대로" if have == want else f"{have or '(없음)'} → {want}"
+        print(f"  {var:<26} {mark}")
+        if not dry_run and have != want:
+            _subprocess.run(["launchctl", "setenv", var, want], check=False, timeout=5)
+    for var, why in HOST_ENV_OMITTED.items():
+        have = _launchctl_get(var) or ""
+        if have:
+            print(f"  ⚠️ {var} = {have} — 설정돼 있으면 안 된다: {why}")
+            print(f"     → launchctl unsetenv {var}")
+
+    if dry_run:
+        print("\n(dry-run) 변경하지 않았다.")
+        return 0
+    print("\n⚠️ **launchctl 값은 서버 재시작 전까지 반영되지 않는다:**")
+    print("     osascript -e 'quit app \"Ollama\"' && sleep 3 && open -a Ollama")
+    print("⚠️ launchctl setenv 는 로그인 세션 단위라 **재부팅하면 사라진다** — 다시 걸어라.")
+    print("\n검증(파일이 아니라 서버가 보고하는 값을 봐라):")
+    print("  ollama ps                          # CONTEXT · SIZE")
+    print("  python3 scripts/probe_parallel.py  # 동시 요청이 실제로 병렬인가")
+    print("  python3 scripts/usage_report.py    # 착수 전 점검이 이 표를 대조한다")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -534,11 +728,17 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--dry-run", action="store_true", help="변경 없이 대상만 출력")
     ap.add_argument("--build-models", action="store_true",
                     help="없는 로컬 파생 모델(-256k 등)을 ollama create 로 생성")
+    ap.add_argument("--host-setup", action="store_true",
+                    help="호스트 Ollama 서버 설정(launchctl)을 HOST_ENV 대로 건다")
     ap.add_argument("--repo-root", default=REPO_ROOT, help="저장소 루트(테스트용)")
     args = ap.parse_args(argv)
 
-    if not args.backend and not args.show and not args.build_models:
-        ap.error("--backend · --show · --build-models 중 하나가 필요하다")
+    if not args.backend and not args.show and not args.build_models and not args.host_setup:
+        ap.error("--backend · --show · --build-models · --host-setup 중 하나가 필요하다")
+    if args.host_setup:
+        rc = cmd_host_setup(args.dry_run)
+        if not args.backend and not args.show and not args.build_models:
+            return rc
     if args.build_models:
         backend = args.backend or active_backend(args.repo_root)
         # 창은 모델별이다(폴백 e4b 는 천장 131072) — 하나로 뭉뚱그려 찍지 않는다.

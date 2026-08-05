@@ -165,6 +165,201 @@ def test_local_probe_never_calls_an_llm():
     assert orig is ur.urllib.request.urlopen and seen == []
 
 
+# ── 서버 실효 설정 점검 (2026-08-06) ────────────────────────────────────────
+# ★ 이 묶음의 존재 이유: launchctl 에 값을 걸어 놓고 **서버에 반영됐다고 착각한 채**
+#   세션 여러 개가 지나갔다. `docs/14 §5` 는 MAX_LOADED_MODELS=1·KEEP_ALIVE=30m 를
+#   지시했는데 실측한 서버 배너는 `0`·`5m0s` 였다. 걸어 놓은 것 ≠ 반영된 것.
+
+BANNER = ("time=2026-08-06T09:00:00.000+09:00 level=INFO source=routes.go:1500 "
+          "msg=\"server config\" env=\"map[OLLAMA_CONTEXT_LENGTH:0 "
+          "OLLAMA_FLASH_ATTENTION:false OLLAMA_KEEP_ALIVE:5m0s OLLAMA_KV_CACHE_TYPE: "
+          "OLLAMA_MAX_LOADED_MODELS:0 OLLAMA_NUM_PARALLEL:1]\"")
+BANNER_OK = ("time=2026-08-06T10:00:00.000+09:00 level=INFO msg=\"server config\" "
+             "env=\"map[OLLAMA_CONTEXT_LENGTH:0 OLLAMA_FLASH_ATTENTION:true "
+             "OLLAMA_KEEP_ALIVE:30m0s OLLAMA_KV_CACHE_TYPE:q8_0 "
+             "OLLAMA_MAX_LOADED_MODELS:1 OLLAMA_NUM_PARALLEL:3]\"")
+
+
+def _log_with(banner: str, filler_mb: int = 0) -> str:
+    """배너 + 뒤에 filler. 배너를 **파일 앞쪽에** 두는 것이 핵심이다."""
+    import set_backend as sb
+    d = tempfile.mkdtemp()
+    p = os.path.join(d, "server.log")
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(banner + "\n")
+        for _ in range(filler_mb * 1024):
+            f.write("x" * 1023 + "\n")
+    return p
+
+
+def test_norm_env_treats_notation_differences_as_equal():
+    """서버는 `1`을 `true` 로, `30m` 을 `30m0s` 로 되받는다 — 표기 차이는 불일치가 아니다.
+
+    ★ 시끄러운 검사는 곧 무시된다. 오탐을 먼저 없앤다.
+    """
+    import set_backend as sb
+    assert sb._norm_env("OLLAMA_FLASH_ATTENTION", "1") == \
+           sb._norm_env("OLLAMA_FLASH_ATTENTION", "true")
+    assert sb._norm_env("OLLAMA_KEEP_ALIVE", "30m") == \
+           sb._norm_env("OLLAMA_KEEP_ALIVE", "30m0s")
+    # 그리고 진짜 다른 것은 여전히 다르다(양방향 확인)
+    assert sb._norm_env("OLLAMA_NUM_PARALLEL", "1") != \
+           sb._norm_env("OLLAMA_NUM_PARALLEL", "3")
+    assert sb._norm_env("OLLAMA_FLASH_ATTENTION", "0") != \
+           sb._norm_env("OLLAMA_FLASH_ATTENTION", "1")
+
+
+def test_banner_found_even_when_far_from_end_of_a_large_log():
+    """★ 회귀: 뒤에서부터 창을 키우며 찾는 로직이 **파일 전체에 못 미친 채 종료**했다.
+
+    실제 server.log 는 30MB 인데 배너는 1행에 있다 — 첫 구현은 배너를 못 찾고
+    '판정 불가'를 돌려줬고, 그래서 어긋난 설정을 **조용히 통과**시켰다.
+    """
+    import set_backend as sb
+    got = sb._last_server_banner(_log_with(BANNER, filler_mb=3))
+    assert got is not None, "3MB 로그의 앞쪽 배너를 찾지 못했다"
+    assert got.get("OLLAMA_NUM_PARALLEL") == "1", got
+
+
+def test_banner_partial_window_does_not_yield_truncated_values():
+    """부분 창의 첫 줄은 잘려 있을 수 있다 — 잘린 배너를 온전한 것으로 읽으면 안 된다."""
+    import set_backend as sb
+    got = sb._last_server_banner(_log_with(BANNER, filler_mb=2))
+    assert got is not None and got.get("OLLAMA_KEEP_ALIVE") == "5m0s", got
+
+
+def test_server_env_state_flags_unapplied_settings():
+    import set_backend as sb
+    st = sb.server_env_state(_log_with(BANNER))
+    assert st["available"] is True
+    names = {r["var"] for r in st["mismatched"]}
+    assert "OLLAMA_NUM_PARALLEL" in names, st
+    assert "OLLAMA_MAX_LOADED_MODELS" in names, "docs/14 가 지시한 값의 미반영을 놓쳤다"
+
+
+def test_server_env_state_passes_when_applied():
+    """★ 반대 방향 — 정상 배너에 FAIL 이 나오면 그 검사는 아무것도 측정하지 못한다."""
+    import set_backend as sb
+    st = sb.server_env_state(_log_with(BANNER_OK))
+    assert st["mismatched"] == [], st["mismatched"]
+
+
+def test_server_env_state_unavailable_does_not_judge():
+    """확인할 수 없는 것을 FAIL 로 만들면 그 검사는 꺼진다(컨테이너에는 로그가 없다)."""
+    import set_backend as sb
+    st = sb.server_env_state(os.path.join(tempfile.mkdtemp(), "없는파일.log"))
+    assert st["available"] is False and st["mismatched"] == []
+
+
+def test_runtime_check_never_blocks_mission_start():
+    """★ 런타임 점검은 WARN 전용이다 — 설정이 어긋나도 착수 판정을 바꾸면 안 된다.
+
+    (막아야 하는 것은 '서버 불통·모델 없음' 뿐이다. 느려지는 것과 못 도는 것은 다르다.)
+    """
+    import set_backend as sb
+    orig_logs, orig_tags, orig_srv = ur.LOG_DIRS, ur.ollama_tags, sb.server_env_state
+    ur.LOG_DIRS = [_dir({})]
+    ur.ollama_tags = _fake_tags(sb.backend_models("ollama"))
+    sb.server_env_state = lambda log_path=None: {
+        "available": True, "vars": [],
+        "mismatched": [{"var": "OLLAMA_NUM_PARALLEL", "want": "3", "have": "1", "ok": False}]}
+    try:
+        assert ur.main_local(_args(), "ollama") == 0, \
+            "서버 설정 불일치로 착수를 막았다 — WARN 이어야 한다"
+    finally:
+        ur.LOG_DIRS, ur.ollama_tags = orig_logs, orig_tags
+        sb.server_env_state = orig_srv
+
+
+def test_context_mismatch_is_detected_from_the_server_not_the_config():
+    """★ 파생본이 옛 창을 물고 있으면 config 는 새 값을 주장하고 서버는 옛 값을 서빙한다.
+
+    두 층 떨어진 실패다 — 그래서 **서버가 보고하는 값**(/api/ps)을 본다.
+    """
+    import set_backend as sb
+    orig_ps = ur.ollama_ps
+    ur.ollama_ps = lambda url="": ([{"name": "gemma4-26b-256k:latest",
+                                     "context_length": 131072, "size": 17_000_000_000}], "")
+    try:
+        rt = ur.check_runtime()
+        assert rt["context_mismatch"], "서버가 옛 창을 서빙하는데 못 잡았다"
+        assert rt["context_mismatch"][0]["expected"] == sb.OLLAMA_NUM_CTX
+    finally:
+        ur.ollama_ps = orig_ps
+
+
+def test_no_context_mismatch_when_server_matches():
+    """반대 방향 — 맞는 창에 경고가 뜨면 경고가 의미를 잃는다."""
+    import set_backend as sb
+    orig_ps = ur.ollama_ps
+    ur.ollama_ps = lambda url="": ([{"name": "m", "context_length": sb.OLLAMA_NUM_CTX,
+                                     "size": 1}], "")
+    try:
+        assert ur.check_runtime()["context_mismatch"] == []
+    finally:
+        ur.ollama_ps = orig_ps
+
+
+def test_restart_pending_separates_not_set_from_not_applied():
+    """★ '안 걸었다' 와 '걸었는데 반영 안 됐다' 는 처방이 다르다(setenv vs 재시작)."""
+    import set_backend as sb
+    orig_host, orig_srv, orig_ps = sb.host_env_state, sb.server_env_state, ur.ollama_ps
+    sb.host_env_state = lambda: {
+        "available": True, "mismatched": [],
+        "vars": [{"var": v, "want": w, "have": w, "ok": True} for v, w in sb.HOST_ENV.items()]}
+    sb.server_env_state = lambda log_path=None: {
+        "available": True, "vars": [],
+        "mismatched": [{"var": "OLLAMA_NUM_PARALLEL", "want": "3", "have": "1", "ok": False}]}
+    ur.ollama_ps = lambda url="": ([], "")
+    try:
+        rt = ur.check_runtime()
+        assert [r["var"] for r in rt["restart_pending"]] == ["OLLAMA_NUM_PARALLEL"], rt
+    finally:
+        sb.host_env_state, sb.server_env_state, ur.ollama_ps = orig_host, orig_srv, orig_ps
+
+
+def test_omitted_var_is_flagged_when_present():
+    """`OLLAMA_CONTEXT_LENGTH` 는 **넣으면 안 된다** — 넣었을 때 잡아야 선언이 의미를 갖는다."""
+    import set_backend as sb
+    orig = sb._launchctl_get
+    sb._launchctl_get = lambda var: ("65536" if var == "OLLAMA_CONTEXT_LENGTH" else
+                                     sb.HOST_ENV.get(var, ""))
+    try:
+        st = sb.host_env_state()
+        assert any(r["var"] == "OLLAMA_CONTEXT_LENGTH" for r in st["mismatched"]), st
+    finally:
+        sb._launchctl_get = orig
+
+
+def test_parallel_probe_verdicts_on_real_measurements():
+    """★ 판정 자체를 검사한다 — 검사하는 쪽도 검사받아야 한다.
+
+    픽스처는 **실측값**이다(gemma4-26b-256k · 동시 3 · 2026-08-06):
+      · NUM_PARALLEL 미설정 → 종료 [1.49,2.68,3.94] 분산 1.70 · 이득 ×0.84
+      · NUM_PARALLEL=3      → 종료 [2.77,2.77,2.77] 분산 0.00 · 이득 ×1.27
+    ⚠️ 처음엔 총 벽시계 비율(×1.85)로 판정했다가 **완전한 병렬을 '부분병렬'로 오판**했다.
+       GPU 는 병렬이어도 요청당 벽시계가 늘기 때문이다.
+    """
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    import probe_parallel as pp
+    assert pp.verdict_of(0.00, 1.27, 3, 3) == "병렬", "실측 병렬을 못 읽었다"
+    assert pp.verdict_of(1.70, 0.84, 3, 3) == "직렬", "실측 직렬(계단)을 못 읽었다"
+
+
+def test_parallel_probe_rejects_no_gain_even_when_ends_cluster():
+    """종료가 몰려도 **이득이 없으면** 병렬이라 부를 이유가 없다(두 신호를 함께 본다)."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    import probe_parallel as pp
+    assert pp.verdict_of(0.0, 0.95, 3, 3) == "직렬"
+
+
+def test_parallel_probe_incomplete_beats_a_fast_looking_ratio():
+    """★ 요청이 죽으면 남은 것끼리는 분산이 작아 보인다 — 완료 수를 먼저 본다."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    import probe_parallel as pp
+    assert pp.verdict_of(0.0, 1.5, 3, 1) == "불완전", "죽은 요청을 '병렬' 로 읽었다"
+
+
 def _args(now=None):
     class A:
         pass
