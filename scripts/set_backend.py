@@ -55,7 +55,8 @@ TIERS: dict[str, list[str]] = {
 #      · /v1  + options.num_ctx=8192 → llama3.1:8b 이 **131072** 로 로드(22GB)
 #      · /api/chat + 같은 옵션        → **8192** 로 로드(5.9GB)
 #    그래서 창은 **서버 쪽에 못박는다** — Modelfile `PARAMETER num_ctx` 로 파생 모델을 만든다
-#    (`--build-models`). 이미 있던 `qwen3-coder-64k` 가 바로 이 방식이고, 원본과 **같은 blob 을
+#    (`--build-models`). 파생본 이름의 접미사(`-256k`)가 **창을 담는다** — 창이 바뀌면
+#    이름이 바뀐다. 파생본은 원본과 **같은 blob 을
 #    공유**하므로 디스크가 늘지 않는다.
 #    config 의 `ollama_num_ctx` 는 그대로 둔다 — 무시되더라도 해가 없고, Hermes 가 `/api/chat`
 #    경로를 쓰게 되면 그때는 유효하다.
@@ -69,21 +70,35 @@ TIERS: dict[str, list[str]] = {
 #        floored >= effective_window 이면 → **퇴화 분기**: effective_window × 0.85
 #    65536 - 16384 = 49152 < 64000 이라 **항상 퇴화 분기**로 떨어져 41,779 토큰에서
 #    압축이 걸렸고, `compression.threshold` 를 0.9 로 올려도 **값이 바뀌지 않았다**(무력).
-#    → `context_length - max_tokens > 64000` 을 만족해야 한다. 131072-16384=114688 ✓
-#    실측 대조: 65536→41,779 · 131072→97,484(th 0.85) · 262144→208,896
-OLLAMA_NUM_CTX = 131072
+#    → `context_length - max_tokens > 64000` 을 만족해야 한다. 262144-16384=245760 ✓
+#    실측 대조: 65536→41,779 · 131072→97,484 · **262144→208,896(현재 설정 · th 0.85)**
+#
+# ⚠️ 창을 바꾸면 **파생본 이름도 바꿔라**(`-256k`). `cmd_build_models` 는 존재를
+#    **이름으로만** 판정하므로, 이름을 그대로 두고 이 상수만 올리면 "이미 있음"을 찍고
+#    서버는 옛 창을 계속 서빙한다. config 는 새 값을 주장하고 서버는 옛 값을 서빙하는,
+#    두 층 떨어진 실패가 된다(docs/11 §7 ⑦ 계열 — 표면 증상과 원인이 멀어진다).
+OLLAMA_NUM_CTX = 262144
 # ⚠️ 프로필마다 직접 써야 한다 — `compression.*` 는 **루트 config 에서 상속되지 않는다**
 #    (named 프로필은 HERMES_HOME=<root>/profiles/<name> 이라 자기 config.yaml 만 읽는다).
 #    그리고 <512K 창에서는 0.75 로 하한이 강제되므로 0.75 이하 값은 의미가 없다.
 COMPRESSION_THRESHOLD = 0.85
 
-# 파생 모델 → 원본. `--build-models` 가 없는 것만 만든다.
-BASE_MODELS: dict[str, str] = {
-    "gemma4-26b-128k":   "gemma4:26b",
+# 파생 모델 → {원본, Modelfile 에 못박을 창, 모델 천장}. `--build-models` 가 없는 것만 만든다.
+#
+# ⚠️ **`ceiling` 은 추측이 아니라 실측이다** — `curl /api/show` 의 `<family>.context_length`.
+#    2026-08-05 재측정: 26b 262144 · e4b **131072** · qwen3.6 262144 · qwen3-coder 262144.
+#    **e4b 만 131072 이 천장이라 256k 를 줄 수 없다.** 전 모델이 창 하나를 공유한다고 두면
+#    이 모델에 서빙 불가능한 값을 못박게 된다 — 그래서 창을 모델별로 들고 있는다.
+#
+# ⚠️ 폴백 3종을 **지우지 않는 이유**: 배치에서 빠졌을 뿐 측정으로 검증된 대안이다
+#    (docs/14 §2.1). 어설션을 맞추려고 측정 기록을 버리는 것은, 이 저장소가
+#    `shared_verifier_model` 선언으로 막아둔 바로 그 실패 모양이다.
+BASE_MODELS: dict[str, dict] = {
+    "gemma4-26b-256k":   {"base": "gemma4:26b",      "num_ctx": 262144, "ceiling": 262144},
     # 폴백(배치에서 빠졌지만 측정으로 검증된 대안 — docs/14 §2.1)
-    "gemma4-e4b-128k":   "gemma4:e4b",       # 동률 속도·최소 메모리, 단 131072 이 천장
-    "qwen3.6-128k":      "qwen3.6:35b",
-    "qwen3-coder-128k":  "qwen3-coder:30b",
+    "gemma4-e4b-128k":   {"base": "gemma4:e4b",      "num_ctx": 131072, "ceiling": 131072},
+    "qwen3.6-256k":      {"base": "qwen3.6:35b",     "num_ctx": 262144, "ceiling": 262144},
+    "qwen3-coder-256k":  {"base": "qwen3-coder:30b", "num_ctx": 262144, "ceiling": 262144},
 }
 
 
@@ -109,15 +124,19 @@ BACKENDS: dict[str, dict] = {
     },
     "ollama": {
         "label": "ollama (호스트 로컬 · host.docker.internal:11434)",
-        # ⚠️ 배치 모델은 **-128k 파생본**이다(원본이 아니다). 이유는 위 BASE_MODELS 주석.
+        # ⚠️ 배치 모델은 **-256k 파생본**이다(원본이 아니다). 이유는 위 BASE_MODELS 주석.
         # 선정 근거는 추측이 아니라 측정이다 — `scripts/probe_protocol.py` (docs/14 §2.1).
         # 무경합 실측(2026-08-05): 프로토콜 3회 벽시계 26b 45s = e4b 45s < 12b 97s ·
         # 실작업(18.8k 입력) 26b 61.5s ≈ e4b 57.2s. 속도가 동률이라 **창 여유**로 갈랐다
         # (26b 262144 > e4b 131072=천장) + 마지막줄 규격 26b 100% vs e4b 33%.
+        # → 2026-08-05 (3) Sam 지시로 그 여유를 실제로 쓴다: 131072 → **262144(천장)**.
+        # ⚠️ 창은 성실성을 사주지 않는다 — 26b 는 131072 에서 원문을 가지고 있으면서
+        #    읽지 않고 분석 7편을 지어냈다(docs/11 §7 ⑧). 날조는 `analysis_substance`
+        #    게이트가 막는다. 창 증설은 그것과 **별개의** 조치다.
         "models": {
-            "writer":   "gemma4-26b-128k",
-            "verifier": "gemma4-26b-128k",
-            "coder":    "gemma4-26b-128k",
+            "writer":   "gemma4-26b-256k",
+            "verifier": "gemma4-26b-256k",
+            "coder":    "gemma4-26b-256k",
         },
         # ⚠️ **작성자≠검증자를 모델 계열 수준에서 포기한 것은 의도된 예외다.**
         # Sam 승인(2026-08-05): 속도 우선으로 전 프로필 단일 모델. 남는 분리는
@@ -354,8 +373,13 @@ def active_backend(repo_root: str = REPO_ROOT) -> str:
 
 
 def modelfile(derived: str) -> str:
-    """파생 모델의 Modelfile 본문. 창을 **서버 쪽에** 못박는다."""
-    return f"FROM {BASE_MODELS[derived]}\nPARAMETER num_ctx {OLLAMA_NUM_CTX}\n"
+    """파생 모델의 Modelfile 본문. 창을 **서버 쪽에** 못박는다.
+
+    ⚠️ 창은 `OLLAMA_NUM_CTX` 가 아니라 **모델별 `num_ctx`** 다 — 폴백 중 `gemma4:e4b` 는
+       천장이 131072 이라 262144 를 서빙할 수 없다.
+    """
+    spec = BASE_MODELS[derived]
+    return f"FROM {spec['base']}\nPARAMETER num_ctx {spec['num_ctx']}\n"
 
 
 def cmd_build_models(backend: str) -> int:
@@ -375,12 +399,16 @@ def cmd_build_models(backend: str) -> int:
 
     rc = 0
     for derived in backend_models(backend):
-        base = BASE_MODELS.get(derived)
-        if base is None:
+        spec = BASE_MODELS.get(derived)
+        if spec is None:
             print(f"  {derived:<20} 파생본이 아니다 — 건너뜀")
             continue
+        base = spec["base"]
+        # ⚠️ 존재 판정은 **이름으로만** 한다 — 이미 있는 파생본의 창이 맞는지는 확인하지
+        #    못한다. 그래서 창을 바꿀 때는 반드시 이름도 바꾼다(위 OLLAMA_NUM_CTX 주석).
+        #    실제 서빙 창은 `ollama ps` 의 CONTEXT 로 확인하라(docs/14 §3.1).
         if derived in installed or f"{derived}:latest" in installed:
-            print(f"  {derived:<20} 이미 있음")
+            print(f"  {derived:<20} 이미 있음 (서빙 창은 `ollama ps` 의 CONTEXT 로 확인하라)")
             continue
         if base not in installed and f"{base}:latest" not in installed:
             print(f"  {derived:<20} ⚠️ 원본 {base} 이 없다 → `ollama pull {base}` 먼저")
@@ -395,7 +423,7 @@ def cmd_build_models(backend: str) -> int:
         finally:
             os.unlink(path)
         if proc.returncode == 0:
-            print(f"  {derived:<20} 생성됨 (FROM {base} · num_ctx {OLLAMA_NUM_CTX})")
+            print(f"  {derived:<20} 생성됨 (FROM {base} · num_ctx {spec['num_ctx']})")
         else:
             print(f"  {derived:<20} ⚠️ 생성 실패: {proc.stderr.strip()[:200]}")
             rc = 1
@@ -490,7 +518,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--json", action="store_true", help="기계 판독(--show 와 함께)")
     ap.add_argument("--dry-run", action="store_true", help="변경 없이 대상만 출력")
     ap.add_argument("--build-models", action="store_true",
-                    help="없는 로컬 파생 모델(-64k)을 ollama create 로 생성")
+                    help="없는 로컬 파생 모델(-256k 등)을 ollama create 로 생성")
     ap.add_argument("--repo-root", default=REPO_ROOT, help="저장소 루트(테스트용)")
     args = ap.parse_args(argv)
 
@@ -498,7 +526,8 @@ def main(argv: list[str] | None = None) -> int:
         ap.error("--backend · --show · --build-models 중 하나가 필요하다")
     if args.build_models:
         backend = args.backend or active_backend(args.repo_root)
-        print(f"── 로컬 파생 모델 준비 ──  num_ctx {OLLAMA_NUM_CTX}")
+        # 창은 모델별이다(폴백 e4b 는 천장 131072) — 하나로 뭉뚱그려 찍지 않는다.
+        print(f"── 로컬 파생 모델 준비 ──  배치 창 {OLLAMA_NUM_CTX} (폴백은 모델별 천장을 따른다)")
         rc = cmd_build_models(backend)
         if not args.backend:
             return rc

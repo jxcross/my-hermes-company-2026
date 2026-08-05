@@ -19,9 +19,9 @@
 
 | 티어 | 프로필 | codex | **ollama(현재)** | 원본 |
 |---|---|---|---|---|
-| 작성자 | `default`(Solomon)·`scout`·`reader`·`curator`·`synthesizer`·`writer` | `gpt-5.6-terra` | **`gemma4-26b-128k`** | `gemma4:26b` |
-| 검증자 | `fact-checker`·`reviewer`·`tester` | `gpt-5.6-sol` | **`gemma4-26b-128k`** | `gemma4:26b` |
-| 코더 | `architect`·`developer` | `gpt-5.6-terra` | **`gemma4-26b-128k`** | `gemma4:26b` |
+| 작성자 | `default`(Solomon)·`scout`·`reader`·`curator`·`synthesizer`·`writer` | `gpt-5.6-terra` | **`gemma4-26b-256k`** | `gemma4:26b` |
+| 검증자 | `fact-checker`·`reviewer`·`tester` | `gpt-5.6-sol` | **`gemma4-26b-256k`** | `gemma4:26b` |
+| 코더 | `architect`·`developer` | `gpt-5.6-terra` | **`gemma4-26b-256k`** | `gemma4:26b` |
 
 ### 2.2 ⚠️ 로컬 백엔드는 **작성자≠검증자를 모델 계열 수준에서 포기했다** (Sam 승인 2026-08-05)
 
@@ -35,10 +35,13 @@ explicit_declaration`). 실미션에서 **검증자가 놓치는 것**을 눈여
 
 `gemma4:26b`(MoE 25.8B · 17GB · 최대 창 262144) 는 무경합 측정에서 프로토콜 전 항목 100%,
 프로토콜 벽시계 45초(3회)로 `gemma4:e4b` 와 동률이었고 `gemma4:12b`(97초)보다 2배 빨랐다.
-**동률에서 `창 여유`로 갈랐다** — e4b 는 131072 이 천장이라 §3.2 의 설정에 여유가 없다.
+**동률에서 `창 여유`로 갈랐다** — e4b 는 131072 이 천장이다. **2026-08-05 (3) 에 그 여유를
+실제로 썼다: 131072 → 262144(26b 의 천장).**
 
-**`-128k` 는 원본에 `num_ctx 131072` 를 못박은 파생본이다** — 창을 왜 서버 쪽에 박는지는
-§3.1, **왜 131072 여야 하는지는 §3.2**(이게 실미션을 멈춰 세운 결함이다). 원본과 **같은 blob 을
+**`-256k` 는 원본에 `num_ctx 262144` 를 못박은 파생본이다** — 창을 왜 서버 쪽에 박는지는
+§3.1, **하한이 왜 있는지는 §3.2**(이게 실미션을 멈춰 세운 결함이다).
+⚠️ **접미사가 창을 담는다 — 창을 바꾸면 이름을 바꿔라.** `--build-models` 는 존재를
+**이름으로만** 판정해서, 이름을 그대로 두면 "이미 있음"을 찍고 서버는 옛 창을 계속 서빙한다. 원본과 **같은 blob 을
 공유**하므로 디스크가 늘지 않는다. 없으면 만든다:
 `python3 scripts/set_backend.py --build-models`.
 
@@ -49,7 +52,8 @@ explicit_declaration`). 실미션에서 **검증자가 놓치는 것**을 눈여
 3. **실작업 벽시계** — tok/s 가 아니다(§2.1 의 주의).
 4. **창 여유** — §3.2 가 요구하는 `context_length − max_tokens > 64000` 을 만족하고도
    더 올릴 여지가 있는가. `gemma4:e4b`(131072 천장)와 `gemma4:26b`(262144)를 여기서 갈랐다.
-5. 메모리. 131072 창 실측: `gemma4-26b-128k` 17GB · `gemma4-e4b-128k` 9.9GB.
+5. 메모리. 실측: `gemma4-26b-256k` **17.64GB @262144** · `gemma4-26b-128k` 17.50GB @131072 ·
+   `gemma4-e4b-128k` 9.9GB @131072. **26b 는 창을 2배로 해도 메모리가 +0.8% 다**(§3.1 하단).
 
 ## 2.1 배치는 측정으로 정했다 — `scripts/probe_protocol.py`
 
@@ -115,13 +119,13 @@ Ollama 에 **`:cloud` 태그뿐**이라 로컬 실행 자체가 안 된다.
 
 ```yaml
 model:
-  default: "gemma4-26b-128k"
+  default: "gemma4-26b-256k"
   provider: "ollama"                                # → Hermes 내부에서 custom 으로 매핑
   base_url: "http://host.docker.internal:11434/v1"
   api_key: "ollama"
   api_mode: "chat_completions"
-  context_length: 131072
-  ollama_num_ctx: 131072
+  context_length: 262144
+  ollama_num_ctx: 262144
   max_tokens: 16384
 compression:
   threshold: 0.85       # ⚠️ 프로필에 직접 — 루트에서 상속 안 됨(§3.3)
@@ -156,11 +160,27 @@ compression:
 **같은 모델이 창 하나로 3.7배의 메모리를 쓴다.** 64GB 에서 이건 그냥 낭비가 아니라 배치 자체를
 불가능하게 만든다.
 
+⚠️⚠️ **그런데 이 3.7배는 `llama3.1:8b` 의 숫자다 — 모델 계열을 건너뛰지 않는다(2026-08-05 (3) 실측).**
+배치 모델을 131072 → 262144 로 올리면서 메모리가 2배 될 것을 각오했는데, **거의 안 늘었다**:
+
+| 파생본 | 창 | 메모리(`/api/ps` 의 `size`) |
+|---|---:|---:|
+| `gemma4-26b-128k` | 131072 | 17.50 GB |
+| **`gemma4-26b-256k`** | **262144** | **17.64 GB** (+0.14 GB · **+0.8%**) |
+
+창을 2배로 했는데 +0.8% 다. `gemma4` 계열은 대부분의 층이 sliding-window attention 이라
+KV 캐시가 선언 창에 비례해 늘지 않는 것으로 보인다 — `llama3.1:8b`(전 층 full attention)에서
+관찰한 비례 증가가 **여기엔 적용되지 않는다.**
+
+> **교훈이 두 개다.** ① 위 3.7배를 일반 법칙으로 읽지 마라 — **모델마다 다시 재라.**
+> ② 이 측정을 더 일찍 했다면 처음부터 262144 로 갔을 것이고, `docs/11 §7 ⑧` 의 stage 5
+> 압축 사고를 겪지 않았을 수도 있다. **메모리가 아까워서 창을 아꼈는데, 아낄 것이 없었다.**
+
 **해법: 창을 서버 쪽에 못박는다.** Modelfile 로 파생 모델을 만든다.
 
 ```
 FROM gemma4:26b
-PARAMETER num_ctx 131072
+PARAMETER num_ctx 262144
 ```
 ```bash
 python3 scripts/set_backend.py --build-models     # 없는 것만 만든다
@@ -170,11 +190,16 @@ python3 scripts/set_backend.py --build-models     # 없는 것만 만든다
 서버가 모델을 로드할 때 적용하므로 **어느 엔드포인트로 부르든 유효하다.**
 
 `ollama_num_ctx` 는 config 에 그대로 뒀다 — 무시돼도 해가 없고, Hermes 가 `/api/chat` 이나
-프록시 경로를 쓰게 되면 그때는 유효하다. Modelfile 의 `num_ctx` 와 config 의 두 값은
-`scripts/set_backend.py` 의 상수 `OLLAMA_NUM_CTX` **하나**에서 나오므로 갈라질 수 없고,
-`test_modelfile_pins_the_same_window_as_the_config` 가 그것을 강제한다.
+프록시 경로를 쓰게 되면 그때는 유효하다. **배치 모델**의 Modelfile `num_ctx` 와 config 의 두
+값은 `scripts/set_backend.py` 의 상수 `OLLAMA_NUM_CTX` **하나**에서 나오므로 갈라질 수 없고,
+`test_deployed_models_pin_the_same_window_as_the_config` 가 그것을 강제한다.
+⚠️ **폴백은 창을 공유하지 않는다** — `gemma4:e4b` 는 천장이 131072 이라 262144 를 못 준다.
+그래서 `BASE_MODELS` 는 모델마다 `num_ctx`·`ceiling` 을 들고 있고,
+`test_no_model_is_pinned_above_its_measured_ceiling` 이 천장 초과를 막는다.
 
-**검증(2026-08-05 실측):** `ollama ps` CONTEXT = **131072** · `gemma4-26b-128k` 17GB.
+**검증(2026-08-05 (3) 실측):** `ollama ps` CONTEXT = **262144** · `gemma4-26b-256k` **17.64 GB** ·
+100% GPU. 확인 경로: 프로필로 실제 호출(`hermes -p fact-checker chat -q …`) → `ollama ps`.
+**설정 파일이 아니라 서버가 보고하는 값을 봐야 한다.**
 
 ⚠️ **`context_length` 와 Modelfile 의 `num_ctx` 는 항상 같은 값이어야 한다.** 압축 임계가 실제
 서빙 창보다 크면 Hermes 는 넣었다고 믿고 모델은 못 본 상태가 된다 — `docs/11 §7 ⑦` 의
@@ -211,8 +236,8 @@ floored >= effective_window  →  ★퇴화 분기★ = int(effective_window × 
 | 65536 | 16384 | 0.5 | **41,779** | 로그의 47,277 이 여기 걸렸다 |
 | 65536 | 16384 | **0.9** | **41,779** | ★ **임계를 올려도 값이 안 바뀐다 — 완전 무력** |
 | 98304 | 16384 | 0.85 | 69,632 | 퇴화 탈출 |
-| **131072** | 16384 | **0.85** | **97,484** | 현재 설정 (2.33배) |
-| 262144 | 16384 | 0.85 | 208,896 | 여지 |
+| 131072 | 16384 | 0.85 | 97,484 | 이전 설정 (2.33배) |
+| **262144** | 16384 | **0.85** | **208,896** | ★ **현재 설정** (5.00배) — 메모리 비용은 +0.8%(§3.1) |
 
 **규칙: `context_length − max_tokens > 64000` 을 반드시 만족시켜라.** 못 지키면
 `compression.threshold` 를 아무리 조정해도 창의 85%에서 압축이 상시 발동하고, 압축 자체가
@@ -239,12 +264,12 @@ named 프로필은 `HERMES_HOME=<root>/profiles/<name>` 이라 **자기 `config.
 ```bash
 python3 scripts/set_backend.py --show                     # 현재 상태
 python3 scripts/set_backend.py --backend ollama --dry-run # 대상 확인
-python3 scripts/set_backend.py --build-models             # -128k 파생본 생성(없는 것만)
+python3 scripts/set_backend.py --build-models             # -256k 파생본 생성(없는 것만)
 python3 scripts/set_backend.py --backend ollama           # 적용
 docker compose up -d --force-recreate hermes-solomon hermes-gatekeeper
 docker exec hermes-solomon hermes profile list            # 모델명 확인
 python3 scripts/usage_report.py                           # 로컬 준비 상태(exit 0 이어야 착수 가능)
-ollama ps                                                 # ★ CONTEXT 가 131072 인지 확인
+ollama ps                                                 # ★ CONTEXT 가 262144 인지 확인
 ```
 
 `--build-models` 는 원본이 없으면 `ollama pull <원본>` 을 안내하고 exit 1 한다. 원본은
@@ -271,7 +296,9 @@ root config 의 `platform_toolsets:`·`personalities:` 는 무손상이다. PyYA
 
 ## 5. 호스트 Ollama 설정
 
-배치가 단일 모델(`gemma4-26b-128k` 17GB @131072)이라 스왑 자체가 없어졌다. 상주 1개면 충분하다. 11단계 파이프라인은 순차
+배치가 단일 모델(`gemma4-26b-256k` **17.64GB @262144** · 실측 2026-08-05 (3))이라 스왑 자체가
+없어졌다. 호스트 64GB 중 상주 17.64GB — **창을 천장까지 올리고도 여유가 크다**(§3.1 의
++0.8% 측정). 상주 1개면 충분하다. 11단계 파이프라인은 순차
 실행이고 스테이지 내 병렬은 같은 profile(=같은 모델)의 subagent 팬아웃이므로(`docs/11 §5`)
 동시에 두 모델이 필요한 구간이 없다. 단계 전환 시 5~12초 로드 비용만 든다.
 

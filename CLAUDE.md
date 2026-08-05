@@ -26,21 +26,23 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 - **⚠️ 추론 백엔드는 갈아끼운다 — 모델을 손으로 고치지 마라**(2026-08-05 신설 · `docs/14`). `model:` 블록은 **`scripts/set_backend.py` 가 생성**한다. 배치표는 그 스크립트 상단 `TIERS`·`BACKENDS` 한 곳에만 있다.
   | 티어 | 프로필 | `codex` | **`ollama`(현재)** |
   |---|---|---|---|
-  | 작성자 | default·scout·reader·curator·synthesizer·writer | `gpt-5.6-terra` | `gemma4-26b-128k` |
-  | 검증자 | fact-checker·reviewer·tester | `gpt-5.6-sol` | `gemma4-26b-128k` |
-  | 코더 | architect·developer | `gpt-5.6-terra` | `gemma4-26b-128k` |
+  | 작성자 | default·scout·reader·curator·synthesizer·writer | `gpt-5.6-terra` | `gemma4-26b-256k` |
+  | 검증자 | fact-checker·reviewer·tester | `gpt-5.6-sol` | `gemma4-26b-256k` |
+  | 코더 | architect·developer | `gpt-5.6-terra` | `gemma4-26b-256k` |
 
   ```bash
   python3 scripts/set_backend.py --show               # 현재 백엔드(불일치면 exit 1)
-  python3 scripts/set_backend.py --build-models       # -128k 파생본 생성(없는 것만)
+  python3 scripts/set_backend.py --build-models       # -256k 파생본 생성(없는 것만)
   python3 scripts/set_backend.py --backend ollama     # 로컬 · 한도 없음
   python3 scripts/set_backend.py --backend codex      # 8/09 14:07 이후 복귀
   ```
-  ⚠️⚠️ **`context_length − max_tokens > 64000` 을 반드시 지켜라(docs/14 §3.2).** 못 지키면 Hermes 압축이 **퇴화 분기**로 떨어져 창의 85%에서 상시 발동하고 `compression.threshold` 가 **완전히 무력**해진다 — M-2026-005 stage 5 가 이걸로 압축 루프에 갇혀 멈췄다(65536−16384=49152 < 64000 → 41,779 토큰에서 발동). 현재 131072−16384=114688 → 97,484. 테스트가 강제한다.
+  ⚠️⚠️ **`context_length − max_tokens > 64000` 을 반드시 지켜라(docs/14 §3.2).** 못 지키면 Hermes 압축이 **퇴화 분기**로 떨어져 창의 85%에서 상시 발동하고 `compression.threshold` 가 **완전히 무력**해진다 — M-2026-005 stage 5 가 이걸로 압축 루프에 갇혀 멈췄다(65536−16384=49152 < 64000 → 41,779 토큰에서 발동). 현재 **262144−16384=245760 → 208,896**. 테스트가 강제한다.
+  ⚠️ **창을 바꾸면 파생본 이름(`-256k`)도 바꿔라** — `--build-models` 는 존재를 **이름으로만** 판정해서, 이름을 그대로 두면 "이미 있음"을 찍고 서버는 옛 창을 계속 서빙한다(config 는 새 값을 주장).
+  💡 **창은 생각보다 싸다(2026-08-05 (3) 실측)**: `gemma4:26b` 는 131072 → 262144 로 2배 올려도 메모리가 17.50GB → 17.64GB, **+0.8%** 다. `docs/14 §3.1` 의 "창 하나로 3.7배"는 `llama3.1:8b` 숫자이고 **모델 계열을 건너뛰지 않는다** — 모델마다 다시 재라.
   ⚠️ **`compression.*`·`agent.*` 는 루트 config 에서 프로필로 상속되지 않는다**(docs/14 §3.3) — named 프로필은 자기 `config.yaml` 만 읽는다. `set_backend.py` 가 프로필마다 직접 쓴다.
   ⚠️ **작성자≠검증자를 모델 계열 수준에서 포기했다**(Sam 승인 2026-08-05 · 속도 우선 통일). `BACKENDS["ollama"]["shared_verifier_model"]` 선언이 없으면 테스트가 FAIL 시킨다 — 불변식을 조용히 잃지 않기 위해서다. 남는 분리는 profile·SOUL·객관 게이트 62종이다.
   **배치는 추측이 아니라 측정으로 정했다** — `python3 scripts/probe_protocol.py`(도구 인자 충실도·부작용·종료 호출·VERDICT 포맷을 재는 프로브 · `docs/14 §2.1`). 후보 8종을 쟀고 채택 모델은 전 항목 100%. ⚠️ **tok/s 로 고르지 마라 — 벽시계로 골라라**(e4b 는 12b 보다 tok/s 가 1.7배인데 벽시계는 2배 빨랐다). ⚠️ **게이트를 재기 전에 게이트가 무엇을 읽는지 읽어라** — 처음에 VERDICT 를 "마지막 줄에 정확히"로 쟀다가 `glm-4.7-flash` 를 0%로 오판했다(`gate_keeper.py:53` 은 `.search()` 라 본문 어디든 되고, 다시 재니 100%였다).
-  ⚠️ **`ollama_num_ctx` 만으로는 창이 안 잡힌다(실측)** — Ollama 의 `/v1` 은 `options.num_ctx` 를 **무시한다**(`/api/chat` 은 지킨다). 그래서 배치 모델은 Modelfile 로 창을 못박은 **`-128k` 파생본**이다(원본과 blob 공유 · 디스크 안 늘어남). 창 하나 차이로 메모리가 3.7배 난다 — 넣은 설정이 **반영됐는지 `ollama ps` 의 CONTEXT 로 확인하라**(`docs/14 §3.1`).
+  ⚠️ **`ollama_num_ctx` 만으로는 창이 안 잡힌다(실측)** — Ollama 의 `/v1` 은 `options.num_ctx` 를 **무시한다**(`/api/chat` 은 지킨다). 그래서 배치 모델은 Modelfile 로 창을 못박은 **`-256k` 파생본**이다(원본과 blob 공유 · 디스크 안 늘어남). 넣은 설정이 **반영됐는지 `ollama ps` 의 CONTEXT 로 확인하라**(`docs/14 §3.1`) — 파일이 아니라 서버가 보고하는 값을 봐라.
 - **인프라 정비 완료**: `HERMES_WRITE_SAFE_ROOT=/opt/data:/work/company:/work/llm-wiki`(워커 직접쓰기, 복사 불필요) · **Tavily 웹검색**(키는 repo `.env`의 `TAVILY_API_KEY`, 전 프로필 os.environ 노출 필수) · **`WIKI_PATH=/work/llm-wiki`**(Curator의 karpathy-llm-wiki 스킬).
 - **미션 산출물**: 보고서→`reports/M-2026-NNN/`, 지식→llm-wiki repo(raw/entities/concepts/reflections, 재사용률 추적). Kanban 게이트: 미션=부모·단계=자식, `link`=순차, `block --kind needs_input`=Sam 게이트, `--workspace dir:/work/company/reports/<mission>`.
 - **반려 게이트 자동화(게이트키퍼)**: 사이드카 컨테이너 **`hermes-gatekeeper`**(`docker-compose.yml`, `scripts/gate_keeper.py`). 검증 task(6·9) 판정이 `VERDICT: FAIL`이면 산출물 재작업 루프(리비전→재검증) 자동 생성 + downstream(7·10) PASS 전까지 보류. **활성 게이트만** 처리(완료 미션 스킵, 재시작 안전). **Sam 승인 게이트도 자동화**(`approval_poll`, Web API): 활성 Sam-게이트를 `#approvals`에 자동 게시 + Sam의 `승인`/`승인 <task_id>` 감지→`kanban unblock`(SLACK_ALLOWED_USERS만). 상세 `docs/10 §4.4`·`docs/11 §7`.
@@ -231,7 +233,7 @@ WARN 으로 넘겨 **게이트 빠진 파이프라인** ③**`archive` 가 워�
 
 **⚠️ 보안 미결(변함없음)**: 진단 중 `SLACK_BOT_TOKEN` 값이 세션 로그에 노출됨 → **재발급(rotate) 권장**(Slack 앱 Regenerate → `.env` 갱신 → `docker compose up -d --force-recreate hermes-solomon hermes-gatekeeper`).
 
-**세션 종료 상태(2026-08-05 (2) · 로컬 백엔드 도입):** 신규 도구 2종(`set_backend.py` 추론 백엔드 전환 · `probe_protocol.py` 모델 프로토콜 측정) + `docs/14`. 커밋 3건(`dc65ed7`·`3e8824e`·`f070850`). **컨테이너 정지 · M-2026-005 stage 5 `blocked`(분석 3/11, 커밋으로 백업 확보) · 백엔드 `ollama`/`gemma4-26b-128k` 11종.** 이번 세션의 가장 큰 발견은 **압축 퇴화 분기**(위 ⚠️⚠️) — 파이프라인을 멈춘 것이 모델이 아니라 창 크기였다. ⚠️ Slack 여전히 도달 불가(네트워크성).
+**세션 종료 상태(2026-08-05 (2) · 로컬 백엔드 도입):** 신규 도구 2종(`set_backend.py` 추론 백엔드 전환 · `probe_protocol.py` 모델 프로토콜 측정) + `docs/14`. 커밋 3건(`dc65ed7`·`3e8824e`·`f070850`). **컨테이너 정지 · M-2026-005 stage 5 `blocked`(분석 3/11, 커밋으로 백업 확보) · 백엔드 `ollama`/`gemma4-26b-256k` 11종.** 이번 세션의 가장 큰 발견은 **압축 퇴화 분기**(위 ⚠️⚠️) — 파이프라인을 멈춘 것이 모델이 아니라 창 크기였다. ⚠️ Slack 여전히 도달 불가(네트워크성).
 
 **새 세션 시작 시(3분 점검):**
 
@@ -240,7 +242,7 @@ WARN 으로 넘겨 **게이트 빠진 파이프라인** ③**`archive` 가 워�
 
 ```bash
 git log --oneline -4            # HEAD: 압축 퇴화 분기 수정 + gemma4:26b 통일(f070850)
-python3 scripts/set_backend.py --show   # ★ 백엔드(ollama · gemma4-26b-128k 11종 · exit 1 이면 불일치)
+python3 scripts/set_backend.py --show   # ★ 백엔드(ollama · gemma4-26b-256k 11종 · exit 1 이면 불일치)
 docker compose up -d            # ← 미션을 이어갈 때만. 2개 Up 확인
 python3 scripts/usage_report.py         # ★ 착수 가능한가(로컬=서버·모델 존재 · exit 1 이면 시작 금지)
 docker exec hermes-solomon hermes kanban list | grep M-2026-005   # stage 5 가 blocked

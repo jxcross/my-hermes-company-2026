@@ -172,14 +172,52 @@ def test_every_ollama_model_is_a_context_pinned_derivative():
             f"{model} 이 파생본이 아니다 — 원본을 그대로 쓰면 창이 안 잡힌다"
 
 
-def test_modelfile_pins_the_same_window_as_the_config():
-    """Modelfile 의 num_ctx 와 config 의 context_length 가 갈라지면 조용히 잘린다."""
-    common = sb.BACKENDS["ollama"]["common"]
-    for derived in sb.BASE_MODELS:
+def test_modelfile_pins_each_models_own_window():
+    """Modelfile 의 num_ctx 는 **모델별**이다 — 전 모델이 하나를 공유하지 않는다.
+
+    폴백 `gemma4:e4b` 는 천장이 131072 이라 262144 를 서빙할 수 없다. 배치 모델의 창을
+    올릴 때 이 모델에까지 같은 값을 못박으면 로드가 실패하거나 조용히 깎인다.
+    """
+    for derived, spec in sb.BASE_MODELS.items():
         text = sb.modelfile(derived)
-        assert f"PARAMETER num_ctx {common['ollama_num_ctx']}" in text, text
-        assert f"FROM {sb.BASE_MODELS[derived]}\n" in text, text
+        assert f"PARAMETER num_ctx {spec['num_ctx']}" in text, text
+        assert f"FROM {spec['base']}\n" in text, text
+
+
+def test_no_model_is_pinned_above_its_measured_ceiling():
+    """★ 천장은 추측이 아니라 실측이다(`/api/show` 의 `<family>.context_length`).
+
+    창을 천장 위로 못박으면 Ollama 가 조용히 깎아서 로드한다 — config 는 큰 창을
+    주장하고 서버는 작은 창을 서빙하는, 두 층 떨어진 실패가 된다(docs/11 §7 ⑦ 계열).
+    """
+    for derived, spec in sb.BASE_MODELS.items():
+        assert spec["num_ctx"] <= spec["ceiling"], \
+            f"{derived}: num_ctx {spec['num_ctx']} > 천장 {spec['ceiling']} ({spec['base']})"
+
+
+def test_deployed_models_pin_the_same_window_as_the_config():
+    """**배치에 쓰이는** 파생본은 config 의 context_length 와 창이 같아야 한다.
+
+    갈라지면 프롬프트가 조용히 잘린다. 폴백은 배치에 안 쓰이므로 대상이 아니다.
+    """
+    common = sb.BACKENDS["ollama"]["common"]
     assert common["context_length"] == sb.OLLAMA_NUM_CTX
+    for model in sb.backend_models("ollama"):
+        assert sb.BASE_MODELS[model]["num_ctx"] == common["ollama_num_ctx"], \
+            f"{model} 의 Modelfile 창이 config 의 ollama_num_ctx 와 다르다"
+
+
+def test_derived_name_carries_its_window():
+    """★ 파생본 이름은 창을 담는다 — 창이 바뀌면 이름이 바뀌어야 한다.
+
+    `cmd_build_models` 는 존재를 **이름으로만** 판정한다(같은 이름이면 "이미 있음"으로
+    건너뛴다). 창만 올리고 이름을 그대로 두면 서버는 옛 창을 계속 서빙하는데 config 는
+    새 값을 주장한다. 이 테스트가 그 실수를 이름 규약으로 막는다.
+    """
+    for derived, spec in sb.BASE_MODELS.items():
+        suffix = f"-{spec['num_ctx'] // 1024}k"
+        assert derived.endswith(suffix), \
+            f"{derived} 의 이름이 창({spec['num_ctx']})을 담고 있지 않다 — {suffix} 로 끝나야 한다"
 
 
 def test_model_names_with_colons_are_quoted():
@@ -218,7 +256,7 @@ def test_preserves_agent_block_in_source_config():
 def test_writes_compression_block_and_keeps_other_blocks():
     d = _repo()
     path = os.path.join(d, "profiles-src", "scout", "config.yaml")
-    sb.apply_to_file(path, "ollama", "gemma4-26b-128k", with_header=True)
+    sb.apply_to_file(path, "ollama", "gemma4-26b-256k", with_header=True)
     text = _read(path)
     assert "compression:" in text, text
     cfg = sb.parse_model_block(text.splitlines(), "compression")
@@ -231,7 +269,7 @@ def test_codex_switch_removes_the_ollama_only_compression_block():
     """★ 백엔드를 되돌릴 때 다른 백엔드의 블록이 남으면 설정이 섞인다."""
     d = _repo()
     path = os.path.join(d, "profiles-src", "scout", "config.yaml")
-    sb.apply_to_file(path, "ollama", "gemma4-26b-128k", with_header=True)
+    sb.apply_to_file(path, "ollama", "gemma4-26b-256k", with_header=True)
     assert "compression:" in _read(path)
     sb.apply_to_file(path, "codex", "gpt-5.6-terra", with_header=True)
     text = _read(path)
