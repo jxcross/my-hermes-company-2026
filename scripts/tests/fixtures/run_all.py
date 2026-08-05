@@ -23,6 +23,7 @@ HARNESSES = [
     ("migrate", "K 마이그레이션"),
     ("sec", "L 보안 감사"),
     ("agent", "M AI 시스템 평가"),
+    ("dataset", "N 데이터셋 배포"),
 ]
 
 

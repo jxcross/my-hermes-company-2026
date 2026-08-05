@@ -1,6 +1,6 @@
 # 13. harness 스킬 → 템플릿 YAML 변환 — 작업 절차서
 
-> 작성일: 2026-08-04(갱신 2026-08-05) · 상태: **작업 중(13/20 — A·B·B'·D·E·F·G·H·I·J·K·L·M 전부 실행가능, 라이브 미션은 A만)** · 성격: working doc(재개 가능)
+> 작성일: 2026-08-04(갱신 2026-08-05) · 상태: **작업 중(14/20 — A·B·B'·D·E·F·G·H·I·J·K·L·M·N 전부 실행가능, 라이브 미션은 A만)** · 성격: working doc(재개 가능)
 > 관련: [`12_pipeline_negotiation.md`](./12_pipeline_negotiation.md)(§8 phasing 2b) · [`11_template_driven_missions.md`](./11_template_driven_missions.md)(템플릿 스키마 §3.A·§3.B) · 소스: 형제 repo `other_projects/harness-templates`
 >
 > **⚠️ 이 문서는 여러 세션에 걸쳐 이어서 작업하기 위한 것이다.** 새 세션은 **§6 진행 대장**에서 다음 대상을 고르고 → **§2 레시피**대로 변환하고 → **§6 갱신 + 커밋**하면 된다. 재개 방법은 §8.
@@ -55,14 +55,15 @@ agents는 템플릿으로 옮기는 것이 아니다. harness의 agent는 **하�
 어떤 입력에도 FAIL 하는 상태**였다(§5). 정상 픽스처로 **PASS 가 나오는지부터** 확인하라 —
 "깨뜨린 픽스처로 FAIL 확인"의 짝이다.
 
-현재 보유 게이트(34종): `recency_check` · `source_balance` · `doc_consistency` · `test_run` ·
+현재 보유 게이트(38종): `recency_check` · `source_balance` · `doc_consistency` · `test_run` ·
 `prisma_counts` · `prisma_checklist` · `seen_dedup` · `digest_shape` · `claim_consistency` ·
 `patent_format` · `evidence_grade` · `stakeholder_coverage` · `format_consistency` ·
 `clause_completeness` · `law_citation` · `legal_safety` · `symbol_truth` · `api_coverage` ·
 `doc_links` · `objective_coverage` · `bloom_distribution` · `course_consistency` ·
 `content_accessibility` · `atomic_commit` · `test_pass_rate` · `behavior_diff` ·
 `owasp_coverage` · `cve_remediation` · `finding_completeness` · `secret_redaction` ·
-`eval_set_quality` · `stat_significance` · `repro_determinism` · `run_completeness`.
+`eval_set_quality` · `stat_significance` · `repro_determinism` · `run_completeness` ·
+`pii_presence` · `license_compat` · `schema_conformance` · `datasheet_completeness`.
 산출 도구는 `scripts/tools/`: `bib_export` · `monitor_state` · `relevance_score`.
 회귀 테스트는 `scripts/tests/test_gates.py`.
 
@@ -89,16 +90,16 @@ docker exec hermes-solomon sh -c 'cd /work/company && \
 
 | 우리 profile | 동사 신호 | tools 신호 | 확인된 별칭 |
 |---|---|---|---|
-| `default` (Solomon) | clarify · scope-interview · finalize · deliver · orchestrate | `AskUserQuestion` | `paperforge-clarify-topic` · `paperforge-finalize` · `trendforge-clarify-scope` · `trendforge-finalize` · `reviewforge-{clarify-question,finalize}` · `litmonitor-seed-config` · `patentforge-{clarify-application,finalize}` · `policyforge-{clarify-issue,finalize}` · `legalforge-{clarify-doc,finalize}` · `docforge-{clarify-scope,finalize}` · `lectureforge-{clarify-course,finalize}` · `migrateforge-{clarify-migration,finalize}` · `secforge-{clarify-scope,finalize}` · `agentforge-{clarify-task,finalize}` |
+| `default` (Solomon) | clarify · scope-interview · finalize · deliver · orchestrate | `AskUserQuestion` | `paperforge-clarify-topic` · `paperforge-finalize` · `trendforge-clarify-scope` · `trendforge-finalize` · `reviewforge-{clarify-question,finalize}` · `litmonitor-seed-config` · `patentforge-{clarify-application,finalize}` · `policyforge-{clarify-issue,finalize}` · `legalforge-{clarify-doc,finalize}` · `docforge-{clarify-scope,finalize}` · `lectureforge-{clarify-course,finalize}` · `migrateforge-{clarify-migration,finalize}` · `secforge-{clarify-scope,finalize}` · `agentforge-{clarify-task,finalize}` · `datasetforge-{clarify-intent,finalize}` |
 | `scout` | gather · ingest · collect · scan · search · survey · **map(외부 사실 조사)** | `WebSearch` `WebFetch` | `paperforge-scope-survey` · `paperforge-gather-{arxiv,web,recent}` · `trendforge-landscape-survey` · `trendforge-gather-{academic,industry,patents,news}` · `reviewforge-{search-protocol,search-database}` · `litmonitor-scan-{arxiv,scholar,openreview}` · `patentforge-prior-art-{academic,patent}-scan` · `policyforge-context-mapping` · `legalforge-legal-research` · `secforge-dep-cve-scanner` · `agentforge-corpus-prep`(**수집 부분** — 정규화·청킹은 `curator` 로 갈랐다) |
-| `reader` | read-extract · analyze · classify · appraise · ingest · **grade** | — | `paperforge-read-extract` · `trendforge-read-extract` · `reviewforge-{data-extract,quality-appraise}` · `patentforge-ingest-invention` · `policyforge-literature-ingest` · `legalforge-ingest-context` · `docforge-{ingest-codebase,parse-symbols}`(**코드를 읽는 것도 reader 다**) · `lectureforge-ingest-source` · `migrateforge-ingest-codebase` · `secforge-{ingest-target,owasp-scanner,cwe-scanner,secrets-scanner}`(**패턴 스캐너도 reader 다**) · `agentforge-eval-set-build`(코퍼스에서 gold Q-A 를 **추출**한다 — 지어내면 안 되는 것이 이 역할의 규율이다) |
-| `curator` | dedup · filter · screen · normalize · cite-pack · cross-link | — | `reviewforge-prisma-screening` · `litmonitor-relevance-filter` · `docforge-cross-linker`(동사 신호에 `cross-link` 가 이미 있었다) · `lectureforge-accessibility-pass`(읽고 마는 감사가 아니라 **정비**로 만들었다) · `agentforge-corpus-prep`(**정규화·중복제거·청킹 부분**) · *(다른 스킬엔 대개 없어 우리가 보강)* |
+| `reader` | read-extract · analyze · classify · appraise · ingest · **grade** | — | `paperforge-read-extract` · `trendforge-read-extract` · `reviewforge-{data-extract,quality-appraise}` · `patentforge-ingest-invention` · `policyforge-literature-ingest` · `legalforge-ingest-context` · `docforge-{ingest-codebase,parse-symbols}`(**코드를 읽는 것도 reader 다**) · `lectureforge-ingest-source` · `migrateforge-ingest-codebase` · `secforge-{ingest-target,owasp-scanner,cwe-scanner,secrets-scanner}`(**패턴 스캐너도 reader 다**) · `agentforge-eval-set-build`(코퍼스에서 gold Q-A 를 **추출**한다 — 지어내면 안 되는 것이 이 역할의 규율이다) · `datasetforge-{ingest-source,license-scan,pii-scan}`(**라이선스 등급 판정도 `grade` 다**) |
+| `curator` | dedup · filter · screen · normalize · cite-pack · cross-link | — | `reviewforge-prisma-screening` · `litmonitor-relevance-filter` · `docforge-cross-linker`(동사 신호에 `cross-link` 가 이미 있었다) · `lectureforge-accessibility-pass`(읽고 마는 감사가 아니라 **정비**로 만들었다) · `agentforge-corpus-prep`(**정규화·중복제거·청킹 부분**) · `datasetforge-clean-normalize`(dedup·normalize 가 이 profile 의 verb 집합 그대로다) · *(다른 스킬엔 대개 없어 우리가 보강)* |
 | `synthesizer` | synthesize · outline · structure · summarize · gap-analysis · **options-design** | — | `paperforge-synthesize-outline` · `trendforge-synthesize-trends` · `reviewforge-synthesize` · `litmonitor-action-suggest` · `patentforge-gap-analyzer` · `policyforge-{evidence-synthesize,options-design}` · `legalforge-{structure-design,risk-disclosure}` · `lectureforge-{learning-objectives,course-structure,assessment-design}` · `secforge-severity-classifier` |
-| `writer` | draft · write · compose · section · adapt | — | `paperforge-draft-section` · `trendforge-draft-section` · `litmonitor-summarize` · `patentforge-{specification-writer,jurisdiction-adapter}` · `policyforge-{brief,report,memo,infographic}-writer` · `legalforge-{contract,opinion,advisory,terms}-writer` · `docforge-{api-ref,architecture,adr,tutorial}-writer` · `lectureforge-{syllabus,slides,assignments,quiz}-writer` |
-| `fact-checker` | fact-check · verify · evidence · recency · citation · **grade-check** | `Bash`(게이트 스크립트 실행) | `paperforge-fact-check` · `trendforge-{evidence-critic,recency-check}` · `reviewforge-evidence-coverage-check` · `patentforge-{claim-consistency-check,novelty-comparison-check}` · `policyforge-{evidence-grade-check,source-diversity-check}` · `legalforge-law-citation-check` · `docforge-accuracy-check` · `lectureforge-{objective-coverage-check,bloom-distribution-check}` · `migrateforge-{test-pass-rate-check,regression-check}` · `secforge-{critical-zero-check,cve-patched-check}` · `agentforge-{evidence-critic,stat-significance-check,reproducibility-check,eval-quality-check}` |
-| `reviewer` | review · critic · clarity · logic · style · bias · **coverage·consistency** | — | `paperforge-{logic-critic,style-edit}` · `trendforge-{clarity-check,bias-check}` · `reviewforge-{prisma-compliance-check,bias-balance-check,clarity-check}` · `patentforge-format-compliance-check` · `policyforge-{stakeholder-coverage-check,format-consistency-check}` · `legalforge-{clause-completeness-check,tone-style-check}` · `docforge-{api-coverage-check,clarity-check}` · `lectureforge-{accessibility-check,format-consistency-check}` · `migrateforge-atomic-commit-check` · `secforge-{owasp-coverage-check,report-clarity-check}` · `specflow` **Design Review(신설)** |
-| `architect` | architect · erd · diagram · wireframe · style-design · dependency-graph · **migration-plan** | `Read,Write,Grep,Glob`(쓰기만·실행 없음) | `specflow-{architect,erd-designer,diagrammer,wireframer,style-designer}` · `docforge-dependency-graph-builder` · `migrateforge-migration-planner` · `secforge-stride-modeler` · `agentforge-{index-build,agent-design}`(검색 기반과 **비교 대상 집합을 결정**한다) |
-| `developer` | backend-dev · frontend-dev · implement · build · **transform-execute** | **`Edit`** + `Bash` | `specflow-{backend-dev,frontend-dev}` · `migrateforge-transform-executor` · `agentforge-system-builder` |
+| `writer` | draft · write · compose · section · adapt | — | `datasetforge-datasheet-writer` · `paperforge-draft-section` · `trendforge-draft-section` · `litmonitor-summarize` · `patentforge-{specification-writer,jurisdiction-adapter}` · `policyforge-{brief,report,memo,infographic}-writer` · `legalforge-{contract,opinion,advisory,terms}-writer` · `docforge-{api-ref,architecture,adr,tutorial}-writer` · `lectureforge-{syllabus,slides,assignments,quiz}-writer` |
+| `fact-checker` | fact-check · verify · evidence · recency · citation · **grade-check** | `Bash`(게이트 스크립트 실행) | `paperforge-fact-check` · `trendforge-{evidence-critic,recency-check}` · `reviewforge-evidence-coverage-check` · `patentforge-{claim-consistency-check,novelty-comparison-check}` · `policyforge-{evidence-grade-check,source-diversity-check}` · `legalforge-law-citation-check` · `docforge-accuracy-check` · `lectureforge-{objective-coverage-check,bloom-distribution-check}` · `migrateforge-{test-pass-rate-check,regression-check}` · `secforge-{critical-zero-check,cve-patched-check}` · `agentforge-{evidence-critic,stat-significance-check,reproducibility-check,eval-quality-check}` · `datasetforge-pii-license-recheck` |
+| `reviewer` | review · critic · clarity · logic · style · bias · **coverage·consistency** | — | `paperforge-{logic-critic,style-edit}` · `trendforge-{clarity-check,bias-check}` · `reviewforge-{prisma-compliance-check,bias-balance-check,clarity-check}` · `patentforge-format-compliance-check` · `policyforge-{stakeholder-coverage-check,format-consistency-check}` · `legalforge-{clause-completeness-check,tone-style-check}` · `docforge-{api-coverage-check,clarity-check}` · `lectureforge-{accessibility-check,format-consistency-check}` · `migrateforge-atomic-commit-check` · `secforge-{owasp-coverage-check,report-clarity-check}` · `specflow` **Design Review(신설)** · `datasetforge-{schema-consistency-check,datasheet-completeness-check}` |
+| `architect` | architect · erd · diagram · wireframe · style-design · dependency-graph · **migration-plan** | `Read,Write,Grep,Glob`(쓰기만·실행 없음) | `specflow-{architect,erd-designer,diagrammer,wireframer,style-designer}` · `docforge-dependency-graph-builder` · `migrateforge-migration-planner` · `secforge-stride-modeler` · `agentforge-{index-build,agent-design}`(검색 기반과 **비교 대상 집합을 결정**한다) · `datasetforge-schema-design`(없던 스키마를 **결정**한다 — docforge 의 architecture-writer 가 서술이라 writer 였던 것과 갈린다) |
+| `developer` | backend-dev · frontend-dev · implement · build · **transform-execute** | **`Edit`** + `Bash` | `specflow-{backend-dev,frontend-dev}` · `migrateforge-transform-executor` · `agentforge-system-builder` · `datasetforge-{hf,parquet,csv}-converter`(변환 코드를 쓰고 돌린다) |
 | `tester` | e2e-test · run · regression · verify-by-execution · **baseline-snapshot** | **`mcp__playwright__*`** + `Bash` | `specflow-e2e-tester` · `migrateforge-{baseline-snapshot,regression-test-runner,behavior-diff-checker,new-test-generator,type-check-runner}` · `agentforge-run-evaluator`(코드를 **돌려서** 지표를 낸다) |
 
 ⚠신규 = **아직 생성되지 않은 profile**(현재 표에는 없다 — 11종 모두 생성 완료). 템플릿은 `requires_profiles:`로 선언하고, `instantiate_template.py`가 미등록을 감지하면 **미리보기는 경고만·실제 인스턴스화는 중단**한다.
@@ -470,6 +471,65 @@ migrateforge 의 죽은 변수(§5)보다 한 단계 더 나아간 형태다 —
 **교훈**: docstring 이 "A 를 B 와 대조한다"고 하면 **B 가 어디서 오는지 인자 목록부터 보라.**
 B 를 받을 통로가 없으면 그 대조는 존재하지 않는다.
 
+### ⚠️ 샘플링하는 게이트는 게이트가 아니다 — 첫 샤드만 스캔했다
+**[발견: dataset-release 변환, 2026-08-05]** datasetforge 의 유일한 하드게이트는 최종 데이터에서
+개인정보를 다시 찾는 것이다. 그런데 대상을 이렇게 고른다:
+
+```python
+shards = sorted((formats_dir / "parquet").glob("data-*.parquet"))
+if shards:
+    return shards[0]          # ← 첫 샤드 하나
+```
+
+샤드 100개짜리 데이터셋이면 **1%만 검사하고 PASS** 한다. 게다가 대상은 parquet(또는 HF 샤드)
+**한 갈래뿐**이라 같은 파이프라인이 만드는 CSV·JSONL 산출물은 아예 보지 않는다. 세 포맷으로
+내보내면서 두 포맷이 미검사다.
+
+**교훈**: 게이트가 **무엇을 대상으로 고르는지**를 반드시 읽어라. `[0]`·`next(...)`·`first`·
+`sample` 이 보이면 그 게이트는 전수 검사가 아니다. 개인정보·비밀값처럼 **한 건이면 사고**인
+도메인에서 샘플링은 검사가 아니라 요행이다.
+
+### ⚠️ 검사할 수 없는 형식을 산출하면 게이트가 아니라 신뢰가 된다
+같은 자리의 우리 쪽 문제. 우리 컨테이너에는 pandas·pyarrow 가 없어 **parquet 을 읽을 수 없다.**
+읽지 못한 파일을 조용히 건너뛰면 원본의 샤드 함정을 형태만 바꿔 되풀이하게 된다.
+
+→ `pii_presence` 는 **읽을 수 없는 데이터 파일이 있으면 FAIL** 한다. 그리고 템플릿의 기본
+산출 포맷을 stdlib 로 읽히는 `.jsonl`/`.csv` 로 정했다(parquet 을 내보내려면 `pyarrow` 를 먼저
+설치하라는 뜻이다).
+
+**교훈**: 도구가 확인할 수 없는 산출물은 **검증되지 않은 산출물**이다. "우리 환경에서 검사
+가능한 형식"이 아키타입의 산출 규격을 정하는 일이 있다 — 그것을 템플릿에 명시하라.
+
+### ⚠️ `# safe default` 주석이 달린 자리가 정확히 구멍이었다
+같은 하드게이트의 라이선스 절반:
+
+```python
+license_severity = license_report.get("verdict", "red")   # safe default
+```
+
+방어적으로 보인다. 그런데 `parse_license_report` 는 파일이 없을 때
+`{"verdict": "missing"}` 를 돌려준다 — **키가 있으므로 기본값 `red` 는 절대 쓰이지 않는다.**
+실측: 라이선스 보고서가 아예 없으면 `severity="missing"` → `missing != "red"` → **PASS**.
+게다가 원본 CLAUDE.md 가 선언한 "`unknown` 이면 `red` 로 취급" 도 코드에 없어
+`verdict: unknown` 역시 통과한다(실측).
+
+**교훈**: **fallback 이 실제로 도달 가능한지 확인하라.** `.get(k, safe)` 앞에서 `k` 를 항상
+채워 넣는 코드가 있으면 그 안전장치는 죽어 있다. 주석은 의도를 말하지 보증하지 않는다.
+
+### ⚠️ "아무 데도 선언하지 않으면 일관됨" — 공집합이 통과하는 자리
+같은 게이트의 세 번째 결함:
+
+```python
+license_consistent = len(declared_set) <= 1   # all same or all missing
+```
+
+주석이 스스로 밝히듯 **"all missing" 도 통과**다. 라이선스 전파를 검증하는 게이트가
+**라이선스가 전무할 때** 통과한다. 실측으로 확인했다.
+
+**교훈**: 집합의 크기로 일관성을 재는 코드를 보면 **빈 집합에서 무슨 일이 일어나는지** 물어라.
+`len(s) <= 1` · `all(...)` · `not any(...)` 는 전부 공집합에서 참이다. 이 계열은 이번이
+세 번째다(secforge 의 빈 블록, agentforge 의 0 runs).
+
 ### ⚠️ 커밋되는 것이 문서만이 아닌 아키타입 — 비밀값 검사의 확장자를 넓혀야 한다
 아키타입 L 의 `secret_redaction` 은 `.md` 만 훑는다. 보안 감사의 산출물이 문서뿐이라 그것으로
 충분했다. 그런데 agent-eval 은 **코드와 설정을 커밋한다** — `src/<system>/config.yaml` 이나
@@ -505,8 +565,8 @@ B 를 받을 통로가 없으면 그 대조는 존재하지 않는다.
 | 11 | migrateforge | domain | 8-stage · agents 13 | ✅ **draft (K)** | `code-migration.yaml` | 0 (**기존 3종으로 충족**) |
 | 12 | secforge | domain | 8-stage · agents 13 | ✅ **draft (L)** | `security-audit.yaml` | 0 (**예상 빗나감**) |
 | 13 | agentforge | research | 9-stage · agents 12 | ✅ **draft (M)** | `agent-eval.yaml` | 0 (**예상 빗나감**) |
-| 14 | datasetforge | research | 9-stage · agents 14 | ⬜ **다음** | — | 예상 있음(변환·빌드) |
-| 15 | reproforge | research | 8-stage · agents 12 | ⬜ | — | 예상 있음(환경 빌드) |
+| 14 | datasetforge | research | 9-stage · agents 14 | ✅ **draft (N)** | `dataset-release.yaml` | 0 (**예상 빗나감**) |
+| 15 | reproforge | research | 8-stage · agents 12 | ⬜ **다음** | — | 예상 있음(환경 빌드) |
 | 16 | simforge | research | 8-stage · agents 11 | ⬜ | — | 예상 있음(실행) |
 | 17 | proposalforge | research | 9-stage · agents 15 | ⬜ | — | 0 예상 |
 | 18 | rebuttalforge | research | 8-stage · agents 11 | ⬜ | — | 0 예상 |
@@ -707,6 +767,39 @@ B 를 받을 통로가 없으면 그 대조는 존재하지 않는다.
 - **연결**: 이 아키타입의 `report/paper-artifacts/` 는 **아키타입 B(academic-paper)의 입력**이다.
   원본이 의도한 `agentforge → paperforge` 사슬이 우리 쪽에서도 성립한다
 
+**dataset-release 변환에서 나온 것 (2026-08-05)**
+- ✅ `gates/pii_presence.py`(원본 pii_scan+하드게이트 이식 — **전 포맷·전 파일 스캔** ·
+  Luhn 창 수정 · 전화번호 과검출 수정 · 마스킹 허용 · **공개 범위 준수 검사**) ·
+  `gates/license_compat.py`(원본 license_check 이식 — **제한 조항 우선 판정** · unknown=red ·
+  선언 부재 FAIL · **소스 LICENSE 를 직접 다시 읽는다**)
+- ✅ **`gates/schema_conformance.py`·`gates/datasheet_completeness.py` 신설** — 원본 크리틱
+  2종은 **스크립트가 없다**(LLM 서술뿐). 원본 CLAUDE.md 가 선언만 하던 규칙("3 포맷 동일
+  row count + 동일 schema" · "모든 column 은 실제 column 에서 유래")을 코드로 옮겼다
+- **원본 게이트 3종에서 결함 6건 — 전부 실측**(§5): 첫 샤드만 스캔 · 라이선스 보고서 부재 시
+  PASS(`# safe default` 가 죽은 코드) · unknown 통과 · 선언 전무를 '일관됨'으로 통과 ·
+  분류 순서가 뒤집혀 독점 조건이 덧붙은 Apache 헤더가 green · Luhn 고정 창이 카드번호를 놓침.
+  **반대 방향** 1건 — `phone_kr` 선두 0 이 선택이라 `측정값 1012345678` 을 HIGH 로 잡는다
+  (숫자 id 를 가진 정상 데이터셋이 영영 배포되지 않는다)
+- ⚠️ **공개 범위를 정책으로 못박고 게이트가 강제한다** — `publication_policy.mode` 가
+  `local_only`(기본)면 데이터는 `_private/bundle/` 에만 두고, **커밋 대상에 데이터 파일이
+  있으면 FAIL**. `repo_commit` 은 Sam 이 Scoping 과 Deliver 에서 **두 번** 승인해야 한다.
+  L·M 의 `_private/` 규율이 여기서 **정책 축**으로 승격했다 — 산출물이 곧 데이터인
+  아키타입에서는 "무엇이 커밋되는가"가 미션마다 달라지기 때문이다
+- ⚠️ **정본 포맷을 `.jsonl`/`.csv` 로 정했다** — 컨테이너에 pandas·pyarrow 가 없어 게이트가
+  parquet 을 읽지 못한다. 읽지 못한 파일을 건너뛰면 원본의 샤드 함정과 같아지므로
+  **읽을 수 없는 데이터 파일이 있으면 FAIL**(§5)
+- ⚠️ **양립성 표를 정책으로 넓힐 수 있게 뒀다**(`extra_compatible`) — 이식한 표는 코드
+  라이선스 기준이라 보수적이고(Apache-2.0 → CC-BY-4.0 이 INCOMPATIBLE), 닫아 두면
+  legalforge 의 '어떤 입력에도 FAIL' 과 같은 자리에 이른다. 넓히는 것은 Sam 의 결정이다
+- **신규 profile 0개 — 대장의 "예상 있음(변환·빌드)"은 빗나갔다.** 정제는 `curator`
+  (dedup·normalize 가 그 verb 집합이다), 포맷 변환은 `developer`(변환 코드를 쓰고 돌린다).
+  **"예상 있음"이 4연속으로 빗나갔다**(I·K·L·M·N) — profile 11종이 사실상 포화인 듯하다
+- ✅ **깨뜨린 픽스처 42케이스 E2E**(정상 5 + 공개범위 4 + 결함 26 + **원본 결함 회귀방어 7**).
+  **정상 픽스처가 내 판정 기준 2건을 잡았다** — 데이터시트 절 하한(60자)에 픽스처 본문이
+  못 미쳤고, 라이선스 조합을 INCOMPATIBLE 로 골라 뒀다(§2⑧ '정상 픽스처로 PASS 확인'이
+  또 작동했다)
+- **미이식**: `croissant_build.py`(JSON-LD 생성 = 산출 도구) · `bundle_export.py` · `runs_state.py`
+
 **새 후속 과제** (다음 세션 이후)
 - `test_run.py`는 테스트를 **실행하지 않는다** — Tester가 남긴 `results.json`을 검사할 뿐이다. 게이트키퍼가 미션 코드를 임의 실행하면 임의 코드 실행 통로가 되기 때문. 자기보고 신뢰 구간이 남아 있으므로, CI 연동 등 **독립 실행 경로**가 생기면 교체 검토
 - `webapp-build`는 아직 **라이브 미션 미실행**(`maturity: draft`) — 실미션 1회로 `tested` 승격 필요
@@ -731,21 +824,21 @@ B 를 받을 통로가 없으면 그 대조는 존재하지 않는다.
 
 | 항목 | 값 |
 |---|---|
-| HEAD | agentforge → M · 그 앞: secforge→L · migrateforge→K · lectureforge→J · docforge→I · legalforge→H |
-| 변환 | **13/20** · 다음 = **datasetforge**(§6 대장 #14 — 신규 profile 예상 있음(변환·빌드)) |
+| HEAD | datasetforge → N · 그 앞: agentforge→M · secforge→L · migrateforge→K · lectureforge→J · docforge→I |
+| 변환 | **14/20** · 다음 = **reproforge**(§6 대장 #15 — 신규 profile 예상 있음(환경 빌드)) |
 | 미커밋 | 없음 (push 완료) |
 | 컨테이너 | `hermes-solomon` · `hermes-gatekeeper` 2개 Up |
 | Slack | **현재 정상**(컨테이너 Web API `ok=true` · team=my-hermes-company). 단 **간헐 재발 중** — 게이트키퍼 WARN(DNS 실패→타임아웃)이 하루 동안 산발했고 마지막 WARN 후 복구됨. 호스트·컨테이너 모두 `slack.com` HTTP 200. **네트워크성**이며 토큰·설정 문제 아님(진단 순서 `docs/10 §4.3`) |
 | Kanban | 전부 `done`(54/54) · 활성 게이트 없음 · 잔여 테스트 카드 없음 |
-| 테스트 | **171종 통과**(29 템플릿 + 21 게이트키퍼 + 121 게이트) · 린터 13/13 · **E2E 하네스 7종 146케이스 전건 통과**(`scripts/tests/fixtures/run_all.py`) |
-| 라이브 미션 | **A(trend-report)만 실증**(M-2026-003·004). 나머지 12종은 `draft` — Sam 지시로 **전체 변환 후** 하나씩 실행 |
+| 테스트 | **185종 통과**(29 템플릿 + 21 게이트키퍼 + 135 게이트) · 린터 14/14 · **E2E 하네스 8종 188케이스 전건 통과**(`scripts/tests/fixtures/run_all.py`) |
+| 라이브 미션 | **A(trend-report)만 실증**(M-2026-003·004). 나머지 13종은 `draft` — Sam 지시로 **전체 변환 후** 하나씩 실행 |
 | ⚠️ 신규 | 저장소가 **PUBLIC** 임을 전제한 개인정보 게이트(`legal_safety`) 도입 · `.gitignore` 에 `_personal/` |
 
 ### 8.1 절차
 
 1. **읽는다**: 이 문서 §6(다음 대상) → §2(레시피) → §5(함정) → 대상 스킬의 `SKILL.md`
 2. **변환한다**: `templates/<name>.yaml` 작성. `templates/academic-paper.yaml`을 참고본으로 삼는다(주석에 변환 판단 근거가 남아 있다)
-3. **게이트를 이식한다** — 이 단계에서 결함이 나온다(13건 변환에서 13건 모두).
+3. **게이트를 이식한다** — 이 단계에서 결함이 나온다(14건 변환에서 14건 모두).
    - 먼저 **이름 충돌 확인**: `ls scripts/gates/` — 같은 이름에 덮어쓰면 먼저 있던 아키타입이
      조용히 망가진다(§5).
    - **원본을 직접 돌려 보라.** `python3 <원본>.py <인자>` 로 정상 입력과 쓰레기 입력을 넣어
@@ -768,7 +861,7 @@ B 를 받을 통로가 없으면 그 대조는 존재하지 않는다.
    ```
    **④가 이 절차의 핵심이다.** `scripts/tests/fixtures/`에 아키타입별 하네스를 두고
    **정상 픽스처(PASS 기대) + 고의로 깨뜨린 픽스처(FAIL 기대) + 원본 결함의 회귀 방어**를
-   함께 돌린다. 기존 하네스(`policy`·`legal`·`docs`·`lecture`·`migrate`·`sec`·`agent`)를 본으로 삼아
+   함께 돌린다. 기존 하네스(`policy`·`legal`·`docs`·`lecture`·`migrate`·`sec`·`agent`·`dataset`)를 본으로 삼아
    새 파일을 만들고 `run_all.py`의 `HARNESSES`에 등록하라. 상세는
    [`scripts/tests/fixtures/README.md`](../scripts/tests/fixtures/README.md).
 

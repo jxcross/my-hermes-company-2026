@@ -56,6 +56,10 @@ eval_set_quality = _load("eval_set_quality")
 stat_significance = _load("stat_significance")
 repro_determinism = _load("repro_determinism")
 run_completeness = _load("run_completeness")
+pii_presence = _load("pii_presence")
+license_compat = _load("license_compat")
+schema_conformance = _load("schema_conformance")
+datasheet_completeness = _load("datasheet_completeness")
 
 
 # ── prisma_counts ────────────────────────────────────────────────────────
@@ -946,6 +950,104 @@ def test_run_name_regex_splits_system_and_seed():
     m = run_completeness.RUN_NAME_RE.match("abl-no-rerank__seed22")
     assert m and m.group("sys") == "abl-no-rerank" and m.group("seed") == "22"
     assert run_completeness.RUN_NAME_RE.match("run-01") is None
+
+
+# ── pii_presence (아키타입 N · 원본 정규식이 양방향으로 무너졌다) ──────────
+def test_plain_long_number_is_not_a_phone():
+    """원본 `0?1[016789]` 는 선두 0 이 선택이라 평범한 10자리 수를 전화번호(HIGH)로 잡았다.
+    실측: `측정값 1012345678` → phone_kr·phone_us 둘 다 HIGH → 하드게이트 FAIL.
+    숫자 id 를 가진 정상 데이터셋이 영영 배포되지 않는다(§5)."""
+    assert pii_presence.scan_text("측정값 1012345678", ["phone_kr", "phone_us"]) == []
+    assert pii_presence.scan_text("행 id 20191055512345", ["phone_kr"]) == []
+
+
+def test_real_korean_phone_is_detected():
+    hits = pii_presence.scan_text("연락처 010-1234-5678", ["phone_kr"])
+    assert [n for n, _s, _r in hits] == ["phone_kr"]
+    assert pii_presence.scan_text("01012345678", ["phone_kr"])
+
+
+def test_luhn_uses_the_match_not_a_fixed_window():
+    """원본은 `text[p:p+19]` 고정 창으로 Luhn 을 돌려 뒤따르는 문자를 끌어들였다.
+    실측: `금액 4111111111111111.50 원` → 자릿수 18 → 미검출(§5)."""
+    assert pii_presence.luhn_valid("4111111111111111")
+    assert not pii_presence.luhn_valid("4111111111111112")
+    hits = pii_presence.scan_text("금액 4111111111111111.50 원", ["credit_card"])
+    assert [n for n, _s, _r in hits] == ["credit_card"]
+
+
+def test_masked_values_are_allowed():
+    """마스킹을 막으면 정제된 데이터셋을 배포할 방법이 없다(secret_redaction 과 같은 규율)."""
+    assert pii_presence.scan_text("연락처 <EMAIL> 참조", ["email"]) == []
+    assert pii_presence.scan_text("주민 900101-1******", ["ssn_kr"]) == []
+
+
+def test_ssn_kr_accepts_spaces_around_hyphen():
+    assert pii_presence.scan_text("주민 900101 - 1234567", ["ssn_kr"])
+
+
+def test_walk_json_reaches_nested_strings():
+    got = pii_presence.walk_json({"a": ["x", {"b": "y"}], "c": 3})
+    assert sorted(got) == ["x", "y"]
+
+
+# ── license_compat (원본 결함 4건) ──────────────────────────────────────────
+def test_restrictive_clause_beats_permissive_header():
+    """원본은 green→yellow→red 순서라 독점 조건이 덧붙은 Apache 헤더를 green 으로 분류했다.
+    실측: ('green', 'Apache-2.0')(§5)."""
+    text = "Apache License\nVersion 2.0\n...\nAll Rights Reserved. Proprietary and Confidential."
+    assert license_compat.classify_text(text)[0] == "red"
+    assert license_compat.classify_text("Apache License\nVersion 2.0\n")[0] == "green"
+
+
+def test_unidentifiable_license_is_red():
+    assert license_compat.classify_text("알 수 없는 이용 약관") == ("red", "UNKNOWN")
+    assert license_compat.classify_text("") == ("red", "UNKNOWN")
+
+
+def test_unknown_compatibility_is_not_compatible():
+    """원본은 `overall_pass` 가 INCOMPATIBLE 만 막아 UNKNOWN 을 통과시켰다."""
+    assert license_compat.compatibility("UNKNOWN", "MIT") == "UNKNOWN"
+    assert license_compat.compatibility("GPL-3.0", "MIT") == "INCOMPATIBLE"
+    assert license_compat.compatibility("MIT", "MIT") == "COMPATIBLE"
+
+
+def test_extra_compatible_widens_the_conservative_matrix():
+    """이식한 표는 코드 라이선스 기준이라 보수적이다 — 닫아 두면 legalforge 의
+    '어떤 입력에도 FAIL' 과 같은 자리에 이른다. 넓히는 것은 정책(=Sam)의 몫이다."""
+    assert license_compat.compatibility("Apache-2.0", "CC-BY-4.0") == "INCOMPATIBLE"
+    assert license_compat.compatibility(
+        "Apache-2.0", "CC-BY-4.0", {"Apache-2.0": ["CC-BY-4.0"]}) == "COMPATIBLE"
+
+
+# ── schema_conformance · datasheet_completeness (신설) ─────────────────────
+def test_schema_accepts_both_columns_and_json_schema_shapes():
+    import tempfile, os as _os, json as _json
+    d = tempfile.mkdtemp()
+    p1 = _os.path.join(d, "a.json")
+    open(p1, "w").write(_json.dumps({"n_rows": 3, "columns": [{"name": "id"}]}))
+    assert schema_conformance.parse_schema(p1) == ([{"name": "id"}], 3)
+    p2 = _os.path.join(d, "b.json")
+    open(p2, "w").write(_json.dumps({"properties": {"id": {"type": "string"}}}))
+    cols, n = schema_conformance.parse_schema(p2)
+    assert cols[0]["name"] == "id" and cols[0]["dtype"] == "string" and n is None
+
+
+def test_row_count_field_accepts_thousands_separator():
+    assert schema_conformance.int_field("rows_out: 1,024\n", "rows_out") == 1024
+    assert schema_conformance.int_field("rows_in: 20\n", "rows_out") is None
+
+
+def test_body_chars_ignores_markdown_decoration():
+    """분량은 어절이 아니라 **글자**로 잰다(국문 대응) — 장식 문자는 내용이 아니다."""
+    assert datasheet_completeness.body_chars("- **가나다** `라마`\n\n> 바사") == 7
+
+
+def test_section_alias_matches_korean_heading():
+    secs = {"3. 수집 과정과 절차": "본문"}
+    hit = datasheet_completeness.match_section(secs, ["collection", "수집"])
+    assert hit and hit[1] == "본문"
+    assert datasheet_completeness.match_section(secs, ["maintenance", "유지보수"]) is None
 
 
 def test_systems_block_parses_change_field():

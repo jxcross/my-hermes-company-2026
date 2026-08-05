@@ -1,0 +1,211 @@
+# 아키타입 N — 데이터셋 큐레이션·배포 (14단계)
+# 출처: other_projects/harness-templates/research-harnesses/project_datasetforge
+#       (.claude/skills/datasetforge/SKILL.md 9-stage + agents 14종). 변환 절차: docs/13
+#
+# 이 아키타입이 만드는 것: **배포 가능한 데이터셋 + 데이터시트 3표준**이다. 원본을 수집·정제하고
+# 스키마를 확정한 뒤 라이선스·개인정보를 검사하고, Datasheets for Datasets(Gebru) ·
+# Data Statements(Bender) · Croissant ML 을 붙여 배포 번들을 낸다.
+#
+# ⚠️ **이 아키타입은 지금까지 중 공개 위험이 가장 크다.** 산출물이 문서가 아니라 **데이터
+#    자체**이고, 데이터에는 개인정보와 제3자 라이선스가 들어 있을 수 있다. 이 저장소는 PUBLIC
+#    이고 Deliver 가 `reports/` 를 push 한다 — 한 번 push 하면 **되돌릴 수 없다.**
+#    그래서 공개 범위를 **정책으로 못박고 게이트가 강제**한다:
+#      · `publication_policy.mode: local_only`(**기본값** — 원본의 기본값과 같다)
+#        → 데이터는 `reports/<MID>/_private/bundle/` 에만 둔다(gitignore).
+#          커밋되는 것은 **데이터시트·스키마·스캔 요약·릴리스 노트뿐**이다.
+#      · `mode: repo_commit` → `reports/<MID>/bundle/` 에도 두어 커밋한다.
+#        Sam 이 Scoping(1)과 Deliver(14)에서 **두 번** 명시 승인해야 한다.
+#    `pii_presence` 게이트가 **선언한 mode 와 실제 산출 위치가 맞는지** 검사한다 —
+#    `local_only` 인데 커밋 대상에 데이터 파일이 있으면 반려한다.
+#
+# ⚠️ **정본은 `.jsonl`/`.csv` 다 — parquet 이 기본이 아니다.** 원본은 parquet 을 정본으로
+#    삼지만 우리 컨테이너에는 pandas·pyarrow 가 없어 **게이트가 parquet 을 읽을 수 없다.**
+#    읽지 못한 파일을 건너뛰면 원본의 '첫 샤드만 검사' 함정을 형태만 바꿔 되풀이하게 된다.
+#    그래서 `pii_presence` 는 **읽을 수 없는 데이터 파일이 있으면 FAIL** 한다. parquet 을
+#    내보내려면 `pyarrow` 를 먼저 설치하라(그 전까지는 formats 에서 빼 둔다).
+#
+# 변환 판단(요약 — 상세·근거는 docs/13 §2·§5):
+#  - **원본 게이트 3종에서 결함 6건을 실측**했다. 가장 큰 것: 하드게이트가 **샤드 하나만**
+#    스캔한다(`sorted(glob("data-*.parquet"))[0]`). 샤드 100개면 1%만 보고 통과한다.
+#  - **하드게이트가 라이선스를 다시 검사하지 않는다** — docstring 은 "license check against
+#    the source" 라 하지만 `license_check.py` 를 한 번도 호출하지 않고 5단계 에이전트가 쓴
+#    마크다운 frontmatter 를 읽는다. agentforge 의 죽은 gold-set 대조와 **같은 계열이 두
+#    하네스 연속**이다.
+#  - **`# safe default` 주석이 달린 자리가 정확히 구멍이었다** — 보고서가 없으면
+#    `{"verdict": "missing"}` 이 돌아와 기본값 `red` 가 절대 쓰이지 않는다.
+#  - 원본 크리틱 2종(schema-consistency · datasheet-completeness)은 **스크립트가 없다** →
+#    `schema_conformance`·`datasheet_completeness` 를 신설했다.
+#  - **신규 profile 0개 — 대장의 "예상 있음(변환·빌드)"은 빗나갔다.** 정제는 `curator`
+#    (dedup·normalize 가 그 verb 집합이다), 포맷 변환은 `developer`(변환 코드를 쓰고 돌린다).
+#  - `croissant_build.py`·`bundle_export.py`·`runs_state.py` 는 미이식(산출 도구 · Kanban 대체).
+#
+# 스키마 규약은 templates/trend-report.yaml 머리말 참조.
+
+name: dataset-release
+category: research
+display_name: 데이터셋 큐레이션·배포(데이터시트 3표준)
+maturity: draft
+goal_kr: 원본 데이터를 정제·스키마화하고 라이선스·개인정보를 검증해 데이터시트 3표준을 갖춘 배포 번들을 낸다.
+requires_profiles: [architect, developer]
+invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop, sources_cited]
+
+policy:
+  # ⚠️ 이 아키타입의 핵심 안전 정책. 기본은 **비공개**다.
+  publication_policy:
+    mode: local_only            # local_only | repo_commit (repo_commit 은 Sam 이 두 번 승인)
+    private_bundle: _private/bundle
+    public_bundle: bundle
+
+  license_policy:
+    intent_license: CC-BY-4.0   # Scoping 에서 미션별로 확정
+    source_dirs: [_private/raw]
+    declare_in: [datasheets/datasheet.md, datasheets/data-statement.md,
+                 datasheets/croissant.json, report/release-notes.md]
+    block_severities: [red]     # 제한적·불명 라이선스는 배포 차단
+    require_notes_for: [yellow] # 카피레프트는 release-notes 에 명시 강제
+    allow_unknown: false        # ⚠️ 원본 CLAUDE.md 가 선언만 하던 "unknown = red" 를 코드로
+
+  pii_policy:
+    patterns: [email, ssn_kr, ssn_us, phone_kr, phone_us, credit_card, ipv4, ipv6]
+    fail_on: [high]             # medium(IP)은 기본적으로 막지 않는다 — 데이터시트에 밝힌다
+    max_medium: null
+    data_extensions: [".jsonl", ".json", ".csv", ".tsv", ".txt", ".md"]
+    # ⚠️ 읽을 수 없는 형식이 번들에 있으면 FAIL 한다. "못 읽었다"는 "깨끗하다"가 아니다
+    unreadable_extensions: [".parquet", ".arrow", ".feather", ".pkl", ".npy", ".h5"]
+
+  schema_policy:
+    require_description: true
+    min_description_chars: 5
+    require_row_match: true
+    placeholder_terms: [TBD, TODO, 미정, "N/A", 작성 예정, FIXME]
+
+  datasheet_policy:
+    standards: [gebru, bender, croissant]
+    min_section_chars: 60       # ⚠️ 어절이 아니라 **글자**(국문 대응)
+    placeholder_terms: [TBD, TODO, 미정, "N/A", 작성 예정, FIXME, 추후]
+
+  # 출처 대장(raw/sources.yaml)의 균형 — 한 출처에서만 온 데이터셋은 그 출처만 대표한다
+  source_balance_policy:
+    categories: [primary, secondary, derived, synthetic]
+    min_per_category:
+      primary: 1
+      secondary: 0
+      derived: 0
+      synthetic: 0
+    hard_block_if_missing: false
+
+stages:
+  - id: 1
+    name: Scoping
+    profile: default          # Solomon
+    sam_gate: true
+    upstream: []
+    body: "미션 스펙을 reports/<MID>/SCOPE.md 에 작성 — 소스(무엇을·어디서) · 용도(ml_train/benchmark/reference/analysis) · 예상 규모 · **배포 라이선스**(`license_policy.intent_license`) · 산출 포맷 · 완료조건. ⚠️ **공개 범위를 여기서 정한다**: `publication_mode` 를 `local_only`(기본 — 데이터는 커밋하지 않는다)로 둘지 `repo_commit`(데이터도 PUBLIC 저장소에 커밋)으로 둘지 **Sam 에게 명시적으로 물어라.** `repo_commit` 은 되돌릴 수 없다 — 한 번 push 된 데이터는 회수되지 않는다. ⚠️ **소스의 라이선스를 먼저 확인하라.** 재배포가 허용되지 않는 데이터는 애초에 이 파이프라인에 넣지 마라(게이트가 막지만, 막히기 전에 이미 `_private/` 에 복사돼 있게 된다). ⚠️ **개인정보가 포함될 수 있는 소스인지** 판단하고 SCOPE 에 적어라. ⚠️ **정본 포맷은 `.jsonl`/`.csv` 다** — parquet 은 컨테이너에 `pyarrow` 가 없어 게이트가 검사하지 못하므로 기본 산출에서 뺀다. ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라."
+  - id: 2
+    name: Source Ingest
+    profile: reader
+    upstream: [1]
+    body: "소스를 `reports/<MID>/_private/raw/` 로 가져와 인벤토리하고 `ingest.md` 에 정리한다 — 파일별 형식·크기·행 수 · **실제 컬럼과 dtype**(샘플이 아니라 전수 기준) · 결측 비율 · 값 분포 요약 · 샘플 3행(**개인정보가 있을 수 있으므로 샘플도 `_private/` 안에만**). **출처 대장을 `reports/<MID>/raw/sources.yaml` 에 작성**하라(각 항목 `id`·`title`·`url` 또는 경로·`published_year`·`source_type`(primary/secondary/derived/synthetic)·`license`·`status`). ⚠️ **소스의 LICENSE 파일을 그대로 `_private/raw/` 에 보존하라** — 게이트가 그 파일을 직접 읽어 등급을 판정한다(원본 하드게이트는 에이전트가 쓴 보고서만 읽어서 검사 대상이 자기 성적표를 적었다). ⚠️ **통계를 추정하지 마라** — 실제로 세어라. 여기서 지어낸 수는 뒤의 모든 대조를 무의미하게 만든다."
+  - id: 3
+    name: Clean & Normalize
+    profile: curator
+    upstream: [2]
+    body: "정제해 정본 레코드 `_private/records.jsonl`(한 줄 한 레코드)을 만들고 `clean-log.md` 에 **모든 변환을 기록**한다. **형식을 정확히 지켜라**(게이트가 파싱한다): `rows_in: 1012` · `rows_out: 1000` 줄을 먼저 적고, 단계별로 무엇을 몇 행 지웠는지(파싱 실패·중복·결측·범위 이탈) 사유와 함께 적는다. 정규화 규칙(공백·대소문자·날짜 형식·단위·인코딩)도 규칙마다 한 줄씩. ⚠️ **조용히 지우지 마라** — 행 수가 맞지 않으면 게이트가 반려한다(`rows_out` 과 실제 산출 행 수를 대조한다). ⚠️ 중복 제거는 **무엇을 기준으로** 같다고 봤는지 밝혀라. ⚠️ 개인정보로 보이는 열을 발견하면 **지우지 말고 표시만** 해라 — 제거 여부는 stage 5 스캔과 stage 6 검증을 거쳐 stage 7 에서 결정한다(여기서 지우면 무엇이 있었는지 아무도 모르게 된다)."
+  - id: 4
+    name: Schema Design
+    profile: architect
+    upstream: [3]
+    body: "정본 스키마를 확정해 `schema.md`(사람용 표)와 `schema.json`(기계용)을 만든다. **`schema.json` 형식**(게이트가 파싱한다): `{\"n_rows\": 1000, \"columns\": [{\"name\": \"id\", \"dtype\": \"string\", \"nullable\": false, \"description\": \"레코드 식별자\"}, …]}`. ⚠️ **모든 컬럼은 실제 데이터에 존재해야 한다** — 있으면 좋을 열을 지어내지 마라(게이트가 실제 데이터와 대조해 환각 컬럼을 잡는다). 반대로 **데이터에 있는데 스키마에 없는 열도 반려**된다(문서화되지 않은 열이 배포된다). ⚠️ **설명을 비우거나 'TBD' 로 두지 마라** — 열 이름만으로는 쓰는 쪽이 의미를 모른다. 단위·허용값·결측의 의미를 적어라. ⚠️ `n_rows` 는 정제 후 실제 행 수다(`clean-log.md` 의 `rows_out` 과 같아야 한다)."
+  - id: 5
+    name: License & PII Scan
+    profile: reader
+    upstream: [4]
+    parallel:
+      mode: workers
+      # 두 스캐너는 "훑어서 배포 위험을 찾는다"는 같은 계약 = profile 아님, 워커다
+      # (secforge 의 owasp/cwe/secrets 스캐너와 같은 판정). 읽기 전용이라 경합이 없다.
+      workers: [license, pii]
+      batch_size: 2
+      shard: "scan/<worker>-report.md"
+      merge_to: "scan/scan-summary.md"
+    body: "자기 축으로 배포 위험을 훑는다 — **license**=`_private/raw/` 의 LICENSE·COPYING·NOTICE 와 출처 대장을 읽어 소스 라이선스를 판정하고(green 허용형 / yellow 카피레프트 / red 제한적·불명), 의도한 배포 라이선스(`intent_license`)와 양립하는지 정리한다. **제한 조항(NonCommercial·All Rights Reserved·내부용)이 하나라도 있으면 permissive 헤더가 있어도 red 다** — 원본은 green 을 먼저 봐서 독점 조건이 덧붙은 Apache 헤더를 green 으로 분류했다. · **pii**=정본 레코드를 훑어 이메일·주민등록번호·SSN·전화번호·카드번호·IP 를 **열 단위로** 집계한다.\n⚠️ **발견을 값 그대로 적지 마라** — 열 이름·건수·행 위치까지만(`email 컬럼 c3 에 1,204건`). 값을 옮겨 적으면 보고서가 곧 유출이다. ⚠️ **오탐을 구별하라** — 10자리 숫자 id 를 전화번호로 잡는 일이 흔하다(원본 정규식이 정확히 그랬다). 열의 의미를 보고 판단해 사유를 남겨라. ⚠️ 여기서는 **경고만** 낸다 — 구속력 있는 판정은 stage 6(라이선스)과 stage 10(개인정보 잔존)이다."
+  - id: 6
+    name: Scan Verify
+    profile: fact-checker      # ≠ reader
+    verifier: true
+    upstream: [5]
+    gate:
+      objective: [license_compat, source_balance]
+      llm: fact_checker_verdict
+      draft: "reports/<MID>"
+    body: "배포 가능성을 **결정하는** 검증이다(객관 게이트는 LICENSE 파일을 직접 읽어 등급·양립성·선언 일관성을 본다). ⚠️ **이 검증이 여기 있는 이유**: 원본은 라이선스·개인정보 판정을 3포맷 변환과 데이터시트 3종을 다 쓴 뒤(stage 8)에 한다. 거기서 red 가 나오면 **그 전부가 버려진다.** 사람이 읽어야 할 것: ① **라이선스 판정의 타당성** — 게이트는 텍스트 패턴만 본다. 소스가 여럿이면 **가장 제한적인 것**이 전체를 구속하는가, 데이터가 여러 라이선스의 혼합이면 분리 배포가 필요한가. ② **재배포 권한** — 라이선스가 permissive 여도 **원저작자가 재배포를 허용했는가**(스크래핑한 데이터는 라이선스 파일이 없다). ③ **개인정보 판정의 오탐·누락** — pii 워커가 잡은 것이 실제 개인정보인가(숫자 id 오탐), 잡지 못한 형태가 있는가(자유 서술 열의 이름·주소는 정규식으로 안 잡힌다). ④ **개인정보 처리 방침** — 어느 열을 지우고 어느 열을 마스킹할지 stage 7 이 실행할 수 있게 구체적으로 정하라. 끝에 VERDICT: PASS|FAIL."
+  - id: 7
+    name: Redact & Freeze
+    profile: curator
+    upstream: [6]              # 게이트: 6 PASS 시 게이트키퍼가 unblock
+    body: "stage 6 이 정한 처리 방침을 적용해 **정본을 확정**한다 — 개인정보 열 제거 또는 마스킹(`<EMAIL>`·`***-****-****` 같은 일관된 표기), 잔여 위험 기록. 결과를 `_private/records.jsonl` 로 확정하고 `records-summary.md` 에 **Sam 이 승인할 요약**을 쓴다: 최종 행 수·열 수 · 라이선스 판정과 배포 라이선스 · **제거·마스킹한 열과 그 사유** · 잔여 위험(정규식으로 못 잡는 자유 서술 등) · `publication_mode` 와 그 의미(무엇이 커밋되고 무엇이 `_private/` 에 남는가) · 예상 번들 크기. ⚠️ **마스킹 표기를 일관되게** 하라 — 게이트가 마스킹된 형태는 통과시키지만(안 그러면 정제 결과를 배포할 수 없다) 표기가 제각각이면 쓰는 쪽이 결측과 구별하지 못한다. ⚠️ **행 수가 바뀌면 `clean-log.md` 의 `rows_out` 도 함께 갱신**하라(게이트가 대조한다). ⚠️ 원본 `_private/raw/` 는 지우지 마라 — 재현에 필요하고 커밋되지 않는다."
+  - id: 8
+    name: Format Export
+    profile: developer
+    sam_gate: true
+    approval_artifact: "reports/<MID>/records-summary.md"
+    upstream: [7]
+    parallel:
+      mode: workers
+      workers: [jsonl, csv]
+      # ⚠️ parquet 은 기본에서 뺐다 — 컨테이너에 pyarrow 가 없어 게이트가 내용을 검사하지
+      #    못한다. 설치했다면 workers 에 parquet 을 더하고 pii_policy 의
+      #    unreadable_extensions 에서 ".parquet" 을 빼라.
+      batch_size: 2
+      shard: "_private/bundle/data/<worker>/"
+      merge_to: "_private/bundle/manifest.json"
+    body: "⚠️ **Sam 승인 뒤에만 실행한다** — 승인 대상은 `records-summary.md` 이고, 여기서 확정되는 것은 **무엇이 배포되고 어디까지 공개되는가**다. 정본 레코드를 포맷별로 내보낸다 — **jsonl**=`_private/bundle/data/jsonl/data.jsonl`(한 줄 한 레코드) · **csv**=`_private/bundle/data/csv/data.csv`(헤더 1행 + 데이터). 각 포맷 디렉터리에 `README.md`(스키마 요약·행 수·라이선스)를 함께 둔다. 끝에 `manifest.json` 으로 병합한다(포맷별 파일 목록·행 수·체크섬). ⚠️ **모든 포맷은 같은 행 수·같은 컬럼**이어야 한다(게이트가 대조한다 — 원본은 이 규칙을 CLAUDE.md 에 선언만 하고 검사하지 않았다). ⚠️ **데이터는 `_private/bundle/` 에 만든다.** `publication_mode: repo_commit` 인 미션만 Deliver 가 `bundle/` 로 복사한다 — 여기서 직접 `bundle/` 에 쓰지 마라(게이트가 공개 범위 위반으로 반려한다). ⚠️ **변환 중 값을 바꾸지 마라** — CSV 의 따옴표·개행 처리로 값이 달라지면 두 포맷이 다른 데이터가 된다."
+  - id: 9
+    name: Datasheets
+    profile: writer
+    upstream: [8]
+    parallel:
+      mode: workers
+      # 세 표준은 "이 데이터셋을 문서화한다"는 같은 계약 = 워커. 축만 다르다.
+      workers: [gebru, bender, croissant]
+      batch_size: 3
+      shard: "datasheets/<worker>"
+      merge_to: "datasheets/index.md"
+    body: "표준마다 데이터시트를 쓴다 — **gebru**=`datasheets/datasheet.md`(Datasheets for Datasets: 동기 · 구성 · 수집 과정 · 전처리/정제/라벨링 · 용도 · 배포 · 유지보수 7개 절) · **bender**=`datasheets/data-statement.md`(Data Statements: 큐레이션 기준 · 언어 변종 · 화자 인구 · 주석자 인구 · 발화 상황 · 텍스트 특성 · 출처 7개 절) · **croissant**=`datasheets/croissant.json`(JSON-LD: `@context`·`@type`·`name`·`description`·`license`·`recordSet` 필수). 모든 문서에 **`license:` 를 배포 라이선스와 같은 값으로** 적어라(게이트가 산출물 전체의 선언 일치를 본다 — 원본은 아무 데도 선언이 없어도 '일관됨'으로 통과시켰다).\n⚠️ **절 제목만 나열하고 'TBD' 를 적지 마라** — 게이트가 절마다 본문 길이와 플레이스홀더를 검사한다. 모르는 것은 '모른다'와 **그 이유**를 쓰는 것이 빈칸보다 낫다. ⚠️ **개인정보 처리 내역과 잔여 위험을 반드시 밝혀라**(전처리 절·텍스트 특성 절) — 쓰는 쪽이 무엇을 조심해야 하는지 알아야 한다. ⚠️ 수치는 `schema.json`·`clean-log.md` 에서 가져오고 손으로 바꾸지 마라."
+  - id: 10
+    name: Bundle Verify
+    profile: fact-checker      # ≠ writer
+    verifier: true
+    upstream: [9]
+    gate:
+      objective: [pii_presence, schema_conformance, datasheet_completeness]
+      llm: fact_checker_verdict
+      draft: "reports/<MID>"
+    body: "배포 번들이 **실제로 안전하고 정확한지** 검증한다(객관 게이트는 모든 포맷의 모든 파일에서 개인정보 잔존 · 스키마 적합성 · 데이터시트 완결성 · **공개 범위 준수**를 본다). 사람이 읽어야 할 것: ① **정규식이 못 잡는 개인정보** — 자유 서술 열의 실명·주소·소속, 희소 조합으로 개인이 특정되는 경우(재식별 위험). 게이트는 패턴만 본다. ② **데이터시트의 진실성** — 수집 과정 서술이 실제 `ingest.md`·`clean-log.md` 와 맞는가, 알려진 편향을 감추지 않았는가. ③ **용도 서술의 정직성** — '이 데이터로 하지 말아야 할 것'이 적혀 있는가. ④ **표본 검사** — 산출 파일에서 임의로 몇 행을 열어 스키마 설명과 실제 값이 맞는지 확인하라. ⑤ **라이선스 선언이 모든 산출물에 같은 값으로** 들어갔는가. 끝에 VERDICT: PASS|FAIL."
+  - id: 11
+    name: Release Notes
+    profile: writer
+    upstream: [10]             # 게이트: 10 PASS 시 unblock
+    body: "**커밋 대상** 문서를 `reports/<MID>/report/` 에 쓴다. ① `release-notes.md` — 데이터셋 이름·버전 · 규모(행·열·크기) · **라이선스와 그 근거**(소스 라이선스 → 배포 라이선스, 카피레프트면 상속 의무를 명시) · 포맷과 사용법 · **개인정보 처리 내역과 잔여 위험** · 알려진 한계 · 인용 방법(BibTeX). ② `report.md` — 미션 요약(무엇을 왜 만들었고 어떻게 검증했는가). ③ `usage-disclaimer.md` — **필수 고지**('본 데이터셋의 개인정보 검사는 패턴 기반이며 법률 자문이 아닙니다. 재식별 위험이 남아 있을 수 있습니다.'). ⚠️ **`publication_mode` 를 분명히 적어라** — 데이터가 이 저장소에 함께 커밋되는지, 아니면 별도 경로로 받아야 하는지 읽는 사람이 알아야 한다. ⚠️ **데이터 자체를 이 문서에 붙여 넣지 마라**(샘플 행도 개인정보일 수 있다 — 넣으려면 마스킹된 합성 예시를 쓴다)."
+  - id: 12
+    name: Release Review
+    profile: reviewer          # ≠ writer
+    verifier: true
+    upstream: [11]
+    gate:
+      objective: [license_compat]
+      llm: reviewer_verdict
+      draft: "reports/<MID>"
+    body: "공개 안전성과 사용성을 독립 검토한다: ① **공개 안전성** — 커밋될 문서에 실제 데이터 값·개인정보가 섞이지 않았는가, `publication_mode: local_only` 인데 데이터가 커밋 대상에 있지 않은가(게이트도 보지만 네가 다시 확인하라 — 되돌릴 수 없는 종류의 실수다). ② **라이선스 서술의 정확성** — 카피레프트 상속 의무가 정확히 서술됐는가, 배포 라이선스가 소스보다 느슨하지 않은가. ③ **사용성** — 처음 보는 사람이 이 문서만으로 데이터를 로드하고 열의 의미를 알 수 있는가. ④ **고지 문구**의 존재와 위치. ⑤ **과장 없는 한계 서술** — 데이터셋의 한계를 숨기면 그것을 쓴 연구가 잘못된 결론에 이른다. 끝에 VERDICT: PASS|FAIL."
+  - id: 13
+    name: Wiki Update
+    profile: curator
+    upstream: [12]             # 게이트: 12 PASS 시 unblock
+    body: "이 데이터셋 작업에서 얻은 것을 llm-wiki 에 반영(entities/concepts) + reflection + 재사용률 갱신 — 이 도메인 데이터의 성질(흔한 오염 패턴·정규화가 필요한 지점) · 개인정보가 숨어 있던 자리(어떤 열에서 나왔는가, 정규식이 놓친 형태) · 라이선스 판단의 근거 · 데이터시트 작성에서 반복되는 질문. ⚠️ **wiki 는 별도 저장소이고 역시 공개될 수 있다** — 실제 데이터 값이나 개인정보가 아니라 **일반화된 교훈**만 남겨라. 같은 소스로 다음 데이터셋을 만들 때 같은 함정을 다시 밟지 않게 하는 것이 목적이다."
+  - id: 14
+    name: Deliver
+    profile: default          # Solomon
+    sam_gate: true
+    approval_artifact: "reports/<MID>/report/release-notes.md"
+    upstream: [13]
+    body: "① 번들 조립. **커밋 대상**: `report/`(release-notes·report·usage-disclaimer) · `datasheets/`(3표준) · `schema.json`·`schema.md` · `clean-log.md`·`ingest.md`·`records-summary.md` · `scan/scan-summary.md`(요약만 — 값 없이) · `raw/sources.yaml`. **`_private/` 는 커밋되지 않는다**(원본·정본 레코드·번들 데이터). ② **⚠️ 공개 범위를 Sam 에게 다시 확인하라** — 승인 요청에 **`publication_mode` 가 무엇인지**, `repo_commit` 이라면 **어떤 데이터 파일이 PUBLIC 저장소에 영구히 남는지**(파일명·행 수·크기)를 분명히 적어라. **한 번 push 하면 되돌릴 수 없다.** Sam 이 `repo_commit` 을 다시 승인하지 않으면 `local_only` 로 진행한다. ③ `repo_commit` 승인 시에만 `_private/bundle/` 을 `bundle/` 로 복사한다. ④ 커밋 + git push(컨테이너 GITHUB_TOKEN 자격) + Slack 요약. ⚠️ Slack 요약에 **규모·라이선스·공개 범위**를 넣되 **데이터 샘플은 넣지 마라**(Slack 도 영구 기록이다). ⚠️ Slack 게시는 반드시 `hermes send --to slack:#mission-log \"<요약+커밋링크>\"`(Web API)로 하라."
