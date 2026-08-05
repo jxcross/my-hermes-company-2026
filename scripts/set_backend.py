@@ -64,8 +64,10 @@ OLLAMA_NUM_CTX = 65536
 # 파생 모델 → 원본. `--build-models` 가 없는 것만 만든다.
 BASE_MODELS: dict[str, str] = {
     "qwen3.6-64k":       "qwen3.6:35b",
-    "glm-4.7-flash-64k": "glm-4.7-flash",
+    "gemma4-26b-64k":    "gemma4:26b",
     "qwen3-coder-64k":   "qwen3-coder:30b",
+    # 폴백(배치에서 빠졌지만 검증된 대안 — docs/14 §2)
+    "glm-4.7-flash-64k": "glm-4.7-flash",
 }
 
 
@@ -91,10 +93,11 @@ BACKENDS: dict[str, dict] = {
     },
     "ollama": {
         "label": "ollama (호스트 로컬 · host.docker.internal:11434)",
-        # ⚠️ 배치 모델은 **-64k 파생본**이다(원본이 아니다). 이유는 아래 BASE_MODELS 주석.
+        # ⚠️ 배치 모델은 **-64k 파생본**이다(원본이 아니다). 이유는 위 BASE_MODELS 주석.
+        # 선정 근거는 추측이 아니라 측정이다 — `scripts/probe_protocol.py` (docs/14 §2.1).
         "models": {
             "writer":   "qwen3.6-64k",
-            "verifier": "glm-4.7-flash-64k",
+            "verifier": "gemma4-26b-64k",
             "coder":    "qwen3-coder-64k",
         },
         "common": {

@@ -25,6 +25,39 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#50 — "더 좋은 로컬 모델은 없나?" → <b>추측 대신 측정</b> · 검증자를 <code>gemma4:26b</code> 로 교체 · <b>내 잣대가 틀렸던 것을 발견</b></h2>
+    <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "1번에서 문제를 해결할 수 있는 더 좋은 로컬 모델은 없나?" → "gemma4 모델은 어떤가?" (#49 가 남긴 한계 ①: 로컬 30B 급의 도구 프로토콜 준수)</div>
+
+    <div class="label">먼저 한 일 — 측정 도구를 만들었다:</div>
+    <ol class="steps">
+      <li><b><code>scripts/probe_protocol.py</code></b> — "더 큰 모델이면 낫지 않을까"는 가설이다. 가설은 잰다. <b>모델 벤치마크 점수가 아니라 우리 파이프라인이 실제로 요구하는 것</b>을 잰다: 도구 인자 충실도(관찰된 실패가 정확히 이것) · 부작용 없음 · 종료 도구 호출(빠뜨린 것이 <code>protocol violation</code>) · <code>VERDICT:</code> 판정. <b>Hermes 를 거치지 않고</b> Ollama <code>/api/chat</code> 에 같은 tool 스키마를 직접 준다 — 프로필·Kanban 을 끼우면 무엇이 실패했는지가 두 층 아래로 내려가 안 보인다.</li>
+      <li>첫 시도가 <b>1회 100%</b> 로 나와 아무것도 측정하지 못했다 → 실제 실패했던 모양 그대로(<b>한국어 지시 + JSON 산출물</b>) 3과제로 늘리고 <b>전부 통과해야 1점</b>으로 바꿨다.</li>
+    </ol>
+
+    <div class="label">⚠️ 측정 도중 <b>내 잣대가 틀린 것</b>을 발견했다 — 이 항목의 핵심:</div>
+    <ol class="steps">
+      <li>첫 프로브는 VERDICT 를 <b>"마지막 줄에 정확히"</b> 로 쟀고 <code>glm-4.7-flash</code>(내가 #49 에서 검증자로 고른 모델)가 <b>0%</b> 로 나왔다. "검증자로 못 쓴다"고 Sam 에게 보고까지 했다.</li>
+      <li>그런데 <code>gate_keeper.py:53</code> 을 읽어 보니 <code>VERDICT_RE.search()</code> — <b>본문 어디든</b> 있으면 된다. 마지막 줄일 필요가 없다. <b>실제 기준으로 다시 재니 glm 은 100%</b> 였다.</li>
+      <li><b>교훈: 게이트를 재기 전에 게이트가 무엇을 읽는지 읽어라.</b> <code>docs/13 §5</code> 의 "동작하는 척하는 게이트"의 <b>거울상</b>이다 — 잣대가 느슨하면 못 쓸 것을 통과시키고, <b>잣대가 틀리면 멀쩡한 후보를 떨어뜨린다.</b> 프로브에 두 기준(<code>v_found</code>=실제 · <code>v_lastline</code>=템플릿 요구·참고용)을 <b>둘 다</b> 남겼다.</li>
+    </ol>
+
+    <div class="label">측정 결과 7종 (reps 3~5 · temp 0.2):</div>
+    <ol class="steps">
+      <li><b><code>gemma4:26b</code> 채택</b> — MoE 25.8B · 17GB · <b>96 tok/s(측정 중 최고)</b> · 엄격 기준까지 전 항목 100% · <b>Gemma 계열이라 Qwen 작성자와 계열 분리 유지</b>. Sam 이 짚은 gemma4 가 답이었다.</li>
+      <li>탈락: <code>gemma4:31b</code> 은 만점이지만 <b>dense 라 11 tok/s</b>(실사용 불가) · <code>gpt-oss:20b</code> 은 판정이 3회 중 1회 <b>비었다</b> · <code>glm-4.7-flash</code> 는 기능상 문제없으나 속도·크기·엄격기준에서 밀린다(<b>폴백으로 남김</b>).</li>
+      <li><b>#49 의 우려는 상당 부분 기우였다</b> — 배치 3종(<code>qwen3.6</code>·<code>gemma4:26b</code>·<code>qwen3-coder</code>)이 <b>전 항목 100%</b>. 연결 검증 때 한 번 나온 <code>developer</code> 의 백틱 경로·<code>/tmp</code> 부작용은 <b>3과제 × 5회에서 재현되지 않았다</b>(드문 실패이지 상시 결함이 아니다).</li>
+      <li><b>받지 않은 것</b>: <code>qwen3-next:80b</code>(50GB)·<code>qwen3-coder-next</code>(52GB) — 배치 3종이 이미 만점이라 50GB 를 더 쓸 근거가 없다. <code>minimax-m2.7</code>·<code>glm-5.2</code> 는 Ollama 에 <b><code>:cloud</code> 태그뿐</b>이라 로컬 실행 자체가 안 된다.</li>
+    </ol>
+
+    <div class="result"><span class="label">결과:</span>
+      검증자 티어 3종(fact-checker·reviewer·tester) → <b><code>gemma4-26b-64k</code></b>. 실호출 검증: <code>VERDICT: FAIL</code> 정확 · CONTEXT 65536 · 17GB.
+      회귀: 린터 <b>20/20</b> · E2E <b>14/14 510케이스</b> · 단위 <b>322종</b>.
+      <b>이 프로브가 재지 않는 것</b>: 검증의 <b>깊이</b>다 — 포맷을 지키는 것과 틀린 주장을 잡아내는 것은 다르다. 그건 실미션으로만 알 수 있다.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#49 — codex 한도 소진 우회: <b>로컬 Ollama 백엔드로 프로필 11종 전환</b> · <code>/v1</code> 이 <code>num_ctx</code> 를 무시한다는 실측</h2>
     <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "현재 codex weekly 토큰이 모두 소진되어 테스트할 수 없는 상황이다. 맥북 로컬에 ollama 가 설치되어 있다. 현재 호스트 맥북(m4 max, 64gb 메모리)에 맞는 로컬 모델을 다운로드하여 각 미션에 맞게 profile 이 사용하는 모델을 로컬 모델로 변경하라."</div>

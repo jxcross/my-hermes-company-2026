@@ -17,11 +17,11 @@ Stage 1 축소 파이프라인의 전문 에이전트(**named 프로필**) 정�
 | `curator` | 선별·정리·지식적재 | 작성자 | terra | qwen3.6-64k | dedup·관련성 판정 · llm-wiki 반영 |
 | `synthesizer` | 종합·구조화 | 작성자 | terra | qwen3.6-64k | 분류·성숙도·목차 |
 | `writer` | 집필 | 작성자 | terra | qwen3.6-64k | 출처 포함 Markdown 초안 |
-| `fact-checker` | 사실·인용 검증 | **검증자** | **sol** | **glm-4.7-flash-64k** | 교차검증 결과 + `VERDICT:` |
-| `reviewer` | 독립 검토 | **검증자** | **sol** | **glm-4.7-flash-64k** | 완료조건 대조 + `VERDICT:` |
+| `fact-checker` | 사실·인용 검증 | **검증자** | **sol** | **gemma4-26b-64k** | 교차검증 결과 + `VERDICT:` |
+| `reviewer` | 독립 검토 | **검증자** | **sol** | **gemma4-26b-64k** | 완료조건 대조 + `VERDICT:` |
 | `architect` | 설계(구조·ERD·화면) | 코더 | terra | qwen3-coder-64k | 설계 문서 + `database/schema.sql` |
 | `developer` | 구현 | 코더 | terra | qwen3-coder-64k | 코드 + 단위 테스트 |
-| `tester` | 실행 검증 | **검증자** | **sol** | **glm-4.7-flash-64k** | `test/results.json` + `VERDICT:` |
+| `tester` | 실행 검증 | **검증자** | **sol** | **gemma4-26b-64k** | `test/results.json` + `VERDICT:` |
 
 > **검증자는 작성자와 다른 모델·다른 계열을 쓴다**(fact-checker·reviewer·tester).
 > 같은 계열은 같은 맹점을 공유하므로 독립검증이 성립하지 않는다 —

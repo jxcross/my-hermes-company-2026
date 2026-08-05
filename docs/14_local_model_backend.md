@@ -17,11 +17,11 @@
 
 ## 2. 배치 — 3티어, 계열 분리
 
-| 티어 | 프로필 | codex | ollama | 원본 | 로드 크기(64K) |
-|---|---|---|---|---|---|
-| 작성자 | `default`(Solomon)·`scout`·`reader`·`curator`·`synthesizer`·`writer` | `gpt-5.6-terra` | **`qwen3.6-64k`** | `qwen3.6:35b` (MoE a3b · 262K) | 24GB |
-| 검증자 | `fact-checker`·`reviewer`·`tester` | `gpt-5.6-sol` | **`glm-4.7-flash-64k`** | `glm-4.7-flash` (glm4moelite 29.9B · 202K) | 22GB |
-| 코더 | `architect`·`developer` | `gpt-5.6-terra` | **`qwen3-coder-64k`** | `qwen3-coder:30b` (MoE · 262K) | 24GB |
+| 티어 | 프로필 | codex | ollama | 원본 | 계열 | tok/s | 로드(64K) |
+|---|---|---|---|---|---|---|---|
+| 작성자 | `default`(Solomon)·`scout`·`reader`·`curator`·`synthesizer`·`writer` | `gpt-5.6-terra` | **`qwen3.6-64k`** | `qwen3.6:35b` (MoE a3b · 262K) | Qwen | 68 | 24GB |
+| 검증자 | `fact-checker`·`reviewer`·`tester` | `gpt-5.6-sol` | **`gemma4-26b-64k`** | `gemma4:26b` (MoE 25.8B · 262K) | Gemma | **96** | 17GB |
+| 코더 | `architect`·`developer` | `gpt-5.6-terra` | **`qwen3-coder-64k`** | `qwen3-coder:30b` (MoE · 262K) | Qwen | 89 | 24GB |
 
 **`-64k` 는 원본에 `num_ctx` 를 못박은 파생본이다** — 이유는 §3.1. 원본과 **같은 blob 을
 공유**하므로 디스크가 늘지 않는다(실측: `ollama show --modelfile` 의 `FROM` 이 동일 sha256).
@@ -40,10 +40,59 @@ GLM 계열이다. `scripts/tests/test_set_backend.py::test_writer_and_verifier_n
 4. 속도. 실측(호스트 · 8K ctx · 100% GPU): `qwen3.6:35b` 89.7 tok/s(로드 11.9s) ·
    `gpt-oss:20b` 93.1 tok/s(로드 4.6s).
 
-`glm-4.7-flash` 실측 확인(2026-08-05): `architecture glm4moelite` · 29.9B · Q4_K_M ·
-Capabilities **completion · tools · thinking** ✅. 대안이 필요하면 `gpt-oss:20b`(13GB ·
-tools+thinking · OpenAI 계열이라 계열 분리는 유지) — `BACKENDS["ollama"]["models"]["verifier"]`
-와 `BASE_MODELS` 두 줄이다.
+## 2.1 배치는 측정으로 정했다 — `scripts/probe_protocol.py`
+
+"더 큰 모델이면 낫지 않을까"는 가설이다. 가설은 잰다. 프로브는 **모델 벤치마크 점수가 아니라
+우리 파이프라인이 실제로 요구하는 것**을 재고, Hermes 를 거치지 않고 Ollama `/api/chat` 에
+같은 모양의 tool 스키마를 직접 준다(프로필·Kanban 을 끼우면 무엇이 실패했는지가 두 층 아래로
+내려가 안 보인다).
+
+| 항목 | 무엇을 보는가 | 파이프라인에서의 의미 |
+|---|---|---|
+| `arg_fidelity` | 도구 인자를 준 그대로 넣는가 | 관찰된 실패가 정확히 이것(경로를 백틱으로 감쌈) |
+| `no_stray` | 시키지 않은 곳에 쓰지 않는가 | 부작용 |
+| `must_finish` | 종료 도구를 정확히 1회 부르는가 | 빠뜨린 것이 `protocol violation` 이다 |
+| `v_found` | `VERDICT:\s*(PASS\|FAIL)` 이 본문에 있는가 | **게이트키퍼의 실제 기준**(`gate_keeper.py:53`) |
+| `v_unambiguous` | PASS·FAIL 이 함께 나오지 않는가 | 첫 매치가 이기므로 섞이면 오판 |
+| `v_correct` | 판정 내용이 맞는가 | 반려 게이트의 실질 |
+| `v_lastline` | 마지막 줄에 오는가 | 템플릿이 요구("끝에") · 게이트키퍼는 미요구 |
+
+**결과 (2026-08-05 · reps 3~5 · temp 0.2)**
+
+| 모델 | arg_fid | no_stray | finish | v_found | v_unambig | v_correct | v_lastline | tok/s |
+|---|---|---|---|---|---|---|---|---|
+| **`gemma4:26b`** ✅채택 | 100 | 100 | 100 | 100 | 100 | 100 | **100** | **96** |
+| `qwen3.6:35b` ✅채택 | 100 | 100 | 100 | 100 | 100 | 100 | 100 | 68 |
+| `qwen3-coder:30b` ✅채택 | 100 | 100 | 100 | 100 | 100 | 100 | 100 | 89 |
+| `gemma4:12b` | 100 | 100 | 100 | 100 | 100 | 100 | 100 | 47 |
+| `gemma4:31b` | 100 | 100 | 100 | 100 | 100 | 100 | 100 | **11** ❌느림 |
+| `glm-4.7-flash` | 100 | 100 | 100 | 100 | 100 | 100 | **0** | 67 |
+| `gpt-oss:20b` | 100 | 100 | 100 | — | — | 67 | 67 | 93 |
+
+**⚠️ 이 측정에서 내가 한 번 틀렸고, 그게 이 절의 핵심 교훈이다.**
+처음 프로브는 VERDICT 를 **"마지막 줄에 정확히"** 로 쟀고 `glm-4.7-flash` 가 **0%** 로 나왔다.
+"검증자로 못 쓴다"고 결론 낼 뻔했다. 그런데 `gate_keeper.py:53` 을 읽어 보니
+`VERDICT_RE.search()` — **본문 어디든** 있으면 된다. 실제 기준으로 다시 재니 glm 은 100% 였다.
+**게이트를 재기 전에 게이트가 무엇을 읽는지 읽어라.** 잣대를 잘못 잡으면 멀쩡한 후보를
+탈락시키고, 반대로 재면 못 쓸 것을 통과시킨다(`docs/13 §5` 의 "동작하는 척하는 게이트"의 거울상).
+
+**왜 `gemma4:26b` 인가**(모두 필요조건을 통과한 뒤의 선택):
+1. **엄격 기준까지 100%** — 템플릿이 요구하는 "끝에"까지 지킨다. 게이트키퍼가 지금은
+   관대하지만, 관대한 파서에 기대는 것보다 규격을 지키는 모델이 낫다.
+2. **가장 빠르다**(96 tok/s) — 측정한 것 중 최고. MoE 25.8B.
+3. **가장 작다**(17GB) — 검증자가 작을수록 작성자 모델과의 스왑이 싸다.
+4. **계열이 다르다**(Gemma ≠ Qwen) — 작성자≠검증자를 계열 수준까지 유지.
+
+**탈락 사유**: `gemma4:31b` 은 dense 라 **11 tok/s**(실사용 불가) · `gpt-oss:20b` 은 판정
+포맷이 3회 중 1회 비었다 · `glm-4.7-flash` 는 기능상 문제없으나 위 4가지에서 gemma4:26b 에
+밀린다(**폴백으로 남겨 둔다** — `BASE_MODELS` 에 유지).
+
+**받지 않은 것**: `qwen3-next:80b`(50GB) · `qwen3-coder-next`(52GB)는 **받지 않았다.** 배치
+모델 3종이 이미 필요조건에서 만점이라 50GB 를 더 쓸 근거가 없다. `minimax-m2.7`·`glm-5.2` 는
+Ollama 에 **`:cloud` 태그뿐**이라 로컬 실행 자체가 안 된다.
+
+⚠️ **이 프로브가 재지 않는 것: 검증의 *깊이*다.** 포맷을 지킨다는 것과 틀린 주장을 잡아낸다는
+것은 다르다. 후자는 실미션으로만 알 수 있다.
 
 ## 3. config 스키마 — 각 키가 없으면 무엇이 깨지는가
 
@@ -191,13 +240,13 @@ launchctl setenv OLLAMA_KEEP_ALIVE 30m
 
 ## 7. 알려진 한계 · 다음
 
-1. **로컬 30B 급은 gpt-5.6 만큼 도구 프로토콜을 지키지 못한다 — 연결 검증에서 이미 보였다.**
-   `developer` 에게 파일 하나를 쓰게 했더니 목표 파일은 정확히 썼지만, **경로를 백틱으로 감싼
-   채** 엉뚱한 곳(`/tmp/...`)에도 두 번 더 쓰려 했다. Hermes 의 `HERMES_WRITE_SAFE_ROOT` 와
-   `.json` 문법 검증이 둘 다 막았다(가드레일이 실제로 일했다). 실미션에서는
-   `kanban_complete` 미호출(`worker exited cleanly … protocol violation`)·`VERDICT:` 포맷
-   이탈이 같은 계열의 위험이다. 객관 게이트 62종은 산출물을 보므로 그대로 작동하지만,
-   **LLM 검증자의 판정 포맷**은 모델 품질에 직접 의존한다.
+1. **프로토콜 준수는 재서 확인했다(§2.1) — 다만 재현되지 않은 실패가 하나 있다.**
+   연결 검증 때 `developer` 가 목표 파일은 정확히 썼지만 **경로를 백틱으로 감싼 채** 엉뚱한
+   곳(`/tmp/...`)에도 두 번 더 쓰려 했다(`HERMES_WRITE_SAFE_ROOT` 와 `.json` 문법 검증이 둘 다
+   막았다 — 가드레일이 일했다). 그런데 **프로브 3과제 × 5회 반복에서는 재현되지 않았다.**
+   즉 드물게 나오는 실패이지 상시 결함이 아니다. 실미션에서 같은 계열의 실패
+   (`kanban_complete` 미호출 = `protocol violation`)가 나오면 §2.1 프로브부터 다시 돌려라.
+   객관 게이트 62종은 산출물을 보므로 그대로 작동한다.
 2. **`reasoning_effort: medium` 은 그대로 뒀다.** custom 프로바이더는 이 값을 top-level
    `reasoning_effort` 로 넘긴다 — 인식하지 못하는 엔드포인트는 무시한다
    (`custom/__init__.py` build_api_kwargs_extras).
