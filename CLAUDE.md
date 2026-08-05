@@ -74,6 +74,11 @@ WARN 으로 넘겨 **게이트 빠진 파이프라인** ③**`archive` 가 워�
 워커가 읽는다** — 파이프라인에 대한 지시로 쓰고, 운영 메모는 `[운영 메모 · 산출물 지시 아님]`
 접두를 붙여라(⑤가 그래서 났다).
 
+**⚠️ 미션을 시작하기 전에 `python3 scripts/usage_report.py` 를 돌려라.** 한도가 소진돼 있으면
+`exit 1` 이고, 그 상태로 미션을 걸면 워커가 60초마다 크래시하다 카드가 blocked 로 떨어진다
+(카드에는 'protocol violation' 만 남아 원인을 알 수 없다). 이 스크립트는 **LLM 을 호출하지
+않는다** — 근거는 `hermes insights` 와 워커 로그의 429 응답(`resets_at`)뿐이다.
+
 **⚠️ 미션을 폐기·재시작할 때는 카드 archive 만으로 부족하다**:
 `docker exec hermes-solomon ps -eo pid,args | grep 'kanban task'` 로 **프로세스를 확인하고 죽여라**.
 
@@ -108,6 +113,7 @@ git log --oneline -6            # HEAD: slideforge→T(20/20) · 그 앞 outreac
 docker compose ps               # hermes-solomon · hermes-gatekeeper 2개 Up
 docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/lint_template.py --all'   # 20/20
 docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/fixtures/run_all.py' # 14/14 하네스
+python3 scripts/usage_report.py    # ★ 사용량·한도 — exit 1 이면 미션을 시작하지 마라(LLM 미호출)
 curl -s -o /dev/null -w '%{http_code}\n' --max-time 8 https://slack.com/api/auth.test           # ⚠️ 현재 000(도달 불가)
 ```
 → 변환은 끝났다. **다음은 실미션**이다 — Sam 에게 어느 아키타입을 먼저 돌릴지 확인하고(19종이 `draft`), Slack 도달성을 먼저 회복하라. 그 다음 과제는 **매처(C)**·**성장 지표 대시보드**(위 '다음 할 일' 5·6번).
