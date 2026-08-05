@@ -24,6 +24,8 @@ def _load(name):
     return mod
 
 
+source_balance = _load("source_balance")
+recency_check = _load("recency_check")
 prisma_counts = _load("prisma_counts")
 prisma_checklist = _load("prisma_checklist")
 doc_consistency = _load("doc_consistency")
