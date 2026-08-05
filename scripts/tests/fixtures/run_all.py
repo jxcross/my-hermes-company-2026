@@ -29,6 +29,7 @@ HARNESSES = [
     ("proposal", "Q 연구제안서"),
     ("rebuttal", "R 리뷰어 응답서"),
     ("outreach", "S 성과 발신"),
+    ("slide", "T 발표 슬라이드"),
 ]
 
 

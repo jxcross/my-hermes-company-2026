@@ -164,6 +164,10 @@ stages:
     verifier: true
     upstream: [6]
     gate:
+      # ⚠️ 한 stage 의 객관 게이트는 `--draft` 를 **하나만 공유**한다. `evidence_grade` 는
+      #    draft 를 콘텐츠 디렉터리로 읽고(상위에서 evidence 파일을 찾는다) 나머지 둘은
+      #    미션 루트로 읽는다 — 그래서 셋이 exit 2 로 막혀 있었다(docs/13 §5 · 실측).
+      #    게이트 쪽을 walk-up `mission_root` 로 고쳐 해결했으므로 draft 는 채널 디렉터리다.
       objective: [claim_provenance, channel_format, evidence_grade]
       llm: fact_checker_verdict
       draft: "reports/<MID>/_private/channels"

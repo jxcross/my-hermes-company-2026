@@ -79,8 +79,26 @@ def load_policy(path: str) -> dict:
 
 
 def mission_root(draft: str) -> str:
+    """미션 루트 — draft 가 하위 디렉터리여도 위로 올라가 `SCOPE.md` 가 있는 곳을 찾는다.
+
+    ⚠️ 처음에는 `draft` 가 곧 미션 루트라고 가정했다. 그런데 **한 stage 의 객관 게이트는
+       `--draft` 를 하나만 공유한다**(gate_keeper). 아키타입 S 의 stage 7·8 은 같은 stage 에
+       콘텐츠 기준 게이트(evidence_grade)와 미션루트 기준 게이트를 함께 뒀고 draft 가
+       `_private/channels` 였다 — **실측: 이 게이트가 exit 2 로 fail-closed 되어 실미션이
+       그 자리에서 막힌다**(legalforge 의 '항상 FAIL' 과 같은 계열 · docs/13 §5).
+       `legal_safety` 가 쓰던 walk-up 관용구로 두 규약 모두를 받는다."""
     p = os.path.abspath(draft)
-    return p if os.path.isdir(p) else os.path.dirname(p)
+    if not os.path.isdir(p):
+        p = os.path.dirname(p)
+    cur = p
+    for _ in range(4):
+        if os.path.isfile(os.path.join(cur, "SCOPE.md")):
+            return cur
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            break
+        cur = parent
+    return p
 
 
 def scope_value(root: str, key: str):

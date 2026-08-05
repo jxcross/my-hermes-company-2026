@@ -51,42 +51,42 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 
 ---
 
-## ‼️ 현재 진행 중 — harness 스킬 → 템플릿 변환 (`docs/13`)
+## ✅ 완료 — harness 스킬 → 템플릿 변환 20/20 (`docs/13`)
 
-**재개 지점은 [`docs/13 §6` 진행 대장](docs/13_skill_to_template_conversion.md)이다.** 새 세션은 거기서 다음 대상을 고르고 **§2 레시피 8단계**대로 변환한 뒤 **§6 대장 갱신 + 커밋**한다. 함정은 §5, agent→profile 매핑 사전은 §3.
+**변환은 2026-08-05 에 20/20 으로 끝났다.** [`docs/13`](docs/13_skill_to_template_conversion.md) 은 이제 **함정 사전(§5)·매핑 사전(§3)** 으로 쓴다 — 새 아키타입을 만들거나 게이트를 고칠 때 먼저 읽어라. **다음 단계는 실미션**(Sam 이 아키타입 순서를 정한다).
 
 | | 상태 |
 |---|---|
-| 변환 | **19/20** — A `trend-report`(**proven**) · B `academic-paper` · B' `systematic-review`(PRISMA) · D `webapp-build` · E `lit-monitor`(주기 실행 — 미션 간 지속 상태 `monitors/`) · F `patent-spec`(고지 강제) · G `policy-brief`(4포맷 동시 산출 + 3게이트) · H `legal-draft`(계약서·의견서·자문서·약관 + **개인정보 차단**) · I `code-docs`(코드베이스 문서화 — **AST 대조 검증**) · J `lecture-course`(강의 자료 — LO·Bloom 사슬) · K `code-migration`(마이그레이션 — **실제 코드 변경·git 대조**) · L `security-audit`(보안 감사 — **공개 범위 분리**) · M `agent-eval`(RAG/Agentic 시스템 구축·평가 — **평가셋·통계·재현성 3중 검증**, 산출물이 아키타입 B 의 입력) · N `dataset-release`(데이터셋 큐레이션·배포 — **개인정보·라이선스·공개범위 3중 강제**) · O `repro-package`(재현 패키지 — **실행 증거 요구·미검증 경로 공시 강제**) · P `sim-experiment`(DOE 파라미터 스윕 — **해시 재계산·입력 드리프트·민감도 불변식**) · Q `research-proposal`(연구비 제안서 — **추적성 사슬·예산 회계·자격 요건**, 기본 비공개) · R `reviewer-response`(리뷰어 응답서 — **원문 대조·원고 실변경 대조**, 기본 비공개) · S `outreach-content`(성과 발신 — **수치↔claim 값 대조·공개 근거 강제**). **A 외 전부 `draft`** |
-| **다음 변환 대상** | **slideforge**(8-stage · agents 10 · **마지막 1종**) |
+| 변환 | **20/20 ✅ 완료** — A `trend-report`(**proven**) · B `academic-paper` · B' `systematic-review`(PRISMA) · D `webapp-build` · E `lit-monitor`(주기 실행 — 미션 간 지속 상태 `monitors/`) · F `patent-spec`(고지 강제) · G `policy-brief`(4포맷 동시 산출 + 3게이트) · H `legal-draft`(계약서·의견서·자문서·약관 + **개인정보 차단**) · I `code-docs`(코드베이스 문서화 — **AST 대조 검증**) · J `lecture-course`(강의 자료 — LO·Bloom 사슬) · K `code-migration`(마이그레이션 — **실제 코드 변경·git 대조**) · L `security-audit`(보안 감사 — **공개 범위 분리**) · M `agent-eval`(RAG/Agentic 시스템 구축·평가 — **평가셋·통계·재현성 3중 검증**, 산출물이 아키타입 B 의 입력) · N `dataset-release`(데이터셋 큐레이션·배포 — **개인정보·라이선스·공개범위 3중 강제**) · O `repro-package`(재현 패키지 — **실행 증거 요구·미검증 경로 공시 강제**) · P `sim-experiment`(DOE 파라미터 스윕 — **해시 재계산·입력 드리프트·민감도 불변식**) · Q `research-proposal`(연구비 제안서 — **추적성 사슬·예산 회계·자격 요건**, 기본 비공개) · R `reviewer-response`(리뷰어 응답서 — **원문 대조·원고 실변경 대조**, 기본 비공개) · S `outreach-content`(성과 발신 — **수치↔claim 값 대조·공개 근거 강제**) · T `conference-slides`(학회 발표 슬라이드 — **발표 분량 양방향·번들 미치환 검출·재사용 4종**). **A 외 전부 `draft`** |
+| **다음 단계** | 변환 끝. **실미션을 하나씩**(Sam 이 순서를 정한다) · 그 전에 Slack 도달성 확인 |
 | profile | **11종** — 기존 8 + `architect`·`developer`·`tester`(아키타입 D 도입 시 신설) |
-| 객관 게이트 | **59종** `scripts/gates/` — recency·source_balance·doc_consistency·test_run·prisma_counts·prisma_checklist·seen_dedup·digest_shape·claim_consistency·patent_format·evidence_grade·stakeholder_coverage·format_consistency·clause_completeness·law_citation·legal_safety·symbol_truth·api_coverage·doc_links·objective_coverage·bloom_distribution·course_consistency·content_accessibility·atomic_commit·test_pass_rate·behavior_diff·owasp_coverage·cve_remediation·finding_completeness·secret_redaction·eval_set_quality·stat_significance·repro_determinism·run_completeness·pii_presence·license_compat·schema_conformance·datasheet_completeness·result_tolerance·env_consistency·install_evidence·reproduce_doc·bit_exact·solver_pin·doe_completeness·analysis_integrity·proposal_format·budget_integrity·call_alignment·proposal_traceability·comment_fidelity·comment_coverage·change_consistency·response_quality·claim_provenance·channel_format·outreach_tone·release_readiness |
+| 객관 게이트 | **62종** `scripts/gates/` — recency·source_balance·doc_consistency·test_run·prisma_counts·prisma_checklist·seen_dedup·digest_shape·claim_consistency·patent_format·evidence_grade·stakeholder_coverage·format_consistency·clause_completeness·law_citation·legal_safety·symbol_truth·api_coverage·doc_links·objective_coverage·bloom_distribution·course_consistency·content_accessibility·atomic_commit·test_pass_rate·behavior_diff·owasp_coverage·cve_remediation·finding_completeness·secret_redaction·eval_set_quality·stat_significance·repro_determinism·run_completeness·pii_presence·license_compat·schema_conformance·datasheet_completeness·result_tolerance·env_consistency·install_evidence·reproduce_doc·bit_exact·solver_pin·doe_completeness·analysis_integrity·proposal_format·budget_integrity·call_alignment·proposal_traceability·comment_fidelity·comment_coverage·change_consistency·response_quality·claim_provenance·channel_format·outreach_tone·release_readiness·**slide_budget·deck_format·diagram_integrity** |
 | 산출 도구 | 4종 `scripts/tools/` — bib_export·monitor_state·relevance_score·budget_build |
-| 검증 | `python3 scripts/lint_template.py --all` · 테스트 **237종**(29 템플릿 + 21 게이트키퍼 + 187 게이트) · **E2E 하네스 `scripts/tests/fixtures/run_all.py`(13종 430케이스)** |
+| 검증 | `python3 scripts/lint_template.py --all`(20/20) · 테스트 **251종**(29 템플릿 + 21 게이트키퍼 + 201 게이트) · **E2E 하네스 `scripts/tests/fixtures/run_all.py`(14종 510케이스)** |
 
 **Sam 지시:** 실미션은 **전체 변환을 마친 뒤 하나씩** 돌린다(변환 중에는 dry-run만).
 
 **게이트를 고쳤으면 E2E 하네스를 다시 돌려라** — `docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/fixtures/run_all.py'`. 단위 테스트만 통과하는 수정은 판정 경로 전체를 검증하지 않는다(`scripts/tests/fixtures/README.md`).
 
-**변환의 교훈(§5 요약):** 이식은 복사가 아니다. **19건 변환에서 19건 모두 결함이 나왔다** — 게이트 겹침(불변식 우회)·검증자 부재·느슨한 체크리스트·"동작하는 척"하는 게이트(한국어 정규식 붕괴)·**docstring은 검사한다는데 코드는 안 하는 게이트**·병렬 산출물 부재 미검출 등. **이식한 게이트는 반드시 일부러 깨뜨린 픽스처로 FAIL을 확인하라.** PASS만 보면 아무것도 측정하지 않는 게이트를 발견할 수 없다. **반대 방향도 확인하라** — legalforge 게이트 2종은 **어떤 입력에도 FAIL**하는 상태였다(정상 픽스처로 PASS 확인 필수). 또한 **이식 전에 우리가 이미 가진 게이트와 겹치는지 보라** — policyforge 하드게이트 3종 중 1종은 `source_balance`+`recency_check`와 같은 일이라 policy 블록으로 흡수했다.
+**변환의 교훈(§5 요약):** 이식은 복사가 아니다. **20건 변환에서 20건 모두 결함이 나왔다** — 게이트 겹침(불변식 우회)·검증자 부재·느슨한 체크리스트·"동작하는 척"하는 게이트(한국어 정규식 붕괴)·**docstring은 검사한다는데 코드는 안 하는 게이트**·병렬 산출물 부재 미검출 등. **이식한 게이트는 반드시 일부러 깨뜨린 픽스처로 FAIL을 확인하라.** PASS만 보면 아무것도 측정하지 않는 게이트를 발견할 수 없다. **반대 방향도 확인하라** — legalforge 게이트 2종은 **어떤 입력에도 FAIL**하는 상태였다(정상 픽스처로 PASS 확인 필수). 또한 **이식 전에 우리가 이미 가진 게이트와 겹치는지 보라** — policyforge 하드게이트 3종 중 1종은 `source_balance`+`recency_check`와 같은 일이라 policy 블록으로 흡수했다.
 
 **⚠️ 보안 미결(변함없음)**: 진단 중 `SLACK_BOT_TOKEN` 값이 세션 로그에 노출됨 → **재발급(rotate) 권장**(Slack 앱 Regenerate → `.env` 갱신 → `docker compose up -d --force-recreate hermes-solomon hermes-gatekeeper`).
 
-**세션 종료 상태(2026-08-05):** 변환 **19/20** — 이번 세션에 Q(연구제안서)·R(리뷰어 응답서)·S(성과 발신) 3종 추가. 미커밋 없음(`question_history.md` 는 Sam 소유 로그라 제외). **남은 것은 `slideforge` 1종.** Kanban 전부 done · 활성 게이트 0. ⚠️ Slack 여전히 도달 불가(`slack.com` 000 · `github.com` 200 = 네트워크성) — **변환 작업에는 영향 없고, 실미션 재개 전에 확인 필요.**
+**세션 종료 상태(2026-08-05 · 변환 완료):** **20/20** — 마지막 `slideforge` → 아키타입 T(학회 발표 슬라이드). 신설 게이트 3종(`slide_budget`·`deck_format`·`diagram_integrity`) + **재사용 4종**(`claim_provenance`·`evidence_grade`·`content_accessibility`·`release_readiness`) · E2E 80케이스. **부수 성과: 아키타입 S 의 실미션 결함을 고쳤다** — stage 7·8 의 객관 게이트 3종이 `--draft` 규약 불일치로 `exit 2` fail-closed 였다(하네스가 편한 draft 를 쓰고 있어 못 잡았다 · `docs/13 §5`). Kanban 전부 done · 활성 게이트 0. ⚠️ Slack 여전히 도달 불가(`slack.com` 000 · `github.com` 200 = 네트워크성) — **실미션 재개 전에 반드시 확인**.
 
 **새 세션 시작 시(3분 점검):**
 ```bash
-git log --oneline -6            # HEAD: outreachforge→S · 그 앞 rebuttalforge→R · proposalforge→Q · simforge→P
+git log --oneline -6            # HEAD: slideforge→T(20/20) · 그 앞 outreachforge→S · rebuttalforge→R
 docker compose ps               # hermes-solomon · hermes-gatekeeper 2개 Up
-docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/lint_template.py --all'   # 19/19
-docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/fixtures/run_all.py' # 13/13 하네스
+docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/lint_template.py --all'   # 20/20
+docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/fixtures/run_all.py' # 14/14 하네스
 curl -s -o /dev/null -w '%{http_code}\n' --max-time 8 https://slack.com/api/auth.test           # ⚠️ 현재 000(도달 불가)
 ```
-→ **`docs/13 §6` 대장**을 읽고 → **마지막 대상(slideforge #20)**을 **§2 레시피 8단계**대로 진행.
+→ 변환은 끝났다. **다음은 실미션**이다 — Sam 에게 어느 아키타입을 먼저 돌릴지 확인하고(19종이 `draft`), Slack 도달성을 먼저 회복하라. 그 다음 과제는 **매처(C)**·**성장 지표 대시보드**(위 '다음 할 일' 5·6번).
 
-**§2④ 를 먼저 하라(이번 세션의 가장 큰 교훈):** 게이트를 새로 만들기 전에 `ls scripts/gates/`(59종)로 **이미 가진 것과 하는 일이 겹치는지** 보라. 재사용은 *하는 일*이 같을 때지 *이름*이 비슷할 때가 아니다(O 는 2종 재사용 · P 는 이름이 비슷한 `run_completeness` 를 일부러 재사용하지 않았다). **Q 에서 `legal_safety` 에 연 `publication_policy` 축이 바로 다음 변환(R)에서 그대로 쓰였다 — 쌍둥이 게이트를 만드는 대신 축을 여는 판단의 실증이다.**
+**§2④ 를 먼저 하라(이번 세션의 가장 큰 교훈):** 게이트를 새로 만들기 전에 `ls scripts/gates/`(62종)로 **이미 가진 것과 하는 일이 겹치는지** 보라. 재사용은 *하는 일*이 같을 때지 *이름*이 비슷할 때가 아니다(O 는 2종 재사용 · P 는 이름이 비슷한 `run_completeness` 를 일부러 재사용하지 않았다). **Q 에서 `legal_safety` 에 연 `publication_policy` 축이 바로 다음 변환(R)에서 그대로 쓰였다 — 쌍둥이 게이트를 만드는 대신 축을 여는 판단의 실증이다.**
 
-**이식 시 1순위 확인 항목(공집합이 8회 반복됐다):** 입력이 **비었을 때** 그 게이트가 PASS 하는지부터 보라 — `len(s) <= 1` · `all(...)` · `not any(...)` · `glob` 결과 0건 · 항목 0개는 전부 공집합에서 참이다. **그리고 아키타입 Q 에서 새 모양이 나왔다 — 검사 대상이 있는데 측정값이 0 인 경우다**(빈 섹션 파일 5개 + 빈 간트가 '규격 통과'). **분량·개수를 재는 게이트에는 상한과 하한을 짝으로 둬라.**
+**이식 시 1순위 확인 항목(공집합이 11회 반복됐다):** 입력이 **비었을 때** 그 게이트가 PASS 하는지부터 보라 — `len(s) <= 1` · `all(...)` · `not any(...)` · `glob` 결과 0건 · 항목 0개는 전부 공집합에서 참이다. **그리고 아키타입 Q 에서 새 모양이 나왔다 — 검사 대상이 있는데 측정값이 0 인 경우다**(빈 섹션 파일 5개 + 빈 간트가 '규격 통과'). **분량·개수를 재는 게이트에는 상한과 하한을 짝으로 둬라.**
 
 **⚠️ 아키타입 K(`code-migration`)는 미션 밖의 실제 코드를 바꾸고 커밋한다.** 대상 저장소는 `HERMES_WRITE_SAFE_ROOT` 안이어야 하고, **`/work/company` 자신을 대상으로 삼으면 안 된다**(파이프라인이 자기 코드를 고치게 된다). 코드 변경 개시 직전에 Sam 승인 게이트가 있다.
 
@@ -120,5 +120,12 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 8 https://slack.com/api/auth
 상태를 발신일과 대조한다 — **`patent_status: planned`(출원 예정)면 막는다**(공개하면
 신규성을 잃는다 · 아키타입 F 와 충돌). 커밋 자체가 공개이므로 `repo_commit` 은 원자료가
 이미 공개된 경우(arXiv·DOI·릴리스)에만 허용한다. **우리는 게시하지 않는다** — 사람이 올린다.
+
+**⚠️ 아키타입 T(`conference-slides`)에서 배운 것 — 한 stage 의 객관 게이트는 `--draft` 를
+**하나만 공유한다**.** 게이트마다 draft 해석이 다르면(미션 루트 / 콘텐츠 디렉터리) 그 조합은
+실미션에서 `exit 2` 로 막힌다 — 아키타입 S 의 stage 7·8 이 실제로 그랬고 하네스는 53/53
+이었다(하네스가 게이트마다 편한 draft 를 골라 줬기 때문이다). **새 게이트는 walk-up
+`mission_root`**(`SCOPE.md` 를 만날 때까지 위로)로 쓰고, **하네스의 draft 는 템플릿이 선언한
+값을 그대로** 옮겨라. 상세 `docs/13 §5`.
 
 **⚠️ 이 저장소는 PUBLIC 이다.** Deliver 단계가 `reports/` 를 커밋·push 하므로 **미션 산출물에 민감 정보가 남으면 그대로 공개된다.** 아키타입 H(법률 문서)는 초안을 플레이스홀더로 쓰고 `legal_safety` 가 강제한다(실제 개인정보는 `_personal/`). 아키타입 L(보안 감사)은 **취약점 상세를 `_private/`(gitignore)에, 공유용 요약만 `report/`에** 두고 `secret_redaction` 이 커밋 대상을 검사한다.

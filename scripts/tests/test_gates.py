@@ -84,6 +84,10 @@ channel_format = _load("channel_format")
 outreach_tone = _load("outreach_tone")
 release_readiness = _load("release_readiness")
 
+slide_budget = _load("slide_budget")
+deck_format = _load("deck_format")
+diagram_integrity = _load("diagram_integrity")
+
 
 # ── prisma_counts ────────────────────────────────────────────────────────
 def test_counts_parse():
@@ -1504,6 +1508,102 @@ def test_visuals_block_requires_source_and_license():
     assert got == [{"id": "v1", "source": "fig.png", "license": "own"}]
     open(p, "w", encoding="utf-8").write("# 그림만 있고 블록이 없다\n")
     assert release_readiness.parse_visuals(p) is None
+
+
+# ── 아키타입 T: slide_budget ─────────────────────────────────────────────
+def test_note_placeholder_is_substring_not_equality():
+    """원본은 `body.lower() in ("tbd","todo","...")` 완전 일치라 `TBD.` 가 통과했다."""
+    terms = slide_budget.DEFAULT_PLACEHOLDERS
+    assert slide_budget.is_placeholder("TBD.", terms) == "TBD"
+    assert slide_budget.is_placeholder("작성 예정", terms) == "작성 예정"
+    assert slide_budget.is_placeholder("이 장에서는 배경을 짧게 말한다", terms) is None
+
+
+def test_speaker_block_body_extracted():
+    text = "## 제목\n\n- 불릿\n\n<!-- speaker:\n할 말이다\n-->\n"
+    assert slide_budget.note_body(text) == "할 말이다"
+    assert slide_budget.note_body("## 제목\n- 불릿\n") is None
+
+
+def test_note_items_recognize_korean_and_english_headings():
+    text = "## Slide 3: 제목\n본문\n### 슬라이드 4 제목\n본문\n## Q&A 예상 질문\n"
+    got = {int(m.group(1)) for m in slide_budget.NOTE_ITEM_RE.finditer(text)}
+    assert got == {3, 4}, got          # Q&A 절은 슬라이드 항목이 아니다
+
+
+def test_slides_block_parsed_with_fields():
+    got = slide_budget.parse_block(
+        "```slides\n- id: 1\n  section: intro\n  time_min: 0.8\n```\n",
+        slide_budget.SLIDE_BLOCK_RE)
+    assert got == [{"id": "1", "section": "intro", "time_min": "0.8"}]
+
+
+# ── 아키타입 T: deck_format ──────────────────────────────────────────────
+def test_body_excludes_speaker_notes_and_frontmatter():
+    text = ("---\nslide_number: 1\n---\n\n## 제목\n\n- 하나\n- 둘\n\n"
+            "<!-- speaker:\n노트에도 - 불릿처럼 보이는 줄이 있다\n-->\n")
+    body = deck_format.body_of(text)
+    assert "slide_number" not in body and "노트에도" not in body
+    assert deck_format.count_bullets(body) == 2
+
+
+def test_visual_counts_image_and_mermaid_placeholder():
+    body = "![설명](a.png)\n\n{{mermaid:d1}}\n"
+    assert deck_format.count_visuals(body) == 2
+
+
+def test_deck_chunks_exclude_deck_frontmatter():
+    deck = "---\nmarp: true\ntheme: default\n---\n\n## 1\n\n---\n\n## 2\n"
+    assert len(deck_format.deck_slide_chunks(deck)) == 2
+
+
+# ── 아키타입 T: diagram_integrity ────────────────────────────────────────
+def test_bracket_check_is_a_stack_not_a_tally():
+    """원본은 문자 총계를 세어 `A[Input) --> B(Encoder]` 를 통과시켰다(실측)."""
+    ok = ["flowchart LR", "    A[입력] --> B(인코더)"]
+    bad = ["flowchart LR", "    A[입력) --> B(인코더]"]
+    assert diagram_integrity.bracket_issue(ok) is None
+    assert diagram_integrity.bracket_issue(bad) is not None
+
+
+def test_er_diagram_cardinality_is_not_a_bracket():
+    """`||--o{` 는 괄호가 아니다 — 정상 erDiagram 을 반려하면 안 된다."""
+    lines = ["erDiagram", "    CUSTOMER ||--o{ ORDER : places"]
+    assert diagram_integrity.bracket_issue(lines) is None
+
+
+def test_quoted_label_parens_are_ignored():
+    lines = ["flowchart LR", '    A["설명 (괄호 포함)"] --> B[출력]']
+    assert diagram_integrity.bracket_issue(lines) is None
+
+
+def test_node_count_only_for_flowchart():
+    lines = ["flowchart LR", "    A[a] --> B[b]", "    B --> C[c]"]
+    assert diagram_integrity.count_nodes("flowchart", lines) == 3
+    assert diagram_integrity.count_nodes("sequenceDiagram", lines) == 0
+
+
+def test_empty_mermaid_is_not_valid():
+    issues = diagram_integrity.lint_mermaid("", diagram_integrity.DEFAULT_TYPES, 8, 2)
+    assert issues and "빈 파일" in issues[0]
+
+
+def test_source_ids_read_evidence_and_figures_blocks():
+    import tempfile, os as _os
+    p = _os.path.join(tempfile.mkdtemp(), "source.md")
+    open(p, "w", encoding="utf-8").write(
+        "```evidence\n- id: e1\n  grade: verified\n- id: e2\n```\n")
+    assert diagram_integrity.known_source_ids(p) == {"e1", "e2"}
+
+
+# ── 아키타입 T: claim_provenance 의 citation_scope 축 ─────────────────────
+def test_file_scope_is_one_segment():
+    """슬라이드는 파일 하나가 한 화면이다 — 제목의 수치와 불릿의 인용이 빈 줄로 갈린다."""
+    text = "## 3.2배 빠른 추론\n\n- 속도가 개선됐다 [e3]\n"
+    para = claim_provenance.segments(text)
+    assert claim_provenance.citations_at(para, text.index("3.2")) == set()
+    whole = [(0, len(text), claim_provenance.cited_ids(text))]
+    assert claim_provenance.citations_at(whole, text.index("3.2")) == {"e3"}
 
 
 if __name__ == "__main__":

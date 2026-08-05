@@ -51,7 +51,12 @@ r"""
   source_dir (기본 _private/source) · min_claims (기본 3)
   require_locator (기본 true) · require_value_in_source (기본 true)
   superlative_patterns · number_patterns
+  citation_scope (기본 paragraph · 다른 값: file)
   ※ 인용은 **수치가 있는 문단 안**에 있어야 한다(창 방식은 옆 트윗의 인용을 끌어온다)
+  ※ `citation_scope: file` — **파일 하나가 곧 의미 단위**인 산출물용(아키타입 T 의 슬라이드).
+    슬라이드는 제목의 수치와 불릿의 인용이 빈 줄로 갈리지만 청중에게는 **한 화면**이다.
+    문단을 단위로 삼은 이유(구조 단위로 묶는다)가 여기서는 파일을 가리킨다. 기본값은
+    그대로라 아키타입 S 의 동작은 바뀌지 않는다.
 
 exit: 0 PASS · 1 FAIL · 2 usage/입력없음(fail-closed)
 """
@@ -102,8 +107,26 @@ def load_policy(path: str) -> dict:
 
 
 def mission_root(draft: str) -> str:
+    """미션 루트 — draft 가 하위 디렉터리여도 위로 올라가 `SCOPE.md` 가 있는 곳을 찾는다.
+
+    ⚠️ 처음에는 `draft` 가 곧 미션 루트라고 가정했다. 그런데 **한 stage 의 객관 게이트는
+       `--draft` 를 하나만 공유한다**(gate_keeper). 아키타입 S 의 stage 7·8 은 같은 stage 에
+       콘텐츠 기준 게이트(evidence_grade)와 미션루트 기준 게이트를 함께 뒀고 draft 가
+       `_private/channels` 였다 — **실측: 이 게이트가 exit 2 로 fail-closed 되어 실미션이
+       그 자리에서 막힌다**(legalforge 의 '항상 FAIL' 과 같은 계열 · docs/13 §5).
+       `legal_safety` 가 쓰던 walk-up 관용구로 두 규약 모두를 받는다."""
     p = os.path.abspath(draft)
-    return p if os.path.isdir(p) else os.path.dirname(p)
+    if not os.path.isdir(p):
+        p = os.path.dirname(p)
+    cur = p
+    for _ in range(4):
+        if os.path.isfile(os.path.join(cur, "SCOPE.md")):
+            return cur
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            break
+        cur = parent
+    return p
 
 
 def parse_claims(path: str) -> list[dict] | None:
@@ -214,6 +237,11 @@ def main() -> int:  # noqa: C901
     min_claims = int(policy.get("min_claims", 3))
     num_pats = policy.get("number_patterns") or DEFAULT_NUMBER
     sup_pats = policy.get("superlative_patterns") or DEFAULT_SUPERLATIVE
+    scope_unit = str(policy.get("citation_scope") or "paragraph").strip().lower()
+    if scope_unit not in ("paragraph", "file"):
+        print(f"FAIL(usage): 알 수 없는 citation_scope '{scope_unit}' — fail-closed",
+              file=sys.stderr)
+        return 2
 
     print(f"모드={mode} · claim {len(claims)}건 (하한 {min_claims}) · 원자료 {len(raw)}자")
     fail = False
@@ -275,7 +303,9 @@ def main() -> int:  # noqa: C901
         text = re.sub(r"```.*?```", " ", open(p, encoding="utf-8").read(), flags=re.DOTALL)
         # URL 안의 숫자(arxiv id·버전)는 주장이 아니다 — 자릿수를 유지해 위치를 보존한다
         text = re.sub(r"https?://\S+", lambda m: "_" * len(m.group(0)), text)
-        segs = segments(text)
+        # 의미 단위 — 문단(기본) 또는 파일 전체(슬라이드처럼 파일 하나가 한 화면인 산출물)
+        segs = ([(0, len(text), cited_ids(text))] if scope_unit == "file"
+                else segments(text))
         # 환각 인용
         for cid in cited_ids(text):
             if cid not in known:

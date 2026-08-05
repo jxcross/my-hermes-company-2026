@@ -32,7 +32,8 @@
 아직 만들어지지 않은 산출물(Deliver 에서 조립되는 번들)의 위치를 stage 10 게이트가 요구하던 것과
 원문 포착률 하한이 낮아 **지적 하나를 빠뜨려도 통과**하던 것(R — 둘 다 정상 픽스처가 잡았다) ·
 인용을 '수치 주변 220자' 창으로 찾아 **옆 트윗의 인용**이 창에 들어오던 것과, 단위 없는 소수
-(정확도 0.873)를 수치로 세지 않아 **발신물에서 가장 흔한 수치를 통째로 놓치던** 것(S).
+(정확도 0.873)를 수치로 세지 않아 **발신물에서 가장 흔한 수치를 통째로 놓치던** 것(S) ·
+사이드카가 선언한 `used_in_slide` 를 **아무도 읽지 않던** 것(T — 내가 목차 선언만 대조하고 사이드카 선언은 요구만 했다. 죽은 변수를 잡겠다며 만든 게이트가 죽은 필드를 만들고 있었다).
 
 ## 실행
 
@@ -61,6 +62,16 @@ docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/fixt
 | `dataset.py` | N 데이터셋 배포 | pii_presence · license_compat · schema_conformance · datasheet_completeness · source_balance | 42 |
 | `repro.py` | O 재현 패키지 | result_tolerance · env_consistency · install_evidence · reproduce_doc · license_compat · secret_redaction | 41 |
 | `sim.py` | P 시뮬레이션 실험 | bit_exact · solver_pin · doe_completeness · analysis_integrity · secret_redaction | 43 |
+| `proposal.py` | Q 연구제안서 | proposal_format · budget_integrity · call_alignment · proposal_traceability · legal_safety · source_balance · recency_check | 62 |
+| `rebuttal.py` | R 리뷰어 응답서 | comment_fidelity · comment_coverage · change_consistency · response_quality · legal_safety | 43 |
+| `outreach.py` | S 성과 발신 | claim_provenance · channel_format · outreach_tone · release_readiness · evidence_grade · secret_redaction | 53 |
+| `slide.py` | T 발표 슬라이드 | slide_budget · deck_format · diagram_integrity · claim_provenance · evidence_grade · content_accessibility · release_readiness | 80 |
+
+**하네스는 템플릿이 선언한 `gate.draft` 를 그대로 써라.** 한 stage 의 객관 게이트는
+`--draft` 를 **하나만 공유**한다(gate_keeper). 하네스가 게이트마다 편한 draft 를 골라 주면
+**실미션에서만 깨지는 조합**을 영영 발견하지 못한다 — 아키타입 S 의 stage 7·8 이 실제로
+그랬다(게이트 3종이 `exit 2` fail-closed 로 파이프라인을 막고 있었는데 하네스는 53/53 이었다 ·
+docs/13 §5). `slide.py` 의 `DRAFTS` 는 템플릿 값을 그대로 옮겨 적었다.
 
 **게이트를 고칠 때는 해당 하네스를 반드시 다시 돌려라.** 단위 테스트만 통과하는 수정은
 판정 경로 전체를 검증하지 않는다.

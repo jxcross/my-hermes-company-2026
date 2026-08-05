@@ -25,6 +25,27 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#45 — slideforge → 아키타입 T(학회 발표 슬라이드) · <b>변환 20/20 완료</b> · 재사용 4종 + 아키타입 S 실미션 결함 수정</h2>
+    <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "docs/13 §6 진행 대장 확인하고 slideforge 변환 진행하라."(진행 대장 #20 · 마지막)</div>
+    <div class="label">작업 단계:</div>
+    <ol class="steps">
+      <li><b>원본 하드게이트를 직접 돌려 결함 6건을 실측</b>. 가장 큰 것 셋: <b>20분 발표에 슬라이드 2장이 PASS</b>(<code>estimated &lt;= talk_time</code> — 상한만 잰다. "한도 이하"는 0에서 가장 잘 만족된다) · <b>분모를 산출물이 정한다</b>(<code>min_per_slide: 0.1</code> 이라 적으면 15분 발표에 60장이 PASS) · <b><code>--notes</code> 가 죽은 인자</b>(<code>required=True</code> 로 받아 놓고 코드가 한 번도 참조하지 않는다 — 존재하지 않는 경로를 줘도 '노트 커버리지 통과'). 그 밖에: 노트 플레이스홀더 필터가 완전 일치라 <code>TBD.</code> 와 <b>작성 예정</b>이 통과 · <b>.mmd 가 0개면 PASS</b>(공집합 열한 번째) · 괄호 균형을 <b>파일 총계</b>로 세어 <code>A[입력) --&gt; B(인코더]</code> 가 통과.</li>
+      <li><b>게이트 3종 신설·이식</b>: <code>slide_budget</code>(원본 하드게이트 이식 — <b>하한 신설</b> · 분모를 SCOPE(Sam 승인)와 정책으로 이관 · <b>죽은 <code>--notes</code> 를 실제 검사로</b> · 선언 목록 대비 존재 · plan/final 두 모드) · <code>diagram_integrity</code>(mermaid 린터 이식 — <b>괄호를 스택으로</b> · 선언↔산출↔슬라이드 <b>삼각 대조</b> · 사이드카·<code>source_basis</code> 실재) · <code>deck_format</code>(<b>신설</b> — 원본은 "≤5 bullets 또는 1 figure"를 지시로만 적어 두고 검사하지 않는다 + <b>번들 미치환 placeholder</b> 검출: <code>marp_export</code> 가 남기는 <code>&lt;!-- missing mermaid --&gt;</code> 주석은 Marp 가 렌더하지 않아 <b>발표장에서 빈 슬라이드가 뜬다</b>).</li>
+      <li><b>♻️ 재사용 4종 — 지금까지 중 가장 많다</b>: <code>claim_provenance</code>(S) · <code>evidence_grade</code>(G) · <code>content_accessibility</code>(J — <b>원래 강의 슬라이드용 게이트라 하는 일이 그대로 같다</b>) · <code>release_readiness</code>(S — <b>학회 발표도 공개다</b>. <code>launch_date</code>=발표일이고 <b>출원 예정 발명이면 막는다</b>).</li>
+      <li><b>새 정책 축 하나</b>: <code>claim_provenance</code> 에 <code>citation_scope: paragraph|file</code>. 슬라이드는 <b>파일 하나가 한 화면</b>이라 제목의 수치와 불릿의 인용이 빈 줄로 갈려도 같은 장면이다(문단 단위로 재면 정상 슬라이드가 반려된다 — 실측). 기본값은 그대로라 S 는 무영향(53/53 확인). <b>축을 여는 판단은 이번이 세 번째</b>(M scan_extensions · Q publication_policy · T citation_scope).</li>
+      <li><b>★ 부수 성과 — 아키타입 S 의 실미션 결함을 발견·수정</b>: <b>한 stage 의 객관 게이트는 <code>--draft</code> 를 하나만 공유한다</b>(gate_keeper). S 의 stage 7·8 은 draft 해석이 다른 게이트(미션루트 / 콘텐츠 디렉터리)를 한 stage 에 묶어 <b>게이트 3종이 <code>exit 2</code> fail-closed 로 파이프라인을 막고 있었다</b>(실측). 그런데 하네스는 53/53 이었다 — <b>하네스가 게이트마다 편한 draft 를 골라 줬기 때문</b>이다. → 미션루트 규약 게이트 3종을 <code>legal_safety</code> 의 <b>walk-up <code>mission_root</code></b>(SCOPE.md 를 만날 때까지 위로)로 고치고, 하네스의 draft 는 <b>템플릿 선언값을 그대로</b> 쓰도록 규약을 바꿨다.</li>
+      <li><b>픽스처가 자체 결함 1건을 잡았다</b>: <code>diagram_integrity</code> 가 사이드카에 <code>used_in_slide:</code> 를 <b>요구해 놓고 목차 선언만 대조</b>했다 — 사이드카의 그 필드는 아무도 읽지 않는 <b>죽은 필드</b>였다. 죽은 변수를 잡겠다며 만든 게이트가 죽은 필드를 만들고 있었다.</li>
+      <li><b>신규 profile 0개 — 8연속</b>(I·K·L·M·N·O·P·T). 대장의 "예상 있음(시각화)"은 빗나갔다: 다이어그램 설계는 <code>architect</code>(<code>diagrammer</code> 별칭이 이미 거기 있었다), 발표자 노트는 <code>writer</code>. <b>profile 11종이 20개 스킬 전부를 받아냈다.</b></li>
+      <li><b>15단계 파이프라인</b>(Q 와 함께 최장) — 설계 검증(stage 5)을 <b>집필 전</b>에 뒀다(아홉 번째 적용). 검증 4지점 · Sam 게이트 3(Scoping · 집필 개시 · Deliver) · 병렬 2지점(다이어그램 per_item · 섹션 5워커).</li>
+      <li><b>E2E 하네스 <code>slide.py</code> 80케이스</b>(정상 9 + 결함 60 + 원본 결함 회귀방어 6 + 설계 회귀방어 5) — 단일 하네스로 최대. 설계 방어에는 <b>정상 erDiagram 의 <code>||--o{</code> 카디널리티를 괄호로 오독하지 않는가</b>, <b>다이어그램 0개를 명시 선언한 미션이 통과하는가</b>가 포함된다.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      <code>templates/conference-slides.yaml</code> · 게이트 3종 신설(<b>62종</b>) · <code>scripts/tests/fixtures/slide.py</code>(80케이스) · <code>docs/13</code> §3 매핑 사전 · §5 함정 3건 · §6 대장 <b>20/20 완료</b> · §7·§8 갱신. 검증: 린터 <b>20/20</b> · 단위 테스트 <b>251종</b>(29 템플릿 + 21 게이트키퍼 + 201 게이트) · <b>E2E 14종 510케이스 전건 통과</b> · <code>reports/M-2026-TEST/</code> 미생성(비파괴). <b>변환 20건에서 20건 모두 원본에 결함이 있었다.</b> 다음 단계는 변환이 아니라 <b>실미션</b>(Sam 이 아키타입 순서를 정한다) — 그 전에 Slack 도달성 회복 필요.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#44 — 2026-08-05 세션 핸드오프 (변환 19/20 · 아키타입 Q·R·S 3종 추가 · <b>slideforge 1종만 남았다</b>)</h2>
     <div class="meta">2026-08-05 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "다음 세션에서 이어서 하겠다. 관련 파일 업데이트 및 다음 세션의 첫 질문을 알려달라."</div>

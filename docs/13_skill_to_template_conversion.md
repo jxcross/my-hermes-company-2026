@@ -1,6 +1,6 @@
 # 13. harness 스킬 → 템플릿 YAML 변환 — 작업 절차서
 
-> 작성일: 2026-08-04(갱신 2026-08-05) · 상태: **작업 중(19/20 — A·B·B'·D·E·F·G·H·I·J·K·L·M·N·O·P·Q·R·S 전부 실행가능, 라이브 미션은 A만)** · 성격: working doc(재개 가능)
+> 작성일: 2026-08-04(갱신 2026-08-05) · 상태: **완료(20/20 — A·B·B'·D·E·F·G·H·I·J·K·L·M·N·O·P·Q·R·S·T 전부 실행가능, 라이브 미션은 A만)** · 성격: working doc(재개 가능)
 > 관련: [`12_pipeline_negotiation.md`](./12_pipeline_negotiation.md)(§8 phasing 2b) · [`11_template_driven_missions.md`](./11_template_driven_missions.md)(템플릿 스키마 §3.A·§3.B) · 소스: 형제 repo `other_projects/harness-templates`
 >
 > **⚠️ 이 문서는 여러 세션에 걸쳐 이어서 작업하기 위한 것이다.** 새 세션은 **§6 진행 대장**에서 다음 대상을 고르고 → **§2 레시피**대로 변환하고 → **§6 갱신 + 커밋**하면 된다. 재개 방법은 §8.
@@ -55,7 +55,7 @@ agents는 템플릿으로 옮기는 것이 아니다. harness의 agent는 **하�
 어떤 입력에도 FAIL 하는 상태**였다(§5). 정상 픽스처로 **PASS 가 나오는지부터** 확인하라 —
 "깨뜨린 픽스처로 FAIL 확인"의 짝이다.
 
-현재 보유 게이트(59종): `recency_check` · `source_balance` · `doc_consistency` · `test_run` ·
+현재 보유 게이트(62종): `recency_check` · `source_balance` · `doc_consistency` · `test_run` ·
 `prisma_counts` · `prisma_checklist` · `seen_dedup` · `digest_shape` · `claim_consistency` ·
 `patent_format` · `evidence_grade` · `stakeholder_coverage` · `format_consistency` ·
 `clause_completeness` · `law_citation` · `legal_safety` · `symbol_truth` · `api_coverage` ·
@@ -68,7 +68,8 @@ agents는 템플릿으로 옮기는 것이 아니다. harness의 agent는 **하�
 `bit_exact` · `solver_pin` · `doe_completeness` · `analysis_integrity` ·
 `proposal_format` · `budget_integrity` · `call_alignment` · `proposal_traceability` ·
 `comment_fidelity` · `comment_coverage` · `change_consistency` · `response_quality` ·
-`claim_provenance` · `channel_format` · `outreach_tone` · `release_readiness`.
+`claim_provenance` · `channel_format` · `outreach_tone` · `release_readiness` ·
+`slide_budget` · `deck_format` · `diagram_integrity`.
 산출 도구는 `scripts/tools/`: `bib_export` · `monitor_state` · `relevance_score` · `budget_build`.
 회귀 테스트는 `scripts/tests/test_gates.py`.
 
@@ -95,15 +96,15 @@ docker exec hermes-solomon sh -c 'cd /work/company && \
 
 | 우리 profile | 동사 신호 | tools 신호 | 확인된 별칭 |
 |---|---|---|---|
-| `default` (Solomon) | clarify · scope-interview · finalize · deliver · orchestrate | `AskUserQuestion` | `paperforge-clarify-topic` · `paperforge-finalize` · `trendforge-clarify-scope` · `trendforge-finalize` · `reviewforge-{clarify-question,finalize}` · `litmonitor-seed-config` · `patentforge-{clarify-application,finalize}` · `policyforge-{clarify-issue,finalize}` · `legalforge-{clarify-doc,finalize}` · `docforge-{clarify-scope,finalize}` · `lectureforge-{clarify-course,finalize}` · `migrateforge-{clarify-migration,finalize}` · `secforge-{clarify-scope,finalize}` · `agentforge-{clarify-task,finalize}` · `datasetforge-{clarify-intent,finalize}` · `reproforge-{clarify-target,finalize}` · `simforge-{clarify-hypothesis,finalize}` · `proposalforge-{clarify-call,finalize}` · `rebuttalforge-{clarify-context,finalize}` · `outreachforge-{clarify-scope,finalize}` |
+| `default` (Solomon) | clarify · scope-interview · finalize · deliver · orchestrate | `AskUserQuestion` | `paperforge-clarify-topic` · `paperforge-finalize` · `trendforge-clarify-scope` · `trendforge-finalize` · `reviewforge-{clarify-question,finalize}` · `litmonitor-seed-config` · `patentforge-{clarify-application,finalize}` · `policyforge-{clarify-issue,finalize}` · `legalforge-{clarify-doc,finalize}` · `docforge-{clarify-scope,finalize}` · `lectureforge-{clarify-course,finalize}` · `migrateforge-{clarify-migration,finalize}` · `secforge-{clarify-scope,finalize}` · `agentforge-{clarify-task,finalize}` · `datasetforge-{clarify-intent,finalize}` · `reproforge-{clarify-target,finalize}` · `simforge-{clarify-hypothesis,finalize}` · `proposalforge-{clarify-call,finalize}` · `rebuttalforge-{clarify-context,finalize}` · `outreachforge-{clarify-scope,finalize}` · `slideforge-{clarify-context,finalize}` |
 | `scout` | gather · ingest · collect · scan · search · survey · **map(외부 사실 조사)** | `WebSearch` `WebFetch` | `paperforge-scope-survey` · `paperforge-gather-{arxiv,web,recent}` · `trendforge-landscape-survey` · `trendforge-gather-{academic,industry,patents,news}` · `reviewforge-{search-protocol,search-database}` · `litmonitor-scan-{arxiv,scholar,openreview}` · `patentforge-prior-art-{academic,patent}-scan` · `policyforge-context-mapping` · `legalforge-legal-research` · `secforge-dep-cve-scanner` · `agentforge-corpus-prep`(**수집 부분** — 정규화·청킹은 `curator` 로 갈랐다) · `proposalforge-{academic-scan,funded-scan,patent-scan}`(갈래가 달라도 '출처를 모은다' 는 계약은 같다 = 워커) |
-| `reader` | read-extract · analyze · classify · appraise · ingest · **grade** | — | `paperforge-read-extract` · `trendforge-read-extract` · `reviewforge-{data-extract,quality-appraise}` · `patentforge-ingest-invention` · `policyforge-literature-ingest` · `legalforge-ingest-context` · `docforge-{ingest-codebase,parse-symbols}`(**코드를 읽는 것도 reader 다**) · `lectureforge-ingest-source` · `migrateforge-ingest-codebase` · `secforge-{ingest-target,owasp-scanner,cwe-scanner,secrets-scanner}`(**패턴 스캐너도 reader 다**) · `agentforge-eval-set-build`(코퍼스에서 gold Q-A 를 **추출**한다 — 지어내면 안 되는 것이 이 역할의 규율이다) · `datasetforge-{ingest-source,license-scan,pii-scan}`(**라이선스 등급 판정도 `grade` 다**) · `reproforge-{ingest-source,env-detect}` · `proposalforge-context-gather` · `rebuttalforge-parse-reviews`(리뷰어 원문을 코멘트로 **분해**한다) · `outreachforge-ingest-source` |
+| `reader` | read-extract · analyze · classify · appraise · ingest · **grade** | — | `paperforge-read-extract` · `trendforge-read-extract` · `reviewforge-{data-extract,quality-appraise}` · `patentforge-ingest-invention` · `policyforge-literature-ingest` · `legalforge-ingest-context` · `docforge-{ingest-codebase,parse-symbols}`(**코드를 읽는 것도 reader 다**) · `lectureforge-ingest-source` · `migrateforge-ingest-codebase` · `secforge-{ingest-target,owasp-scanner,cwe-scanner,secrets-scanner}`(**패턴 스캐너도 reader 다**) · `agentforge-eval-set-build`(코퍼스에서 gold Q-A 를 **추출**한다 — 지어내면 안 되는 것이 이 역할의 규율이다) · `datasetforge-{ingest-source,license-scan,pii-scan}`(**라이선스 등급 판정도 `grade` 다**) · `reproforge-{ingest-source,env-detect}` · `proposalforge-context-gather` · `rebuttalforge-parse-reviews`(리뷰어 원문을 코멘트로 **분해**한다) · `outreachforge-ingest-source` · `slideforge-ingest-source` |
 | `curator` | dedup · filter · screen · normalize · cite-pack · cross-link | — | `reviewforge-prisma-screening` · `litmonitor-relevance-filter` · `docforge-cross-linker`(동사 신호에 `cross-link` 가 이미 있었다) · `lectureforge-accessibility-pass`(읽고 마는 감사가 아니라 **정비**로 만들었다) · `agentforge-corpus-prep`(**정규화·중복제거·청킹 부분**) · `outreachforge-{visual-suggest,cite-pack}`(**`cite-pack` 은 이 profile 의 verb 목록에 이미 있었다**) · `rebuttalforge-categorize`(분류에 더해 **리뷰어 간 중복 지적을 상호 연결**한다 — cross-link 가 이 profile 의 verb 다) · `datasetforge-clean-normalize`(dedup·normalize 가 이 profile 의 verb 집합 그대로다) · *(다른 스킬엔 대개 없어 우리가 보강)* |
-| `synthesizer` | synthesize · outline · structure · summarize · gap-analysis · **options-design** | — | `paperforge-synthesize-outline` · `trendforge-synthesize-trends` · `reviewforge-synthesize` · `litmonitor-action-suggest` · `outreachforge-hook-design`(후킹은 요약의 한 형태다) · `proposalforge-{gap-synthesizer,narrative-design}` · `simforge-analyze`(출력 통합 + 민감도 종합) · `patentforge-gap-analyzer` · `policyforge-{evidence-synthesize,options-design}` · `legalforge-{structure-design,risk-disclosure}` · `lectureforge-{learning-objectives,course-structure,assessment-design}` · `secforge-severity-classifier` |
-| `writer` | draft · write · compose · section · adapt · **apply-changes** | — | `outreachforge-{twitter,medium,readme}-writer`(채널이 달라도 '같은 주장을 그 규격으로 쓴다' 는 계약은 같다 = 워커) · `rebuttalforge-{address-comment,apply-changes,cover-letter}`(**원고에 수정을 반영하는 것도 `writer` 다** — 코드가 아니라 산문이므로 `developer` 가 아니다) · `proposalforge-section-writer` · `datasetforge-datasheet-writer` · `paperforge-draft-section` · `trendforge-draft-section` · `litmonitor-summarize` · `patentforge-{specification-writer,jurisdiction-adapter}` · `policyforge-{brief,report,memo,infographic}-writer` · `legalforge-{contract,opinion,advisory,terms}-writer` · `docforge-{api-ref,architecture,adr,tutorial}-writer` · `lectureforge-{syllabus,slides,assignments,quiz}-writer` |
-| `fact-checker` | fact-check · verify · evidence · recency · citation · **grade-check** | `Bash`(게이트 스크립트 실행) | `paperforge-fact-check` · `trendforge-{evidence-critic,recency-check}` · `reviewforge-evidence-coverage-check` · `patentforge-{claim-consistency-check,novelty-comparison-check}` · `policyforge-{evidence-grade-check,source-diversity-check}` · `legalforge-law-citation-check` · `docforge-accuracy-check` · `lectureforge-{objective-coverage-check,bloom-distribution-check}` · `migrateforge-{test-pass-rate-check,regression-check}` · `secforge-{critical-zero-check,cve-patched-check}` · `agentforge-{evidence-critic,stat-significance-check,reproducibility-check,eval-quality-check}` · `datasetforge-pii-license-recheck` · `reproforge-result-tolerance-check` · `simforge-{bit-exact-check,environment-audit,evidence-critic}` · `proposalforge-{call-alignment,feasibility-check}`(자격 요건 대조와 자원↔계획 정합은 **사실 검증**이다) · `rebuttalforge-{coverage-check,change-consistency-check}` · `outreachforge-fact-consistency-check` |
-| `reviewer` | review · critic · clarity · logic · style · bias · **coverage·consistency** | — | `paperforge-{logic-critic,style-edit}` · `trendforge-{clarity-check,bias-check}` · `reviewforge-{prisma-compliance-check,bias-balance-check,clarity-check}` · `patentforge-format-compliance-check` · `policyforge-{stakeholder-coverage-check,format-consistency-check}` · `legalforge-{clause-completeness-check,tone-style-check}` · `docforge-{api-coverage-check,clarity-check}` · `lectureforge-{accessibility-check,format-consistency-check}` · `migrateforge-atomic-commit-check` · `secforge-{owasp-coverage-check,report-clarity-check}` · `specflow` **Design Review(신설)** · `datasetforge-{schema-consistency-check,datasheet-completeness-check}` · `reproforge-{env-completeness-check,doc-clarity-check}` · `simforge-output-completeness` · `proposalforge-{innovation-check,format-compliance}` · `rebuttalforge-{tone-polish,argument-strength}` · `outreachforge-{tone-style-check,channel-format-check}` |
-| `architect` | architect · erd · diagram · wireframe · style-design · dependency-graph · **migration-plan** | `Read,Write,Grep,Glob`(쓰기만·실행 없음) | `specflow-{architect,erd-designer,diagrammer,wireframer,style-designer}` · `docforge-dependency-graph-builder` · `migrateforge-migration-planner` · `secforge-stride-modeler` · `proposalforge-timeline-build`(간트는 그림이 아니라 **연차 배치 결정**이다) · `simforge-{solver-pin,design-of-exp}`(솔버 고정과 실험계획은 **결정**이다) · `agentforge-{index-build,agent-design}`(검색 기반과 **비교 대상 집합을 결정**한다) · `datasetforge-schema-design`(없던 스키마를 **결정**한다 — docforge 의 architecture-writer 가 서술이라 writer 였던 것과 갈린다) |
+| `synthesizer` | synthesize · outline · structure · summarize · gap-analysis · **options-design** | — | `paperforge-synthesize-outline` · `trendforge-synthesize-trends` · `reviewforge-synthesize` · `litmonitor-action-suggest` · `outreachforge-hook-design`(후킹은 요약의 한 형태다) · `slideforge-outline-design`(발표 목차는 **구조화·요약**이다 — paperforge 의 synthesize-outline 과 같은 판정) · `proposalforge-{gap-synthesizer,narrative-design}` · `simforge-analyze`(출력 통합 + 민감도 종합) · `patentforge-gap-analyzer` · `policyforge-{evidence-synthesize,options-design}` · `legalforge-{structure-design,risk-disclosure}` · `lectureforge-{learning-objectives,course-structure,assessment-design}` · `secforge-severity-classifier` |
+| `writer` | draft · write · compose · section · adapt · **apply-changes** | — | `slideforge-{slide-writer,speaker-notes}`(섹션마다 같은 계약 = 워커 · 발표자 노트도 집필이다) · `outreachforge-{twitter,medium,readme}-writer`(채널이 달라도 '같은 주장을 그 규격으로 쓴다' 는 계약은 같다 = 워커) · `rebuttalforge-{address-comment,apply-changes,cover-letter}`(**원고에 수정을 반영하는 것도 `writer` 다** — 코드가 아니라 산문이므로 `developer` 가 아니다) · `proposalforge-section-writer` · `datasetforge-datasheet-writer` · `paperforge-draft-section` · `trendforge-draft-section` · `litmonitor-summarize` · `patentforge-{specification-writer,jurisdiction-adapter}` · `policyforge-{brief,report,memo,infographic}-writer` · `legalforge-{contract,opinion,advisory,terms}-writer` · `docforge-{api-ref,architecture,adr,tutorial}-writer` · `lectureforge-{syllabus,slides,assignments,quiz}-writer` |
+| `fact-checker` | fact-check · verify · evidence · recency · citation · **grade-check** | `Bash`(게이트 스크립트 실행) | `paperforge-fact-check` · `trendforge-{evidence-critic,recency-check}` · `reviewforge-evidence-coverage-check` · `patentforge-{claim-consistency-check,novelty-comparison-check}` · `policyforge-{evidence-grade-check,source-diversity-check}` · `legalforge-law-citation-check` · `docforge-accuracy-check` · `lectureforge-{objective-coverage-check,bloom-distribution-check}` · `migrateforge-{test-pass-rate-check,regression-check}` · `secforge-{critical-zero-check,cve-patched-check}` · `agentforge-{evidence-critic,stat-significance-check,reproducibility-check,eval-quality-check}` · `datasetforge-pii-license-recheck` · `reproforge-result-tolerance-check` · `simforge-{bit-exact-check,environment-audit,evidence-critic}` · `proposalforge-{call-alignment,feasibility-check}`(자격 요건 대조와 자원↔계획 정합은 **사실 검증**이다) · `rebuttalforge-{coverage-check,change-consistency-check}` · `outreachforge-fact-consistency-check` · `slideforge-timing-check`(**게이트 스크립트를 돌려 판정한다** = `Bash` 신호) |
+| `reviewer` | review · critic · clarity · logic · style · bias · **coverage·consistency** | — | `paperforge-{logic-critic,style-edit}` · `trendforge-{clarity-check,bias-check}` · `reviewforge-{prisma-compliance-check,bias-balance-check,clarity-check}` · `patentforge-format-compliance-check` · `policyforge-{stakeholder-coverage-check,format-consistency-check}` · `legalforge-{clause-completeness-check,tone-style-check}` · `docforge-{api-coverage-check,clarity-check}` · `lectureforge-{accessibility-check,format-consistency-check}` · `migrateforge-atomic-commit-check` · `secforge-{owasp-coverage-check,report-clarity-check}` · `specflow` **Design Review(신설)** · `datasetforge-{schema-consistency-check,datasheet-completeness-check}` · `reproforge-{env-completeness-check,doc-clarity-check}` · `simforge-output-completeness` · `proposalforge-{innovation-check,format-compliance}` · `rebuttalforge-{tone-polish,argument-strength}` · `outreachforge-{tone-style-check,channel-format-check}` · `slideforge-{clarity-check,flow-check}` |
+| `architect` | architect · erd · diagram · wireframe · style-design · dependency-graph · **migration-plan** | `Read,Write,Grep,Glob`(쓰기만·실행 없음) | `specflow-{architect,erd-designer,diagrammer,wireframer,style-designer}` · `docforge-dependency-graph-builder` · `migrateforge-migration-planner` · `secforge-stride-modeler` · `proposalforge-timeline-build`(간트는 그림이 아니라 **연차 배치 결정**이다) · `simforge-{solver-pin,design-of-exp}`(솔버 고정과 실험계획은 **결정**이다) · `agentforge-{index-build,agent-design}`(검색 기반과 **비교 대상 집합을 결정**한다) · `slideforge-mermaid-designer`(§3 의 `diagrammer` 별칭이 이미 `architect` 다 — 무엇을 상자로 두고 무엇을 화살표로 둘지가 **결정**이다) · `datasetforge-schema-design`(없던 스키마를 **결정**한다 — docforge 의 architecture-writer 가 서술이라 writer 였던 것과 갈린다) |
 | `developer` | backend-dev · frontend-dev · implement · build · **transform-execute** | **`Edit`** + `Bash` | `specflow-{backend-dev,frontend-dev}` · `migrateforge-transform-executor` · `agentforge-system-builder` · `datasetforge-{hf,parquet,csv}-converter`(변환 코드를 쓰고 돌린다) · `proposalforge-budget-build`(명세를 쓰고 산출 도구를 돌린다) · `reproforge-{docker,conda,pip}-builder`·`reproforge-script-builder` · `simforge-visualize`(그림을 그리는 **코드**를 쓴다) |
 | `tester` | e2e-test · run · regression · verify-by-execution · **baseline-snapshot** | **`mcp__playwright__*`** + `Bash` | `specflow-e2e-tester` · `migrateforge-{baseline-snapshot,regression-test-runner,behavior-diff-checker,new-test-generator,type-check-runner}` · `agentforge-run-evaluator`(코드를 **돌려서** 지표를 낸다) · `reproforge-install-test`(실제로 설치·실행해 재측정한다) · `simforge-run-worker` |
 
@@ -819,6 +820,80 @@ Table 2 caption has a typo.")은 글자 비율을 거의 움직이지 않기 때
 **교훈**: 필터와 판정을 같은 함수에 두지 마라. 거른 뒤에 "걸러진 것이 있느냐"고 물으면
 답은 언제나 '없다' 다.
 
+### ⚠️ 한 stage 의 객관 게이트는 `--draft` 를 **하나만 공유한다** — 규약이 다르면 그 조합은 성립하지 않는다
+**[자체 결함 · 아키타입 T 변환 중 발견 · 실측]** `gate_keeper` 는 stage 의 `gate.draft` 하나를
+그 stage 의 **모든** 객관 게이트에 넘긴다. 그런데 우리 게이트에는 두 규약이 섞여 있다 —
+`--draft` 가 **미션 루트**인 것(`claim_provenance`·`channel_format`·`release_readiness` …)과
+**콘텐츠 디렉터리**인 것(`evidence_grade`·`content_accessibility`·`format_consistency` …).
+
+아키타입 S 의 stage 7·8 은 이 둘을 한 stage 에 두고 `draft: reports/<MID>/_private/channels`
+를 선언했다. 실측:
+
+```
+$ claim_provenance --draft …/_private/channels
+FAIL(usage): _private/source.md 의 ```evidence``` 블록이 없다 … exit=2
+$ channel_format  --draft …/_private/channels
+FAIL(usage): 채널 디렉터리가 없다(…/_private/channels/_private/channels) exit=2
+```
+
+**게이트 3종이 실미션에서 전부 fail-closed** 로 파이프라인을 막는다(legalforge 의 '어떤
+입력에도 FAIL' 과 같은 계열이되, 이번엔 **우리가 만든 것**이다). 그런데 하네스는 53/53
+이었다 — 하네스가 게이트마다 **편한 draft** 를 골라 줬기 때문이다.
+
+→ 두 가지를 고쳤다. ① 미션루트 규약 게이트 3종을 `legal_safety` 가 쓰던 **walk-up**
+(`SCOPE.md` 를 만날 때까지 위로)으로 바꿔 **어느 draft 를 받아도 성립**하게 했다.
+② 하네스의 `DRAFTS` 는 **템플릿이 선언한 값을 그대로** 쓴다(`slide.py` 참조).
+
+**교훈**: 게이트를 조합할 때 **각 게이트가 `--draft` 를 무엇으로 해석하는지** 확인하라.
+그리고 하네스가 게이트를 부르는 방식이 **실미션과 다르면**, 그 하네스는 실미션을 검증하지
+않는다. 픽스처의 값은 게이트를 **실제와 같은 방식으로** 부를 때만 나온다.
+
+### ⚠️ 재사용 게이트가 **같은 토큰 공간**을 쓰면 산출물의 형식이 그 공간에 맞춰져야 한다
+**[발견: conference-slides 변환, 2026-08-05]** `claim_provenance`(S)와 `evidence_grade`(G)를
+함께 재사용했더니 둘 다 `[e1]` 형태를 **인용**으로 읽는다. 그래서 슬라이드 frontmatter 에
+자연스럽게 쓰고 싶은
+
+```yaml
+claims: [e1, e3]
+diagrams: [d1]
+```
+
+이 **환각 인용**(`[d1]` 은 claim 이 아니다)으로 반려된다. 아키타입 S 에서 "게이트를 고치는
+대신 claim id 를 `e1` 형식에 맞췄다" 고 적은 것의 두 번째 얼굴이다 — 형식을 맞추는 쪽이
+싸지만, **맞춰야 할 곳이 하나 더 있었다.**
+
+→ 슬라이드 frontmatter 를 `slide_number`·`section`·`title` 세 필드로 못박고, 다이어그램
+참조는 본문의 `{{mermaid:d1}}` 이, claim↔슬라이드 매핑은 cite-pack 이 갖게 했다. 템플릿
+본문에 **"대괄호 id 목록을 frontmatter 에 쓰지 마라"** 를 명시했다.
+
+**교훈**: 게이트를 두 개 이상 재사용하면 **그것들이 공유하는 토큰 공간**을 먼저 그려라.
+산출물의 형식은 게이트의 합집합이 정한다.
+
+### ⚠️ 인용의 단위는 도메인의 **'한 장면'** 이다 — 문단이 언제나 옳지는 않다
+아키타입 S 에서 인용을 '수치 주변 220자' 창에서 **문단** 단위로 바꾼 것은 옳았다(옆 트윗의
+인용이 창에 들어왔다). 그런데 슬라이드에서는 그 문단이 **너무 작다**:
+
+```markdown
+## 3.2배 빠른 추론          ← 수치는 제목에
+
+- 동일 정확도에서 속도가 개선됐다 [e3]   ← 인용은 불릿에 (빈 줄로 갈린다)
+```
+
+실측: 문단 단위로 재면 **정상 슬라이드가 '수치에 인용이 없다' 로 반려**된다. 슬라이드는
+파일 하나가 **한 화면**이고 청중에게는 제목과 불릿이 한 장면이다.
+
+→ 새 게이트를 만들지 않고 `claim_provenance` 에 **`citation_scope: paragraph|file` 축**을
+열었다(기본값 paragraph = S 무영향 · 53/53 확인). Q 에서 `legal_safety` 에
+`publication_policy` 축을 연 판단의 세 번째 적용이다.
+
+**교훈**: 구조 단위로 묶으라는 규칙은 맞다. 다만 **어느 구조가 그 도메인의 의미 단위인지**는
+아키타입마다 다시 물어야 한다.
+
+> **[자체 결함 · 픽스처가 잡았다]** 같은 변환에서 `diagram_integrity` 가 사이드카에
+> `used_in_slide:` 를 **요구해 놓고 목차 선언만 대조**했다 — 사이드카의 그 필드는 아무도
+> 읽지 않는 죽은 필드였다. **죽은 변수를 잡겠다며 만든 게이트가 죽은 필드를 만들고 있었다**
+> (migrateforge 의 `plan_text` 와 같은 자리). → 양쪽 선언을 모두 실제 참조와 대조한다.
+
 ## 6. 진행 대장 (재개 지점 — 새 세션은 여기서 다음 대상을 고른다)
 
 | # | 스킬 | 카테고리 | 원본 | 상태 | 템플릿 | 신규 profile |
@@ -842,7 +917,9 @@ Table 2 caption has a typo.")은 글자 비율을 거의 움직이지 않기 때
 | 17 | proposalforge | research | 9-stage · agents 15 | ✅ **draft (Q)** | `research-proposal.yaml` | 0 (**예상 적중**) |
 | 18 | rebuttalforge | research | 8-stage · agents 11 | ✅ **draft (R)** | `reviewer-response.yaml` | 0 (**예상 적중**) |
 | 19 | outreachforge | research | 8-stage · agents 12 | ✅ **draft (S)** | `outreach-content.yaml` | 0 |
-| 20 | slideforge | research | 8-stage · agents 10 | ⬜ **다음(마지막)** | — | 예상 있음(시각화) |
+| 20 | slideforge | research | 8-stage · agents 10 | ✅ **draft (T)** | `conference-slides.yaml` | 0 (**예상 빗나감 — 8연속**) |
+
+**✅ 20/20 완료(2026-08-05).** 남은 것은 변환이 아니라 **실미션**이다 — Sam 지시대로 아키타입을 하나씩 돌린다(A 만 `proven`, 나머지 19종은 `draft`). 실미션 재개 전에 Slack 도달성부터 확인할 것(§8.0).
 
 **권장 순서**: 문서·조사 계열(4·5·7·17·18 — 신규 profile 0 예상)을 먼저 몰아서 하고, **개발·실행 계열(3·11·12·13·15·16)은 신규 profile 결정을 한 번에 모아서** 처리하는 편이 낫다. profile 신설은 Sam 승인 사항이라 왕복이 생기기 때문이다.
 
@@ -1228,6 +1305,37 @@ Table 2 caption has a typo.")은 글자 비율을 거의 움직이지 않기 때
 - **연결**: B·M·N·O·P 의 산출물이 이 아키타입의 입력이고, F(특허)·R(심사 중 원고)와는
   **공개 가능성에서 충돌**한다 — 그래서 `release_readiness` 가 필요하다
 
+**conference-slides 변환에서 나온 것 (2026-08-05 · 마지막 20/20)**
+- ✅ `gates/slide_budget.py`(원본 HARD GATE `timing_check.py` 이식 — **하한 신설** ·
+  **분모를 SCOPE/정책으로 이관** · **죽은 `--notes` 인자를 실제 검사로** · 플레이스홀더
+  부분일치+국문 어절 하한 · **선언 목록 대비 존재** · plan/final 두 모드) ·
+  `gates/diagram_integrity.py`(원본 `mermaid_lint.py` 이식 — **괄호를 스택으로** ·
+  **선언 목록 대비 존재** · 사이드카·`source_basis` 대조 · 슬라이드와 **양방향** 참조)
+- ✅ **`gates/deck_format.py` 신설 — 원본은 슬라이드 규율을 CLAUDE.md 에 지시로만 적어 둔다**
+  ("≤ 5 bullets 또는 1 figure" · "Marp 표준"). 검사하는 코드가 없다. 여기에 **번들 조립
+  검증**을 더했다 — `marp_export` 는 다이어그램을 못 찾으면 `<!-- missing mermaid: dN -->`
+  **주석**을 남기고, Marp 는 주석을 렌더하지 않아 **발표장에서 빈 슬라이드가 뜬다**
+- ✅ **재사용 4종 — 지금까지 중 가장 많다**(§2④): `claim_provenance`(S · **`citation_scope`
+  축을 열었다**) · `evidence_grade`(G · 예비 결과를 확정처럼) · `content_accessibility`
+  (J · **원래 강의 슬라이드용 게이트다 — 하는 일이 그대로 같다**) · `release_readiness`
+  (S · **학회 발표도 공개다** — `launch_date` = 발표일)
+- **원본 게이트 2종에서 결함 6건 — 전부 실측**(§5): **20분 발표에 2장이 PASS**(상한만
+  잰다) · **`min_per_slide` 를 산출물이 정한다**(15분에 60장이 PASS) · **`--notes` 가 죽은
+  인자**(존재하지 않는 경로도 PASS) · `TBD.` 와 `작성 예정` 이 노트로 통과(완전 일치 비교) ·
+  **.mmd 가 0개면 PASS**(공집합 열한 번째) · **괄호 총계가 맞으면 짝이 틀려도 PASS**
+- ⚠️ **자체 결함 1건을 실미션 전에 잡았다** — 아키타입 S 의 stage 7·8 이 `--draft` 규약이
+  다른 게이트를 한 stage 에 묶어 **게이트 3종이 exit 2 로 파이프라인을 막고 있었다**(§5).
+  walk-up `mission_root` 로 고치고 S 하네스 53/53 무회귀 확인
+- **신규 profile 0개 — 대장의 "예상 있음(시각화)" 은 빗나갔다. 8연속**(I·K·L·M·N·O·P·T).
+  다이어그램 설계는 `architect`(`diagrammer` 별칭이 이미 거기 있었다), 발표자 노트는
+  `writer`. **profile 11종은 20개 스킬 전부를 받아냈다**
+- ⚠️ **stage 15 — Q 와 함께 가장 길다.** 원본 8단계에 우리 불변식(검증 4지점·curator 2회·
+  발표 준비)이 더해졌다. 설계 검증(stage 5)을 **집필 전**에 둔 것이 아홉 번째다
+- ✅ **깨뜨린 픽스처 80케이스 E2E**(정상 9 + 결함 60 + **원본 결함 회귀방어 6** + 설계
+  회귀방어 5) — 단일 하네스로는 가장 크다
+- **미이식**: `marp_export.py`·`bundle_export.py`(**판정하지 않는 산출 도구** — Deliver 가
+  만들어 쓴다) · `runs_state.py`(Kanban 이 대체) · `timing_check.py` 의 `--json` 리포트
+
 **새 후속 과제** (다음 세션 이후)
 - `test_run.py`는 테스트를 **실행하지 않는다** — Tester가 남긴 `results.json`을 검사할 뿐이다. 게이트키퍼가 미션 코드를 임의 실행하면 임의 코드 실행 통로가 되기 때문. 자기보고 신뢰 구간이 남아 있으므로, CI 연동 등 **독립 실행 경로**가 생기면 교체 검토
 - `webapp-build`는 아직 **라이브 미션 미실행**(`maturity: draft`) — 실미션 1회로 `tested` 승격 필요
@@ -1242,26 +1350,34 @@ Table 2 caption has a typo.")은 글자 비율을 거의 움직이지 않기 때
 - **보안 스캐너를 실제 도구로 교체할 때** `tester` 계열 profile 이 필요해질 수 있다
   (semgrep·trivy 등 실행 결과로 판정). 지금은 `reader` 의 패턴 검토라 불필요 — 실제 도구를
   붙이는 미션이 생기면 §3 신호(실행 판정)로 재평가
+- **게이트의 `--draft` 규약이 두 가지다**(미션루트 / 콘텐츠). 지금은 게이트마다 코드를 읽어야
+  알 수 있어 stage 에 게이트를 조합할 때마다 §5 의 함정을 다시 밟을 수 있다. 새 게이트는
+  **walk-up `mission_root`** 로 통일하고(어느 draft 도 받는다), 여유가 생기면 기존 A 규약
+  게이트에도 소급 적용 검토(지금 26종을 한꺼번에 바꾸면 430케이스 회귀 위험이 크다)
+- **Marp 렌더는 우리가 못 한다** — 컨테이너에 Marp CLI 가 없다(아키타입 O 의 docker ·
+  P 의 matplotlib 와 같은 계열). `deck_format` 은 Markdown 구조까지만 보고 **실제 렌더
+  결과(폰트·넘침·대비)는 검증하지 않는다.** 템플릿 stage 11·15 본문에 그 한계를 적어 뒀되,
+  **공시를 게이트로 강제하지는 않았다**(O 의 `docker_verified` 처럼 올릴지는 실미션에서 판단)
 - `symbol_truth`는 **Python 만 AST 파싱**한다. JS/TS·Java 코드베이스는 검증자(LLM)가 읽어야
   하므로 객관 게이트가 그만큼 얇아진다. 다국어 코드베이스 미션이 실제로 생기면 언어별 파서
   (tree-sitter 등) 도입을 검토 — 지금 넣으면 쓰지도 않을 의존성이 늘어난다
 
 ## 8. 다음 세션 재개 방법
 
-### 8.0 현재 상태 스냅샷 (2026-08-05 세션 종료 시점)
+### 8.0 현재 상태 스냅샷 (2026-08-05 · **변환 완료 시점**)
 
 | 항목 | 값 |
 |---|---|
-| HEAD | outreachforge → S · 그 앞: rebuttalforge→R · proposalforge→Q · simforge→P |
-| 변환 | **19/20** · 다음 = **slideforge**(§6 대장 #20 — **마지막**) |
+| HEAD | slideforge → T(**20/20 완료**) · 그 앞: outreachforge→S · rebuttalforge→R · proposalforge→Q |
+| 변환 | **20/20 — 끝났다.** 다음은 변환이 아니라 **실미션**이다(Sam 지시: 하나씩) |
 | 미커밋 | 없음 (push 완료 · `question_history.md` 는 이 작업과 무관한 기존 변경) |
 | 컨테이너 | `hermes-solomon` · `hermes-gatekeeper` 2개 Up |
 | Slack | ⚠️ **현재 도달 불가(재발 · 2026-08-05 세션 종료 시점)**. `docs/10 §4.3` 1순위 진단 실측: 호스트·컨테이너 모두 `slack.com` **HTTP 000**(타임아웃)인데 `google.com`·`github.com` 은 **HTTP 200** → **네트워크성이며 토큰·설정 문제 아님**(2026-08-03·08-04 와 같은 증상, 그때는 와이파이 변경으로 복구됐다). 게이트키퍼가 `conversations.history` 폴링 실패 WARN 을 계속 남긴다(정상 동작 — 네트워크가 돌아오면 멎는다). **Kanban 이 전부 done 이고 활성 게이트가 없어 실무 영향은 없다** — 승인 대기 중인 미션이 없기 때문. **실미션 재개 전에 도달성부터 확인할 것**(변환 작업 자체는 Slack 없이 진행된다) |
 | Kanban | 전부 `done` · 활성 게이트 없음 · 마지막 미션은 M-2026-004(아키타입 A) |
-| 테스트 | **237종 통과**(29 템플릿 + 21 게이트키퍼 + 187 게이트) · 린터 19/19 · **E2E 하네스 13종 430케이스 전건 통과**(`scripts/tests/fixtures/run_all.py`) |
-| 라이브 미션 | **A(trend-report)만 실증**(M-2026-003·004). 나머지 18종은 `draft` — Sam 지시로 **전체 변환 후** 하나씩 실행 |
-| ⚠️ 신규 | `legal_safety` 의 **`publication_policy` 축**(Q 에서 열어 R 이 재사용) · 아키타입 S 는 **공개가 목적**이라 `release_readiness` 가 그 질문을 대신 맡는다(하나로 뒀다) |
-| 다음 세션 | **slideforge 1종만 남았다.** 끝내면 20/20 이고, 그 다음은 Sam 지시대로 **실미션을 하나씩** 돌리는 단계로 넘어간다(그때 Slack 도달성이 필요하다) |
+| 테스트 | **251종 통과**(29 템플릿 + 21 게이트키퍼 + 201 게이트) · 린터 **20/20** · **E2E 하네스 14종 510케이스 전건 통과**(`scripts/tests/fixtures/run_all.py`) |
+| 라이브 미션 | **A(trend-report)만 실증**(M-2026-003·004). 나머지 **19종은 `draft`** — Sam 지시대로 이제 하나씩 실행하는 단계 |
+| ⚠️ 신규 | `claim_provenance` 의 **`citation_scope` 축**(슬라이드는 파일 하나가 한 화면이다) · **아키타입 S 의 실미션 결함을 고쳤다** — stage 7·8 의 게이트 3종이 `--draft` 규약 불일치로 exit 2 fail-closed 였다(§5). walk-up `mission_root` 로 수정·무회귀 확인 |
+| 다음 세션 | **변환은 끝났다.** 다음은 ① Slack 도달성 확인 → ② **실미션을 하나씩**(어느 아키타입부터 돌릴지는 Sam 이 정한다) → ③ 매처(C)·성장 지표 대시보드(CLAUDE.md '다음 할 일' 5·6번) |
 
 ### 8.1 절차
 
@@ -1300,3 +1416,7 @@ Table 2 caption has a typo.")은 글자 비율을 거의 움직이지 않기 때
 6. **커밋한다**: `feat(template): <name> → 아키타입 <X>` + `history.html` 기록
 
 **한 세션에 2~3종이 적당하다.** 스킬 하나가 300줄 안팎이고, 변환 판단(§2②)은 원본을 실제로 읽어야 나온다.
+
+> **[2026-08-05] 20/20 으로 이 문서의 변환 작업은 끝났다.** 남은 것은 실미션이고, 이 문서는
+> 이제 **함정 사전(§5)과 매핑 사전(§3)** 으로 쓰인다 — 새 아키타입을 만들거나 게이트를 고칠
+> 때 먼저 읽어라. 20건 변환에서 **20건 모두 원본에 결함이 있었다.**

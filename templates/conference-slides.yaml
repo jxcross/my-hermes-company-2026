@@ -1,0 +1,252 @@
+# 아키타입 T — 학회 발표 슬라이드(Marp 덱) 15단계
+# 출처: other_projects/harness-templates/research-harnesses/project_slideforge
+#       (.claude/skills/slideforge/SKILL.md 8-stage + agents 10종). 변환 절차: docs/13
+#
+# 이 아키타입이 만드는 것: **발표장에 들고 갈 수 있는 Marp 덱**이다. 논문·평가결과·시뮬레이션
+# 결과를 받아 발표 시간에 맞는 목차를 짜고, 다이어그램을 그리고, 섹션별로 병렬 집필해
+# 발표자 노트·배포용 handout 과 함께 번들로 낸다. 아키타입 B·B'·M·N·O·P·Q 의 산출물을 받는다.
+#
+# ⚠️ **발표는 공개다** — 원본에는 이 질문이 없지만 우리에게는 있다. 심사 중 원고(아키타입 R
+#    의 입력) · **출원 전 발명**(아키타입 F 와 충돌 — 학회 발표도 공개라 신규성을 잃는다) ·
+#    엠바고가 걸린 공동연구 결과가 섞인다. → 아키타입 S 의 `release_readiness` 를 **재사용**
+#    한다(`launch_date` = 발표일). **우리는 발표하지 않는다** — 사람이 한다.
+#
+# 변환 판단(요약 — 상세·근거는 docs/13 §2·§5):
+#  - **원본 하드게이트에서 결함 6건을 실측**했다. 가장 큰 것 셋:
+#      · **20분 발표에 슬라이드 2장이 PASS**(상한만 잰다 — "한도 이하"는 0에서 가장 잘 만족된다).
+#      · **분모를 산출물이 정한다** — `min_per_slide: 0.1` 이라 적으면 15분에 60장이 PASS.
+#      · **`--notes` 가 죽은 인자** — `required=True` 로 받아 놓고 코드가 한 번도 안 읽는다.
+#        존재하지 않는 경로를 줘도 '노트 커버리지 통과' 가 나온다.
+#  - mermaid 는 **파일이 0개면 PASS**(공집합 열한 번째)이고 괄호 균형을 **파일 총계**로 세어
+#    `A[Input) --> B(Encoder]` 가 통과했다(실측). → 선언 목록 대비 존재 + 스택 대응.
+#  - **재사용 4종**(§2④): `claim_provenance`(S — 슬라이드의 수치도 claim 에 매여야 한다.
+#    다만 **슬라이드는 파일 하나가 한 화면**이라 `citation_scope: file` 축을 열었다) ·
+#    `content_accessibility`(J — 원래 강의 슬라이드용이다. 하는 일이 같다) ·
+#    `evidence_grade`(G — 예비 결과를 확정처럼 말하는 것) · `release_readiness`(S).
+#  - `marp_export.py`·`bundle_export.py`·`runs_state.py` 는 미이식(산출 도구 · Kanban).
+#
+# ⚠️ **슬라이드 frontmatter 에 대괄호 id 목록을 쓰지 마라**(`claims: [e1]`·`diagrams: [d1]`).
+#    재사용 게이트 2종이 `[e1]` 형태를 **인용**으로 읽어 환각 인용으로 반려한다. 다이어그램
+#    참조는 본문의 `{{mermaid:d1}}` 이 하고, claim↔슬라이드 매핑은 cite-pack 이 갖는다.
+#
+# 스키마 규약은 templates/trend-report.yaml 머리말 참조.
+
+name: conference-slides
+category: research
+display_name: 학회 발표 슬라이드(Marp 덱 + 발표자 노트 + handout)
+maturity: draft
+goal_kr: 연구 산출물에서 검증된 주장만 뽑아 발표 시간에 맞는 Marp 덱과 발표자 노트·배포 자료를 만들고 공개 근거를 확인해 사람이 바로 발표할 수 있게 낸다.
+requires_profiles: []
+invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, revision_loop]
+
+policy:
+  # ── 공개 범위 — 발표 전 덱은 비공개다. 원자료가 이미 공개된 경우만 커밋 ──────
+  publication_policy:
+    mode: local_only            # release_basis 가 arxiv·doi·github_release 면 repo_commit 가능
+    private_dir: _private
+    content_files: [slides, mermaid, outline.md, notes.md, source.md, visuals.md,
+                    talk-checklist.md]
+
+  # ── 신설: 발표 분량 예산(원본 하드게이트를 뒤집어 이식) ──────────────────────
+  slide_policy:
+    outline_file: _private/outline.md
+    slides_dir: _private/slides
+    notes_file: _private/notes.md
+    # ⚠️ **장당 시간은 정책이 갖는다**(산출물이 못 고친다). 발표 시간은 SCOPE.md(Sam 승인).
+    #    원본은 둘 다 미션 산출물에서 읽어 60장짜리 15분 발표가 통과했다.
+    min_per_slide: 0.75         # 상한 계산용 — 15분 → 20장까지
+    max_per_slide: 1.5          # 하한 계산용 — 15분 → 10장부터. **원본에는 하한이 없다**
+    time_sum_tolerance: 0.2
+    sections: [intro, method, result, discussion, closing]
+    require_all_sections: true  # 섹션 워커 하나가 죽으면 여기서 잡힌다
+    min_note_words: 8           # 국문 어절 — `TBD.` 와 `작성 예정` 이 통과하던 자리
+    placeholder_terms: [TBD, TODO, FIXME, 작성 예정, 미정, 채워, 여기에,
+                        "1~3 sentences", "what to say"]
+
+  # ── 신설: 덱 규격(원본은 CLAUDE.md 에 지시로만 적어 둔다) ────────────────────
+  deck_policy:
+    slides_dir: _private/slides
+    bundle_dir: _private/slide-bundle
+    bundle_files: [slides.md, speaker-notes.md, handout.md]
+    max_bullets: 5              # 원본이 지시로만 적어 둔 규율
+    max_bullets_with_visual: 2
+    max_visuals: 1
+    min_body_words: 4           # ⚠️ 상한만 두면 **빈 슬라이드가 가장 안전하게 통과**한다
+    max_body_words: 60          # 국문 어절
+    require_title: true
+    required_fields: [slide_number, section, title]
+    handout_words: [150, 900]
+
+  # ── 신설: 다이어그램 무결성 ─────────────────────────────────────────────────
+  diagram_policy:
+    outline_file: _private/outline.md
+    mermaid_dir: _private/mermaid
+    slides_dir: _private/slides
+    source_file: _private/source.md
+    max_nodes: 8                # 원본 템플릿의 '노드 ≤ 8 (가독성)' 을 게이트로 올렸다
+    min_body_lines: 2
+    require_meta: true          # 사이드카 traceability — 원본은 선언만 한다
+    require_source_basis: true  # 환각 다이어그램 차단
+
+  # ── 재사용(S): 주장 출처 — 슬라이드의 수치도 claim 에 매인다 ────────────────
+  claim_policy:
+    source_file: _private/source.md
+    channels_dir: _private/slides
+    source_dir: _private/source
+    min_claims: 3
+    require_locator: true
+    require_value_in_source: true
+    # ⚠️ **슬라이드는 파일 하나가 한 화면**이다. 제목의 수치와 불릿의 인용이 빈 줄로 갈리지만
+    #    청중에게는 한 장면이므로 인용 단위를 파일로 연다(기본값 paragraph 는 그대로 = S 무영향).
+    citation_scope: file
+
+  # ── 재사용(G): 예비 결과를 확정처럼 말하는 것 ───────────────────────────────
+  evidence_policy:
+    evidence_file: source.md         # draft(slides/)의 상위에서 찾는다
+    caveat_grades: [preliminary, low, very_low]
+    caveat_terms: [예비, 잠정, 초기 결과, 추가 검증, 한계, preliminary, early]
+    min_refs_per_format: 0           # 슬라이드마다 인용을 요구하지 않는다(표지·전환 슬라이드)
+    recommendation_required_in: []   # 발표 덱에는 '권고 절' 이 없다 — 이 축은 끈다
+    strong_grades: [verified, high, moderate]
+
+  # ── 재사용(J): 접근성 — 원래 강의 슬라이드용 게이트다 ───────────────────────
+  a11y_policy:
+    require_alt_text: true           # 그림에 설명이 없으면 FAIL
+    max_words_per_sentence: 18       # 국문 어절
+    readability_is_fail: false       # 문장 길이는 약한 대리지표 — 과적재는 deck_format 이 잰다
+    require_speaker_notes_in: []     # 노트 실체는 slide_budget 이 강제한다(겹침 방지)
+
+  # ── 재사용(S): 공개 준비 — 학회 발표도 공개다 ───────────────────────────────
+  release_policy:
+    allowed_basis: [arxiv, doi, github_release, public_dataset, owner_approval]
+    public_basis: [arxiv, doi, github_release, public_dataset]
+    require_launch_date: true        # launch_date = **발표일**
+    checklist_file: _private/talk-checklist.md
+    visuals_file: _private/visuals.md
+    scan_dirs: [_private/slides, _private/notes.md]
+    require_visual_rights: true      # 남의 그림을 슬라이드에 붙이는 일이 가장 흔하다
+    placeholder_terms: [TBD, TODO, FIXME, 작성 예정, 미정, lorem ipsum, "<제목>", "@handle"]
+    disclaimer_terms:
+      - "발표는 저자가 직접"
+      - "이 파이프라인은 발표하지"
+      - "사람이 최종 확인"
+
+stages:
+  - id: 1
+    name: Scoping
+    profile: default          # Solomon
+    sam_gate: true
+    upstream: []
+    body: "미션 스펙을 reports/<MID>/SCOPE.md 에 작성한다. **frontmatter 에 다음을 반드시 선언하라 — 게이트가 이 값을 분모로 쓴다**:\n```\ntalk_time_minutes: 15                 # 발표 시간. **이 값이 슬라이드 수의 분모다**\nsections: [intro, method, result, discussion, closing]\naudience: 학회-전문가                 # 학회-전문가 | 내부 | 일반 | 심사위원\nvenue: <학회명·세미나·심사>\nemphasis: balanced                    # method | result | impact | balanced\nrelease_basis: arxiv                  # arxiv | doi | github_release | public_dataset | owner_approval\nrelease_ref: 2601.01234               # 근거의 실체(id·URL·태그)\npatent_status: none                   # none | filed | planned\nlaunch_date: 2026-09-15               # **발표일**\nembargo_until:                        # 있으면 적는다(발표일과 대조된다)\n```\n⚠️ **발표는 공개다.** Sam 에게 확인하라: ① 원자료가 **이미 공개**됐는가(arXiv·DOI·릴리스). ② **출원 예정 발명이 섞여 있지 않은가** — `patent_status: planned` 면 게이트가 막는다(학회 발표도 공개라 신규성을 잃는다 · 아키타입 F 와 충돌). ③ 공동연구자·기관의 **엠바고**가 발표일보다 늦지 않은가. ④ 심사 중 원고의 결과를 말하는가(아키타입 R 의 입력이면 특히). ⚠️ **발표 시간을 여기서 못박아라** — 원본은 이 값을 산출물이 정하게 두어 15분 발표에 60장이 통과했다. ⚠️ 원자료는 `_private/source/` 에 둔다. ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라."
+  - id: 2
+    name: Source Ingest
+    profile: reader
+    upstream: [1]
+    body: "원자료(논문·평가결과·시뮬레이션 산출물)를 읽어 **발표할 주장과 그림 후보**를 `_private/source.md` 에 정리한다. **한 블록·한 id 공간을 써라**(게이트 3종이 같은 id 를 읽는다):\n```evidence\n- id: e1\n  kind: claim              # claim | figure\n  grade: verified          # verified | high | moderate | preliminary | low\n  value: 0.873             # 발표에 쓸 수 있는 수치(게이트가 슬라이드의 숫자와 대조한다)\n  locator: _private/source/results.md\n  statement: 국내 산업 데이터에서 정확도 0.873 을 얻었다\n- id: e4\n  kind: figure\n  grade: verified\n  locator: _private/source/figures/fig2.png\n  statement: 정확도 비교 막대그림(원논문 Figure 2)\n```\n⚠️ **claim 5~10건**을 뽑아라(15분 발표에 담을 수 있는 양이다). ⚠️ **모든 항목에 `locator:`** — 어디서 나온 값인지 밝히지 않은 주장은 게이트가 반려한다. ⚠️ **값을 지어내지 마라** — 게이트가 원자료 전문에서 그 값을 다시 찾는다. ⚠️ **`grade:` 를 정직하게** — 예비 결과를 `verified` 로 올리면 유보 표현 검사가 무력해지고, 그것이 발표에서 가장 흔한 사고다. ⚠️ 그림은 **출처와 라이선스**를 함께 기록하라(남의 그림은 그냥 못 쓴다)."
+  - id: 3
+    name: Source Verify
+    profile: fact-checker      # ≠ reader
+    verifier: true
+    upstream: [2]
+    gate:
+      objective: [claim_provenance]
+      llm: fact_checker_verdict
+      draft: "reports/<MID>"
+    body: "**목차를 짜기 전에** 주장이 사실인지 검증한다(객관 게이트는 source 모드로 돌아 claim 의 원자료 실재를 본다). ⚠️ **이 검증이 앞에 있는 이유**: 틀린 수치 하나가 목차→슬라이드→발표자 노트→handout 으로 네 번 복제되고, 그 다음은 **청중 앞**이다. 사람이 읽어야 할 것: ① **값의 맥락** — 0.873 이 어떤 조건에서 나온 값인가(게이트는 문자열 일치만 본다). ② **등급의 정직성** — `verified` 로 단 것이 정말 검증된 것인가(단일 실험·단일 시드가 아닌가). ③ **비교 주장의 근거** — '가장 빠르다' 를 말하려면 무엇과 비교했는지가 원자료에 있어야 한다. ④ **발표 가능성** — 이 결과를 지금 말해도 되는가(심사 중·출원 전·엠바고). 끝에 VERDICT: PASS|FAIL."
+  - id: 4
+    name: Outline Design
+    profile: synthesizer
+    upstream: [3]              # 게이트: 3 PASS 시 게이트키퍼가 unblock
+    body: "발표 시간에 맞는 목차를 `_private/outline.md` 에 설계한다. **형식을 정확히 지켜라**(게이트 2종이 읽는다):\n```\n---\nn_slides: 14          # ⚠️ 명시 선언 — 블록 길이와 대조한다\nn_diagrams: 2         # ⚠️ 0 이면 0 이라고 적어라\n---\n```slides\n- id: 1\n  section: intro\n  title: 문제와 배경\n  time_min: 0.8\n  claims: [e1]\n```\n```diagrams\n- id: d1\n  type: flowchart\n  used_in_slide: 5\n  source_basis: [e2, e4]\n```\n```\n⚠️ **슬라이드 수는 발표 시간이 정한다** — SCOPE.md 의 `talk_time_minutes` ÷ 0.75~1.5분/장 범위 안이어야 한다(15분이면 **10~20장**). **양쪽 다 걸린다** — 원본은 상한만 재서 20분 발표에 2장이 통과했다. ⚠️ **`time_min` 합계가 발표 시간의 ±20% 안**이어야 한다. ⚠️ **선언한 섹션이 전부 등장**해야 한다(집필은 섹션별 병렬이라, 목차에 없는 섹션은 아무도 쓰지 않는다). ⚠️ 강조점(`emphasis`)에 따라 배분을 바꿔라 — method 중심이면 method 5~7장, result 중심이면 result 6~8장. ⚠️ 다이어그램은 **원자료의 항목(`source_basis`)에 근거**해야 한다 — 지어낸 구조도는 질문 하나에 무너진다."
+  - id: 5
+    name: Design Verify
+    profile: reviewer          # ≠ synthesizer
+    verifier: true
+    upstream: [4]
+    gate:
+      objective: [slide_budget]
+      llm: reviewer_verdict
+      draft: "reports/<MID>"
+    body: "**집필 전에** 설계를 검증한다(객관 게이트는 plan 모드로 돌아 슬라이드 수·시간 배분·섹션 커버리지를 본다). ⚠️ **검증을 앞으로 당긴 여덟 번째 자리다** — 목차가 틀린 채로 집필하면 슬라이드 14장과 노트 14개를 다시 쓴다. 사람이 읽어야 할 것: ① **서사** — 문제→방법→결과→의미가 이어지는가. 발표는 읽는 것이 아니라 듣는 것이다. ② **청중 적합성** — SCOPE 의 `audience` 에 맞는 깊이인가(학회 전문가에게 배경 5장은 낭비고, 일반 청중에게 수식 3장은 벽이다). ③ **시간 배분의 현실성** — 결과 슬라이드에 0.5분은 실제로 불가능하다. ④ **버릴 것** — 15분에 담을 수 없는 claim 을 지금 덜어내라. 끝에 VERDICT: PASS|FAIL."
+  - id: 6
+    name: Diagram Design
+    profile: architect
+    upstream: [5]              # 게이트: 5 PASS 시 unblock
+    parallel:
+      mode: per_item
+      over: "outline.md ```diagrams``` 블록의 각 다이어그램"
+      batch_size: 3
+      shard: "_private/mermaid/diagram-<id>.mmd (+ .meta.yml 사이드카)"
+      merge_to: null           # 다이어그램은 각자 독립 산출물이다
+    body: "목차가 선언한 다이어그램을 **하나씩** 그린다. 산출: `_private/mermaid/diagram-N.mmd`(순수 Mermaid · frontmatter 없음) + `diagram-N.mmd.meta.yml` 사이드카:\n```yaml\ndiagram_id: d1\ntype: flowchart          # .mmd 첫 줄의 타입과 **일치**해야 한다\nused_in_slide: 5\nsource_basis: [e2, e4]   # 원자료에 실재하는 id 만\n```\n⚠️ **노드 8개 이하** — 슬라이드에서 읽히지 않으면 그림이 아니다(원본 템플릿의 규율을 게이트로 올렸다). ⚠️ **괄호 짝을 맞춰라** — `A[Input) --> B(Encoder]` 는 원본 린터가 총계만 세어 통과시켰다. 우리는 여는 순서까지 본다. ⚠️ **노드 라벨은 원자료에 있는 것만** — 구조도는 질문을 부르고, 지어낸 상자는 그때 드러난다. ⚠️ 사이드카를 빠뜨리지 마라(부재는 FAIL 이다)."
+  - id: 7
+    name: Slide Write
+    profile: writer
+    sam_gate: true             # 목차·그림 확정 후 **집필 개시** 승인(academic-paper 와 같은 배치)
+    approval_artifact: "reports/<MID>/_private/outline.md"
+    upstream: [6]
+    parallel:
+      mode: workers
+      # 섹션마다 같은 계약(그 섹션의 슬라이드를 규격대로 쓴다) = profile 아님, 워커다.
+      workers: [intro, method, result, discussion, closing]
+      batch_size: 3            # 5워커 = 3 + 2, 2라운드
+      shard: "_private/slides/slide-NN.md (목차에서 section=<worker> 인 슬라이드 전부)"
+      merge_to: null           # 슬라이드는 파일 하나가 한 장이다. 병합은 Deliver 의 일
+    body: "목차의 자기 섹션 슬라이드를 **한 장에 한 파일**로 쓴다. 형식:\n```\n---\nslide_number: 5\nsection: method\ntitle: 제안 구조\n---\n\n## 제안 구조\n\n- 핵심 한 줄 [e2]\n- 두 번째 근거 [e3]\n\n<!-- speaker:\n(stage 8 이 채운다)\n-->\n```\n⚠️ **frontmatter 는 이 세 필드뿐이다.** `claims: [e1]` 같은 **대괄호 id 목록을 쓰지 마라** — 게이트가 인용으로 읽어 환각으로 반려한다. ⚠️ **불릿 5개 이하**(그림·다이어그램이 있으면 2개), **시각자료는 장당 1개**, 본문 4~60어절. 원본은 이 규율을 지시로만 적어 두고 검사하지 않았다. ⚠️ **본문에 제목(`## …`)을 넣어라** — frontmatter 의 title 은 청중에게 보이지 않는다. ⚠️ **모든 수치와 최상급 표현에 `[e1]` 인용**을 달아라 — 게이트가 그 claim 의 값과 같은지까지 본다. 인용은 **같은 슬라이드 파일 안**에 있으면 된다. ⚠️ **예비 등급(`preliminary`) claim 을 인용한 슬라이드에는 유보 표현**을 함께 넣어라('예비', '추가 검증 필요'). ⚠️ 그림은 `![설명](경로)` 로 쓰고 **설명(대체 텍스트)을 반드시 채워라**. 다이어그램은 `{{mermaid:d1}}` placeholder 로 두면 Deliver 가 치환한다."
+  - id: 8
+    name: Speaker Notes
+    profile: writer
+    upstream: [7]
+    body: "슬라이드마다 **할 말**을 쓴다. ① 각 `slide-NN.md` 의 `<!-- speaker: … -->` 블록을 채운다(1~3문장 · 구어체 · 다음 장으로 넘어가는 전환 한 마디). ② 통합 노트 `_private/notes.md` 를 쓴다 — 슬라이드마다 `## Slide N: <제목>` 절에 시간·할 말·전환·강조를 적고, 끝에 **Q&A 예상 질문 3개와 답변 골자**를 넣는다.\n⚠️ **`TBD` 나 '작성 예정' 을 남기지 마라** — 원본은 `TBD.`(마침표 하나)와 '작성 예정' 을 통과시켰다. 우리는 **8어절 하한**으로 실체를 요구한다. ⚠️ **통합 노트와 슬라이드 안의 노트가 어긋나면 반려**다(원본은 통합 노트를 인자로 받아 놓고 한 번도 읽지 않았다). ⚠️ 슬라이드 글을 **그대로 읽는 노트는 쓸모없다** — 슬라이드에 없는 맥락을 적어라. ⚠️ 시간 압박 구간(결과 절)에 **줄일 수 있는 문장**을 표시해 두면 리허설에서 값을 한다."
+  - id: 9
+    name: Figure·Cite Pack
+    profile: curator
+    upstream: [8]
+    body: "① `_private/visuals.md` 에 덱에 쓴 **모든 그림의 권리**를 정리한다(게이트가 확인한다):\n```visuals\n- id: v1\n  slide: 7\n  description: 정확도 비교 막대그림\n  source: _private/source/figures/fig2.png\n  license: own            # own | CC-BY-4.0 | 저널 재사용 허락 … 반드시 적는다\n```\n② `_private/cite-pack.md` 에 **claim ↔ 슬라이드 ↔ 원자료** 매핑표를 만든다. ③ 슬라이드 전체를 훑어 **중복 주장**(같은 claim 을 세 장에서 반복)과 **고아 다이어그램**(어느 슬라이드도 쓰지 않는 그림)을 정리한다.\n⚠️ **남의 그림은 그냥 못 쓴다** — 논문 그림을 발표에 재사용하려면 저널 정책을 확인하고 출처를 슬라이드에 표기하라. 자작이면 `own` 이라고 적어라. ⚠️ 이 단계가 없으면 다음 두 검증이 무엇을 대조할지 모른다."
+  - id: 10
+    name: Deck Verify
+    profile: fact-checker      # ≠ curator
+    verifier: true
+    upstream: [9]
+    gate:
+      objective: [claim_provenance, diagram_integrity]
+      llm: fact_checker_verdict
+      draft: "reports/<MID>"
+    body: "덱의 **사실성**을 검증한다(객관 게이트: 슬라이드 수치↔claim 값 일치·최상급 인용·환각 인용 · 다이어그램 선언↔산출↔슬라이드 삼각 대조·Mermaid 문법·근거 실재). 사람이 읽어야 할 것: ① **맥락 삭제** — 수치는 맞는데 조건이 빠져 과장이 된 슬라이드(게이트가 못 본다). 발표에서는 이것이 질문으로 돌아온다. ② **그림이 말하는 것** — 다이어그램의 화살표 방향과 본문 설명이 일치하는가. ③ **비교의 공정성** — 우리에게 유리한 baseline 만 고르지 않았는가. ④ **인용 표기** — 남의 결과를 소개하는 슬라이드에 출처가 있는가. 끝에 VERDICT: PASS|FAIL."
+  - id: 11
+    name: Delivery Review
+    profile: reviewer          # ≠ fact-checker
+    verifier: true
+    upstream: [10]
+    gate:
+      objective: [slide_budget, deck_format, evidence_grade, content_accessibility]
+      llm: reviewer_verdict
+      draft: "reports/<MID>/_private/slides"
+    body: "덱의 **규격과 전달성**을 검토한다(객관 게이트: 선언 대비 산출·노트 실체·통합 노트 대조 · 불릿 과적재·본문 어절·제목 · 예비 등급↔유보 표현 · 대체 텍스트). 사람이 읽어야 할 것: ① **소리 내어 읽었을 때** 15분에 들어오는가(게이트는 장수만 센다). ② **한 장의 메시지** — 슬라이드마다 '청중이 가져갈 한 문장' 이 있는가. 불릿 5개가 규격 안이어도 메시지가 없으면 실패다. ③ **전환** — 섹션 경계에서 청중이 길을 잃지 않는가(섹션별 병렬 집필의 가장 흔한 실패다). ④ **폰트·색 대비**는 우리가 검사할 수 없다 — Marp 테마 기본값을 쓰라고 적어 두었는지 확인하라. 끝에 VERDICT: PASS|FAIL."
+  - id: 12
+    name: Talk Prep
+    profile: writer
+    upstream: [11]             # 게이트: 11 PASS 시 unblock
+    body: "발표 체크리스트 `_private/talk-checklist.md` 를 만든다 — **시간 순**으로: 발표일(`launch_date`)·리허설 일정·장비 확인(어댑터·클리커·폰트 임베딩)·발표 직전 확인(백업 PDF)·발표 후(질문 기록·슬라이드 공개 시점). 각 항목의 **담당(사람)**을 적어라. **SCOPE.md 의 `launch_date` 를 본문에 명시하라**(게이트가 대조한다).\n⚠️ **고지를 반드시 넣어라**: 이 파이프라인은 **발표하지 않는다** — 사람이 최종 확인 후 직접 발표한다. ⚠️ **슬라이드 공개 시점을 적어라** — 발표 후 덱을 올릴 것인지, 올린다면 어느 버전인지(엠바고·특허와 직결된다). ⚠️ 발표장 시간이 줄었을 때 **어느 슬라이드를 건너뛸지** 미리 정해 두면 그날 살아남는다."
+  - id: 13
+    name: Release Verify
+    profile: fact-checker      # ≠ writer
+    verifier: true
+    upstream: [12]
+    gate:
+      objective: [release_readiness]
+      llm: fact_checker_verdict
+      draft: "reports/<MID>"
+    body: "**지금 이것을 발표해도 되는지**를 마지막으로 확인한다(객관 게이트: 공개 근거·특허 상태·엠바고↔발표일·플레이스홀더·그림 권리·고지). 사람이 읽어야 할 것: ① **공개 근거의 실체** — `release_ref` 가 실제로 접근 가능한가. ② **공동 저자·기관의 동의** — 발표는 개인의 행위가 아니다. ③ **미공개 정보의 혼입** — 슬라이드나 노트에 아직 공개되지 않은 수치·이름·일정이 섞이지 않았는가(발표장에서 사진이 찍힌다). ④ **출원 전 발명** — `patent_status: planned` 면 게이트가 막는다. 학회 발표는 공개이고 신규성은 되돌릴 수 없다. 끝에 VERDICT: PASS|FAIL."
+  - id: 14
+    name: Wiki Update
+    profile: curator
+    upstream: [13]            # 게이트: 13 PASS 시 unblock
+    body: "이 미션에서 얻은 것을 llm-wiki 에 반영한다 — 발표 시간별 슬라이드 배분이 실제로 맞았는지 · 분야·학회별 발표 관행(질문 시간·슬라이드 밀도) · **다이어그램으로 설명이 되는 개념과 안 되는 개념** · 재사용 가능한 서사 구조(문제→방법→결과). entities/concepts + reflection + 재사용률 갱신."
+  - id: 15
+    name: Deliver
+    profile: default          # Solomon
+    sam_gate: true
+    approval_artifact: "reports/<MID>/_private/talk-checklist.md"
+    upstream: [14]
+    body: "① 번들을 `_private/slide-bundle/` 에 조립한다: `slides.md`(Marp 단일 파일 — 덱 frontmatter `marp: true`·`theme:`·`paginate: true` + 슬라이드를 번호 순으로 `---` 로 이어 붙이고 **`{{mermaid:dN}}` 을 실제 mermaid 블록으로 치환**) · `speaker-notes.md` · `mermaid/*.mmd` · `handout.md`(1쪽 요약 150~900어절). ⚠️ **미치환 placeholder 를 남기지 마라** — 원본 도구는 다이어그램을 못 찾으면 `<!-- missing mermaid: dN -->` **주석**을 넣는데, Marp 는 주석을 렌더하지 않아 **발표장에서 빈 슬라이드가 뜬다**. 게이트가 이것을 잡는다. ② `report/summary.md` 를 쓴다: 무엇으로 몇 장을 만들었는지 · 예상 발표 시간 · 다이어그램 수 · 게이트 7종 판정 · 번들 위치 · **남은 사람 작업**(리허설 → 최종 확인 → 발표) · Marp 렌더 명령(`marp slides.md --pdf`, Marp CLI 별도 설치). ③ 커밋 + git push(컨테이너 GITHUB_TOKEN 자격) + Slack 요약. ⚠️ **`publication_policy.mode` 를 Sam 과 확인하라** — 기본은 `local_only`(덱은 `_private/`, 커밋되는 것은 `report/summary.md` 뿐)다. 원자료가 이미 공개된 경우에만 `repo_commit` 으로 바꿀 수 있고, 그때도 **커밋 자체가 공개**임을 분명히 말하라. ⚠️ **우리는 발표하지 않는다.** ④ Slack 게시는 반드시 `hermes send --to slack:#mission-log \"<요약+커밋링크>\"`(Web API)로 하라 — 에이전트 slack 도구는 인바운드 Socket Mode 어댑터에 의존해 실패할 수 있다(현재 flapping)."
