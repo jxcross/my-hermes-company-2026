@@ -3,6 +3,55 @@
 이 프로젝트의 주요 변경 이력. 형식은 [Keep a Changelog](https://keepachangelog.com/) 및
 [Semantic Versioning](https://semver.org/)을 따른다.
 
+## [Unreleased]
+
+### Added — 추론 백엔드를 갈아끼울 수 있게 했다 (`docs/14`)
+- **`scripts/set_backend.py`** — 프로필 11종의 `model:` 블록을 **한 명령으로** 전환한다
+  (`--backend codex|ollama` · `--show` · `--dry-run`). 배치표는 스크립트 상단 `TIERS`·`BACKENDS`
+  **한 곳에만** 있고, `profiles-src/`(git 소스)와 `hermes-home/`(라이브) 양쪽을 함께 갱신한다.
+  - **왜**: codex 주간 한도가 소진돼(리셋 2026-08-09 14:07) 실미션 M-2026-005 가 stage 4 에서
+    멈췄고, 나흘 동안 파이프라인·게이트 62종·템플릿 20종을 **실행으로 검증할 수 없었다**.
+    한 공급자의 한도가 회사 전체를 세우면 안 된다.
+  - **로컬 배치**(M4 Max·64GB): 작성자 `qwen3.6-64k` · 검증자 **`glm-4.7-flash-64k`** ·
+    코더 `qwen3-coder-64k`(64K 창에서 각각 22~24GB). **작성자≠검증자를 모델 *계열* 수준까지**
+    지킨다 — 같은 계열은 같은 맹점을 공유해 독립검증이 성립하지 않는다. 테스트가 강제한다.
+  - **`--build-models`** — 배치 모델은 Modelfile 로 창을 못박은 **파생본**이다.
+    **실측으로 드러난 것**: Ollama 의 `/v1/chat/completions` 는 `options.num_ctx` 를 **무시한다**
+    (`/api/chat` 은 지킨다). Hermes 는 `/v1` 로 말하므로 config 의 `ollama_num_ctx` 만으로는
+    창이 안 잡히고, 모델이 최대 창으로 로드된다 — llama3.1:8b 로 재보니 8192 에서 5.9GB,
+    131072 에서 **22GB** 였다. 파생본은 원본과 **같은 blob 을 공유**해 디스크가 늘지 않는다.
+    `OLLAMA_NUM_CTX` 상수 하나가 Modelfile 과 config 양쪽을 채워 값이 갈라질 수 없다.
+  - **PyYAML 비의존** — 호스트 python3 에 PyYAML 이 없다. `model:` 최상위 블록만 행 단위로
+    치환해 `agent:`·Hermes 가 스스로 써 넣은 `onboarding:`·root config 의 `platform_toolsets:` 를
+    무손상으로 남긴다. 상태 파일 없이 **config 파일 자체**가 단일 진실원이다.
+- **`docs/14_local_model_backend.md`** — 배치 근거, config 키가 하나씩 빠졌을 때 무엇이 깨지는지,
+  전환·복귀 절차, 호스트 Ollama 설정.
+
+### Changed
+- **`scripts/usage_report.py` 가 백엔드를 인식한다.** 로컬 백엔드에서는 codex 한도가 착수
+  판정의 근거가 아니다 — 로그의 429 `resets_at` 만 보면 **리셋 시각까지 계속 `exit 1`** 이라
+  로컬로 옮긴 의미가 사라진다. `ollama` 백엔드에서는 **Ollama 서버 도달 + 배치 모델 설치
+  여부**로 판정하고(`/api/tags` — 여전히 **LLM 미호출**), 한도 기록은 복귀 판단용 참고로만
+  표시한다. `--backend codex|ollama` 강제 지정 추가.
+- `profiles-src/*/config.yaml` 의 `model:` 블록은 이제 **생성물**이다 — 직접 고치지 마라.
+
+### Verified (2026-08-05 · 연결 검증)
+- 프로필 11종 전부 로컬 모델로 전환 · 세 티어 모두 실호출 성공 · **`ollama ps` CONTEXT = 65536**
+  (설정이 실제로 반영됐는지를 바깥에서 관측 — 이게 없었으면 262144 인 걸 몰랐다).
+- **tool call 실증**: `scout`·`developer` 가 지시한 파일을 실제로 썼다.
+- `usage_report.py` 가 로컬 백엔드에서 **exit 0**(codex 한도는 아직 리셋 전인데도).
+- 토글 왕복(ollama→codex→ollama) 양방향 정상.
+- 회귀: 린터 **20/20** · E2E **14/14 510케이스** · 단위 **322종** 전건 통과.
+
+### Notes
+- ⚠️ **로컬 30B 급은 도구 프로토콜을 덜 지킨다 — 연결 검증에서 이미 보였다.** `developer` 가
+  목표 파일은 정확히 썼지만 **경로를 백틱으로 감싼 채** 엉뚱한 곳에 두 번 더 쓰려 했다
+  (`HERMES_WRITE_SAFE_ROOT` 와 `.json` 문법 검증이 막았다 — 가드레일이 일했다). 실미션에서는
+  `kanban_complete` 미호출·`VERDICT:` 포맷 이탈이 같은 계열의 위험이다. 객관 게이트 62종은
+  산출물을 보므로 그대로 작동하지만 **LLM 검증자의 판정 포맷**은 모델 품질에 직접 의존한다.
+- **설정 키가 있다는 것은 그 키가 먹힌다는 뜻이 아니다.** `docs/13 §5` 의 "동작하는 척하는
+  게이트" 와 같은 계열 — 넣은 설정이 반영됐는지를 **바깥에서 관측**하라(`ollama ps` 의 CONTEXT).
+
 ## [v0.3.0] - 2026-08-05
 
 **실미션 테스트 착수** — 변환된 아키타입을 라이브로 돌리기 시작했고, **첫 미션이 배선·운영

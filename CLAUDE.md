@@ -22,7 +22,22 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 
 ## 실행 상태 (Stage 1 — full 11단계 운영)
 - 격리 컨테이너 **`hermes-solomon`** (`docker-compose.yml`, 공식 이미지 nousresearch/hermes-agent). 인증: OAuth(ChatGPT), provider `openai-codex`.
-- **프로필 11종**: default(Solomon)·scout·reader·writer·synthesizer·curator·**architect·developer**=`gpt-5.6-terra`, **fact-checker·reviewer·tester=`gpt-5.6-sol`**(검증자). 소스=`profiles-src/`. architect·developer·tester는 2026-08-04 아키타입 D 도입으로 신설(`docs/13 §7`).
+- **프로필 11종**: default(Solomon)·scout·reader·curator·synthesizer·writer(작성자) · **fact-checker·reviewer·tester**(검증자) · **architect·developer**(코더). 소스=`profiles-src/`. architect·developer·tester는 2026-08-04 아키타입 D 도입으로 신설(`docs/13 §7`).
+- **⚠️ 추론 백엔드는 갈아끼운다 — 모델을 손으로 고치지 마라**(2026-08-05 신설 · `docs/14`). `model:` 블록은 **`scripts/set_backend.py` 가 생성**한다. 배치표는 그 스크립트 상단 `TIERS`·`BACKENDS` 한 곳에만 있다.
+  | 티어 | 프로필 | `codex` | **`ollama`(현재)** | 원본 |
+  |---|---|---|---|---|
+  | 작성자 | default·scout·reader·curator·synthesizer·writer | `gpt-5.6-terra` | `qwen3.6-64k` | `qwen3.6:35b` |
+  | 검증자 | fact-checker·reviewer·tester | `gpt-5.6-sol` | `glm-4.7-flash-64k` | `glm-4.7-flash` |
+  | 코더 | architect·developer | `gpt-5.6-terra` | `qwen3-coder-64k` | `qwen3-coder:30b` |
+
+  ```bash
+  python3 scripts/set_backend.py --show               # 현재 백엔드(불일치면 exit 1)
+  python3 scripts/set_backend.py --build-models       # -64k 파생본 생성(없는 것만)
+  python3 scripts/set_backend.py --backend ollama     # 로컬 · 한도 없음
+  python3 scripts/set_backend.py --backend codex      # 8/09 14:07 이후 복귀
+  ```
+  **작성자≠검증자는 모델 *계열* 수준까지 지킨다** — 같은 계열은 같은 맹점을 공유해 독립검증이 성립하지 않는다(테스트가 강제한다).
+  ⚠️ **`ollama_num_ctx` 만으로는 창이 안 잡힌다(실측)** — Ollama 의 `/v1` 은 `options.num_ctx` 를 **무시한다**(`/api/chat` 은 지킨다). 그래서 배치 모델은 Modelfile 로 창을 못박은 **`-64k` 파생본**이다(원본과 blob 공유 · 디스크 안 늘어남). 창 하나 차이로 메모리가 3.7배 난다 — 넣은 설정이 **반영됐는지 `ollama ps` 의 CONTEXT 로 확인하라**(`docs/14 §3.1`).
 - **인프라 정비 완료**: `HERMES_WRITE_SAFE_ROOT=/opt/data:/work/company:/work/llm-wiki`(워커 직접쓰기, 복사 불필요) · **Tavily 웹검색**(키는 repo `.env`의 `TAVILY_API_KEY`, 전 프로필 os.environ 노출 필수) · **`WIKI_PATH=/work/llm-wiki`**(Curator의 karpathy-llm-wiki 스킬).
 - **미션 산출물**: 보고서→`reports/M-2026-NNN/`, 지식→llm-wiki repo(raw/entities/concepts/reflections, 재사용률 추적). Kanban 게이트: 미션=부모·단계=자식, `link`=순차, `block --kind needs_input`=Sam 게이트, `--workspace dir:/work/company/reports/<mission>`.
 - **반려 게이트 자동화(게이트키퍼)**: 사이드카 컨테이너 **`hermes-gatekeeper`**(`docker-compose.yml`, `scripts/gate_keeper.py`). 검증 task(6·9) 판정이 `VERDICT: FAIL`이면 산출물 재작업 루프(리비전→재검증) 자동 생성 + downstream(7·10) PASS 전까지 보류. **활성 게이트만** 처리(완료 미션 스킵, 재시작 안전). **Sam 승인 게이트도 자동화**(`approval_poll`, Web API): 활성 Sam-게이트를 `#approvals`에 자동 게시 + Sam의 `승인`/`승인 <task_id>` 감지→`kanban unblock`(SLACK_ALLOWED_USERS만). 상세 `docs/10 §4.4`·`docs/11 §7`.
@@ -36,7 +51,8 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 - **Claude Code 프로젝트 메모리**: 로컬. 이 CLAUDE.md가 대체 컨텍스트 역할.
 
 ## 새 PC 부트스트랩 (순서)
-`docs/05_stage0_setup_guide.md` 참조. 요약: repo 2개 clone → `docker compose pull` → `cp .env.example .env`(SLACK·`TAVILY_API_KEY` 값 채움) → `hermes setup`(OAuth) → `solomon-profile/`의 SOUL·USER를 `hermes-home/`에 복사 → **전문 프로필 7종 재생성**(`profiles-src/<name>/`의 SOUL·config를 `hermes profile create` 후 `hermes-home/profiles/<name>/`에 복사: scout·reader·writer·synthesizer·curator·fact-checker·reviewer) → `docker compose up -d`(hermes-solomon + **hermes-gatekeeper 사이드카** 동시 기동) → 대시보드/Slack/`hermes profile list`(모델 terra/sol)·`docker compose ps`(게이트키퍼 Up) 확인.
+`docs/05_stage0_setup_guide.md` 참조. 요약: repo 2개 clone → `docker compose pull` → `cp .env.example .env`(SLACK·`TAVILY_API_KEY` 값 채움) → `hermes setup`(OAuth) → `solomon-profile/`의 SOUL·USER를 `hermes-home/`에 복사 → **전문 프로필 7종 재생성**(`profiles-src/<name>/`의 SOUL·config를 `hermes profile create` 후 `hermes-home/profiles/<name>/`에 복사: scout·reader·writer·synthesizer·curator·fact-checker·reviewer) → **`python3 scripts/set_backend.py --backend codex|ollama`**(배치 동기화 — `hermes profile create` 가 만든 config 를 배치표대로 덮는다) → `docker compose up -d`(hermes-solomon + **hermes-gatekeeper 사이드카** 동시 기동) → 대시보드/Slack/`set_backend.py --show`·`hermes profile list`·`docker compose ps`(게이트키퍼 Up) 확인.
+**로컬 Ollama 백엔드로 부트스트랩하면 OAuth(`hermes setup`) 자체가 필요 없다** — 호스트에 Ollama 와 배치 모델 3종만 있으면 된다(`docs/14`).
 
 ## 다음 할 일
 **완료(2026-08-03):** ✅ Slack 재연결(`docs/10 §4.3`) · ✅ 반려 게이트 자동화=`hermes-gatekeeper` 사이드카(`docs/10 §4.4`) · ✅ **템플릿 기반 미션 시스템 Pilot(P0–P4)**: 선언적 템플릿→Kanban 번역기 + 이중 게이트(객관 Python + LLM 검증자) + 실미션 **M-2026-003 완주**(11/11, 커밋 b7ec055). 상세 `docs/11 §7`. 신규 미션 실행: `python3 scripts/instantiate_template.py trend-report <MID> --topic "..."`(협상 미리보기 `--dry-run --render mermaid`).
@@ -59,14 +75,21 @@ plan=team · **리셋 2026-08-09 14:07**). 미션은 깨끗이 세워져 있다(
 stage 1~3 산출물 온전 · 정지 사유는 카드 코멘트에 기록). **재개 = 리셋 확인 → `t_b62286c9` unblock
 → stage 4 부터.**
 
+**→ [2026-08-05] 한도에 묶이지 않는 경로를 만들었다: 로컬 Ollama 백엔드**(`docs/14`).
+`python3 scripts/set_backend.py --backend ollama` 로 프로필 11종을 호스트 로컬 모델로 돌렸다.
+**리셋을 기다리지 않고 재개할 수 있다.** 단, 로컬 30B 급은 gpt-5.6 만큼 도구 프로토콜을 지키지
+못할 수 있다(`kanban_complete` 미호출 · `VERDICT:` 포맷 이탈) — 재개는 Sam 판단.
+
 **계획서**: 4-티어 실행 순서·미션 1건 절차·승인 규약은 `history.html #47`·`#48` 참조.
 1차 `academic-paper`(골격 검증 · **진행 중, stage 4 정지**) → 2차 `code-docs`(AST 게이트 ·
 우리 저장소 대상) → 3차 `systematic-review`(이식 게이트). Tier 3·4(비용·외부 실행·저장소
 수정)는 **Sam 재확인**.
 
-### 재개 절차 (2026-08-09 14:07 이후)
+### 재개 절차
 ```bash
-python3 scripts/usage_report.py                 # exit 0 이어야 재개 가능(1이면 아직 소진)
+# 백엔드에 따라 점검 대상이 다르다 — ollama=서버·모델 존재 · codex=한도 소진
+python3 scripts/set_backend.py --show           # 현재 백엔드 확인
+python3 scripts/usage_report.py                 # exit 0 이어야 재개 가능
 docker compose ps                               # 2개 Up
 docker exec hermes-solomon hermes kanban list | grep M-2026-005
 docker exec hermes-solomon hermes kanban unblock t_b62286c9 \
@@ -93,10 +116,12 @@ WARN 으로 넘겨 **게이트 빠진 파이프라인** ③**`archive` 가 워�
 "미션 진행상황을 전혀 모르겠다"에 대한 답이기도 하다. 나머지 3건(발견 문서화·사용량
 가시화·매처 C)은 완료.
 
-**⚠️ 미션을 시작하기 전에 `python3 scripts/usage_report.py` 를 돌려라.** 한도가 소진돼 있으면
-`exit 1` 이고, 그 상태로 미션을 걸면 워커가 60초마다 크래시하다 카드가 blocked 로 떨어진다
-(카드에는 'protocol violation' 만 남아 원인을 알 수 없다). 이 스크립트는 **LLM 을 호출하지
-않는다** — 근거는 `hermes insights` 와 워커 로그의 429 응답(`resets_at`)뿐이다.
+**⚠️ 미션을 시작하기 전에 `python3 scripts/usage_report.py` 를 돌려라.** 착수 불가면 `exit 1` 이고,
+그 상태로 미션을 걸면 워커가 60초마다 크래시하다 카드가 blocked 로 떨어진다(카드에는
+'protocol violation' 만 남아 원인을 알 수 없다). 이 스크립트는 **LLM 을 호출하지 않는다.**
+**점검 대상은 백엔드에 따라 다르다**(`docs/14 §6`): `codex`=워커 로그의 429 `resets_at` ·
+`ollama`=**Ollama 서버 도달 + 배치 모델 설치 여부**(로컬은 한도가 없으므로 지나간 429 기록으로
+막지 않는다). `--backend codex` 로 강제 지정하면 복귀 시점을 확인할 수 있다.
 
 **⚠️ 미션을 폐기·재시작할 때는 카드 archive 만으로 부족하다**:
 `docker exec hermes-solomon ps -eo pid,args | grep 'kanban task'` 로 **프로세스를 확인하고 죽여라**.
@@ -114,8 +139,8 @@ WARN 으로 넘겨 **게이트 빠진 파이프라인** ③**`archive` 가 워�
 | profile | **11종** — 기존 8 + `architect`·`developer`·`tester`(아키타입 D 도입 시 신설) |
 | 객관 게이트 | **62종** `scripts/gates/` — recency·source_balance·doc_consistency·test_run·prisma_counts·prisma_checklist·seen_dedup·digest_shape·claim_consistency·patent_format·evidence_grade·stakeholder_coverage·format_consistency·clause_completeness·law_citation·legal_safety·symbol_truth·api_coverage·doc_links·objective_coverage·bloom_distribution·course_consistency·content_accessibility·atomic_commit·test_pass_rate·behavior_diff·owasp_coverage·cve_remediation·finding_completeness·secret_redaction·eval_set_quality·stat_significance·repro_determinism·run_completeness·pii_presence·license_compat·schema_conformance·datasheet_completeness·result_tolerance·env_consistency·install_evidence·reproduce_doc·bit_exact·solver_pin·doe_completeness·analysis_integrity·proposal_format·budget_integrity·call_alignment·proposal_traceability·comment_fidelity·comment_coverage·change_consistency·response_quality·claim_provenance·channel_format·outreach_tone·release_readiness·**slide_budget·deck_format·diagram_integrity** |
 | 산출 도구 | 4종 `scripts/tools/` — bib_export·monitor_state·relevance_score·budget_build |
-| 운영 도구 | `scripts/match_template.py`(미션→템플릿 3-way 매처 · `--rebuild` 로 manifest 생성) · `scripts/usage_report.py`(사용량·한도 · **LLM 미호출** · exit 1=소진) |
-| 검증 | `python3 scripts/lint_template.py --all`(20/20) · 테스트 **294종**(32 템플릿 + 23 게이트키퍼 + 204 게이트 + 8 매처 + 7 사용량 + 20 기타) · **E2E 하네스 `scripts/tests/fixtures/run_all.py`(14종 510케이스)** |
+| 운영 도구 | `scripts/match_template.py`(미션→템플릿 3-way 매처 · `--rebuild` 로 manifest 생성) · `scripts/usage_report.py`(착수 전 점검 · **LLM 미호출** · 백엔드별 판정) · **`scripts/set_backend.py`**(추론 백엔드 codex↔ollama 전환 · `docs/14`) |
+| 검증 | `python3 scripts/lint_template.py --all`(20/20) · 테스트 **322종**(32 템플릿 + 23 게이트키퍼 + 204 게이트 + 8 매처 + 12 사용량 + 23 백엔드 + 20 기타) · **E2E 하네스 `scripts/tests/fixtures/run_all.py`(14종 510케이스)** |
 
 **Sam 지시:** 실미션은 **전체 변환을 마친 뒤 하나씩** 돌린다(변환 중에는 dry-run만).
 
@@ -129,11 +154,12 @@ WARN 으로 넘겨 **게이트 빠진 파이프라인** ③**`archive` 가 워�
 
 **새 세션 시작 시(3분 점검):**
 ```bash
-git log --oneline -6            # HEAD: slideforge→T(20/20) · 그 앞 outreachforge→S · rebuttalforge→R
+git log --oneline -6            # HEAD: 로컬 Ollama 백엔드 전환기 · 그 앞 slideforge→T(20/20)
 docker compose ps               # hermes-solomon · hermes-gatekeeper 2개 Up
+python3 scripts/set_backend.py --show   # ★ 어느 백엔드인가(현재 ollama · exit 1 이면 불일치)
+python3 scripts/usage_report.py         # ★ 착수 가능한가 — exit 1 이면 미션을 시작하지 마라(LLM 미호출)
 docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/lint_template.py --all'   # 20/20
 docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/fixtures/run_all.py' # 14/14 하네스
-python3 scripts/usage_report.py    # ★ 사용량·한도 — exit 1 이면 미션을 시작하지 마라(LLM 미호출)
 curl -s -o /dev/null -w '%{http_code}\n' --max-time 8 https://slack.com/api/auth.test           # ⚠️ 현재 000(도달 불가)
 ```
 → 변환은 끝났다. **다음은 실미션**이다 — Sam 에게 어느 아키타입을 먼저 돌릴지 확인하고(19종이 `draft`), Slack 도달성을 먼저 회복하라. 그 다음 과제는 **매처(C)**·**성장 지표 대시보드**(위 '다음 할 일' 5·6번).

@@ -109,6 +109,7 @@ hermes kanban swarm "핵심 주장 교차검증" \
   | reader·writer·**Solomon(default)**·(추후)synthesizer·curator | `gpt-5.6-terra` | GPT-5.5급·절반가·프로덕션 표준 |
   | (추후)fact-checker·reviewer | `gpt-5.6-sol` | 최심층 추론=독립검증 |
   - 설정: `hermes-home/config.yaml`(Solomon) + `profiles/<name>/config.yaml`. 버전관리 소스=`profiles-src/`.
+  - ⚠️ **[2026-08-05 갱신] 이 표는 이제 `scripts/set_backend.py` 의 `TIERS`·`BACKENDS` 가 유일한 출처다.** codex 주간 한도가 소진돼 실미션이 멈춘 것을 계기로 **추론 백엔드를 갈아끼울 수 있게** 바꿨다(`python3 scripts/set_backend.py --backend codex|ollama`). 위 배치는 `codex` 백엔드의 값이고, `ollama` 백엔드는 작성자=`qwen3.6:35b` · 검증자=`glm-4.7-flash` · 코더=`qwen3-coder:30b` 다. **config.yaml 의 `model:` 블록을 손으로 고치지 마라** — 다음 전환에서 덮인다. 상세: [`14_local_model_backend.md`](14_local_model_backend.md).
 
 ## 4.3 full 11단계 실행 결과 (M-2026-002, 2026-08-02~03)
 2호 미션 "AI 에이전트 평가·신뢰성·안전성 동향"으로 full 11단계를 완주하며 두 핵심 원리를 실증.

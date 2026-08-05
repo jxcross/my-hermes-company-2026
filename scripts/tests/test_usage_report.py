@@ -82,19 +82,102 @@ def test_main_exit_codes(capsys=None):
     orig = ur.LOG_DIRS
     ur.LOG_DIRS = [d]
     try:
-        sys.argv = ["usage_report", "--quiet", "--now", str(RESETS - 3600)]
+        sys.argv = ["usage_report", "--quiet", "--backend", "codex",
+                    "--now", str(RESETS - 3600)]
         assert ur.main() == 1, "리셋 전인데 소진으로 판정하지 않았다"
-        sys.argv = ["usage_report", "--quiet", "--now", str(RESETS + 3600)]
+        sys.argv = ["usage_report", "--quiet", "--backend", "codex",
+                    "--now", str(RESETS + 3600)]
         assert ur.main() == 0, "리셋 후인데 소진으로 판정했다"
     finally:
         ur.LOG_DIRS = orig
+
+
+# ── 백엔드 인식 (2026-08-05 · docs/14) ──────────────────────────────────────
+# 로컬 백엔드에서는 한도라는 것이 없는데 로그의 429 는 그대로 남아 있다. 그것만 보면
+# 리셋 시각까지 계속 exit 1 이 나와 **로컬로 옮긴 의미가 사라진다.**
+
+def _fake_tags(names):
+    return lambda url="": (list(names), "")
+
+
+def test_local_backend_ignores_stale_codex_limit(monkeypatch=None):
+    """★ 이 테스트가 이 변경의 존재 이유다 — 로컬인데 codex 한도로 막히면 안 된다."""
+    import set_backend as sb
+    d = _dir({"t_x.log": LOG_429})
+    orig_logs, orig_tags = ur.LOG_DIRS, ur.ollama_tags
+    ur.LOG_DIRS = [d]
+    ur.ollama_tags = _fake_tags(sb.backend_models("ollama"))
+    try:
+        sys.argv = ["usage_report", "--quiet", "--now", str(RESETS - 3600)]
+        args = _args(now=RESETS - 3600)
+        assert ur.main_local(args, "ollama") == 0, \
+            "로컬 백엔드인데 지나간 codex 한도 기록으로 착수를 막았다"
+    finally:
+        ur.LOG_DIRS, ur.ollama_tags = orig_logs, orig_tags
+
+
+def test_local_backend_blocks_when_model_missing():
+    """모델이 없으면 워커가 매 턴 실패한다 — 카드에는 이유가 안 남는다(docs/11 §7 ⑦)."""
+    import set_backend as sb
+    orig_logs, orig_tags = ur.LOG_DIRS, ur.ollama_tags
+    ur.LOG_DIRS = [_dir({})]
+    ur.ollama_tags = _fake_tags([sb.backend_models("ollama")[0]])  # 1종만 설치
+    try:
+        assert ur.main_local(_args(), "ollama") == 1, "모델이 없는데 착수 가능으로 판정했다"
+    finally:
+        ur.LOG_DIRS, ur.ollama_tags = orig_logs, orig_tags
+
+
+def test_local_backend_blocks_when_server_unreachable():
+    orig_logs, orig_tags = ur.LOG_DIRS, ur.ollama_tags
+    ur.LOG_DIRS = [_dir({})]
+    ur.ollama_tags = lambda url="": (None, "URLError: refused")
+    try:
+        assert ur.main_local(_args(), "ollama") == 1, "서버가 죽었는데 착수 가능으로 판정했다"
+    finally:
+        ur.LOG_DIRS, ur.ollama_tags = orig_logs, orig_tags
+
+
+def test_check_local_accepts_latest_suffix_variants():
+    """ollama 는 `foo` 를 `foo:latest` 로 보고한다 — 이름 비교만 하면 거짓 '없음' 이 난다."""
+    import set_backend as sb
+    want = sb.backend_models("ollama")
+    orig = ur.ollama_tags
+    ur.ollama_tags = _fake_tags([f"{w}:latest" if ":" not in w else w for w in want])
+    try:
+        assert ur.check_local("ollama")["missing"] == [], ur.check_local("ollama")
+    finally:
+        ur.ollama_tags = orig
+
+
+def test_local_probe_never_calls_an_llm():
+    """★ 한도를 확인하려고 한도를 쓰면 안 된다 — 로컬 점검도 /api/tags 만 본다."""
+    seen = []
+    orig = ur.urllib.request.urlopen
+    ur.ollama_tags(url="http://127.0.0.1:1")   # 닿지 않아도 예외를 삼켜야 한다
+    src = open(ur.__file__, encoding="utf-8").read()
+    assert "/api/tags" in src and "/api/chat" not in src and "/api/generate" not in src, \
+        "로컬 점검이 추론 엔드포인트를 부른다"
+    assert orig is ur.urllib.request.urlopen and seen == []
+
+
+def _args(now=None):
+    class A:
+        pass
+    a = A()
+    a.json = False
+    a.quiet = True
+    a.now = now
+    a.ollama_url = ""
+    a.repo_root = ur.REPO_ROOT
+    return a
 
 
 def test_main_fail_closed_when_no_logs():
     orig = ur.LOG_DIRS
     ur.LOG_DIRS = [tempfile.mkdtemp() + "/nonexistent"]
     try:
-        sys.argv = ["usage_report", "--quiet"]
+        sys.argv = ["usage_report", "--quiet", "--backend", "codex"]
         assert ur.main() == 2, "근거가 없는데 정상으로 판정했다(fail-closed 위반)"
     finally:
         ur.LOG_DIRS = orig

@@ -16,12 +16,20 @@
      · `hermes insights` — 누적 세션·토큰(모델별)
      · `hermes-home/kanban/logs/*.log` — 워커 세션의 429 응답(`resets_at` 포함)
 
+⚠️ **백엔드에 따라 무엇을 점검할지가 달라진다**(2026-08-05 추가 · `docs/14`).
+   `scripts/set_backend.py` 로 로컬 Ollama 백엔드로 전환하면 **API 한도라는 것이 없다.**
+   그런데 로그의 429 `resets_at` 은 그대로 남아 있어, 그것만 보면 리셋 시각까지 계속
+   `exit 1` 이 나온다 — 로컬로 옮긴 의미가 사라진다. 그래서 활성 백엔드를 먼저 읽고:
+     · `codex`  → 한도 소진 여부(기존 판정)
+     · `ollama` → **Ollama 서버 도달 + 배치 모델 설치 여부**(한도 판정은 참고로만 표시)
+   로컬 점검도 LLM 을 호출하지 않는다 — `/api/tags` 는 메타데이터 조회다.
+
 사용
   python3 scripts/usage_report.py               # 사람이 읽는 요약
   python3 scripts/usage_report.py --json        # 기계 판독
   python3 scripts/usage_report.py --quiet       # exit code 만 (미션 착수 전 점검용)
 
-exit: 0 정상 · 1 **한도 소진 중**(리셋 전) · 2 근거를 읽지 못함
+exit: 0 정상 · 1 **착수 불가**(codex=한도 소진 · ollama=서버 불통/모델 없음) · 2 근거를 읽지 못함
 """
 from __future__ import annotations
 import argparse
@@ -32,10 +40,19 @@ import re
 import shutil
 import subprocess
 import sys
+import urllib.error
+import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import set_backend as sb  # noqa: E402
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG_DIRS = [os.path.join(REPO_ROOT, "hermes-home", "kanban", "logs"),
             "/opt/data/kanban/logs"]
+
+# 로컬 백엔드 점검용. 호스트에서 도는 것을 전제로 한다(컨테이너에서는
+# host.docker.internal 을 쓴다 — set_backend.BACKENDS 의 base_url 참조).
+OLLAMA_URL = os.environ.get("OLLAMA_PROBE_URL", "http://127.0.0.1:11434")
 
 # 429 본문. resets_at 은 epoch 초.
 # ⚠️ plan_type 을 같은 정규식의 **선택 그룹**으로 두면 비탐욕 매칭이 그것을 건너뛰고
@@ -115,6 +132,78 @@ def scan_limits(paths: list[str]) -> tuple[dict | None, list[str]]:
     return latest, sorted(set(env_failed))
 
 
+def ollama_tags(url: str = "") -> tuple[list[str] | None, str]:
+    """(설치된 모델 태그 목록, 오류). LLM 을 호출하지 않는다 — /api/tags 는 메타데이터다."""
+    base = (url or OLLAMA_URL).rstrip("/")
+    try:
+        with urllib.request.urlopen(base + "/api/tags", timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, OSError, ValueError, TimeoutError) as exc:
+        return None, f"{type(exc).__name__}: {exc}"
+    return [m.get("name", "") for m in (data.get("models") or [])], ""
+
+
+def check_local(backend: str, url: str = "") -> dict:
+    """로컬 백엔드의 착수 가능 여부. 근거는 두 가지뿐이다 — 서버 도달 · 모델 존재."""
+    want = sb.backend_models(backend)
+    tags, err = ollama_tags(url)
+    if tags is None:
+        return {"reachable": False, "error": err, "wanted": want,
+                "missing": want, "installed": []}
+    # `qwen3.6:35b` 와 `qwen3.6:35b` 는 같지만, ollama 는 `:latest` 를 생략해 보고하기도 한다.
+    have = set(tags) | {t.split(":")[0] for t in tags if t.endswith(":latest")}
+    missing = [m for m in want if m not in have and f"{m}:latest" not in have]
+    return {"reachable": True, "error": "", "wanted": want,
+            "missing": missing, "installed": tags}
+
+
+def main_local(args, backend: str) -> int:
+    """로컬 백엔드 착수 점검 — 한도가 아니라 **모델이 거기 있는지**를 본다."""
+    local = check_local(backend, args.ollama_url)
+    ok = local["reachable"] and not local["missing"]
+    # 과거 codex 소진 기록은 참고용으로 계속 읽는다(복귀 시점 판단에 쓴다).
+    latest, env_failed = scan_limits(log_files())
+    now = args.now if args.now is not None else int(dt.datetime.now().timestamp())
+    report = {
+        "backend": backend,
+        "exhausted": False,          # 로컬은 한도가 없다
+        "local": local,
+        "limit_record": latest,      # 참고: codex 복귀 시 이 시각 이후여야 한다
+        "seconds_to_reset": max(0, latest["resets_at"] - now) if latest else 0,
+        "env_failed_tasks": env_failed,
+        "insights": insights() if not args.quiet else {},
+        "log_files": len(log_files()),
+    }
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if ok else 1
+    if args.quiet:
+        return 0 if ok else 1
+
+    print(f"── 백엔드 ──  {backend} (로컬) — API 한도 없음")
+    print(f"  모델: {', '.join(local['wanted'])}")
+    print("── 로컬 준비 상태 ──")
+    if not local["reachable"]:
+        print(f"  ⚠️ Ollama 서버에 닿지 않는다 ({args.ollama_url or OLLAMA_URL}) — {local['error']}")
+        print("     → Ollama 를 켜라. 이 상태로 미션을 걸면 워커가 매 턴 실패한다.")
+    elif local["missing"]:
+        print(f"  ⚠️ 모델 없음: {', '.join(local['missing'])}")
+        print(f"     → ollama pull {local['missing'][0]}")
+    else:
+        print(f"  ✓ 서버 도달 · 배치 모델 {len(local['wanted'])}종 모두 설치됨")
+    if latest:
+        when = dt.datetime.fromtimestamp(latest["resets_at"]).strftime("%Y-%m-%d %H:%M")
+        state = "리셋 전" if latest["resets_at"] > now else "리셋됨"
+        print(f"── 참고: codex 한도 ──  {when} {state} "
+              f"(복귀는 `set_backend.py --backend codex`)")
+    ins = report["insights"]
+    if ins:
+        print("── 누적 사용량 ──")
+        print(f"  기간 {ins.get('period', '?')} · 세션 {ins.get('sessions', '?')} · "
+              f"총 토큰 {ins.get('total_tokens', 0):,}")
+    return 0 if ok else 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -122,7 +211,18 @@ def main() -> int:
     ap.add_argument("--quiet", action="store_true", help="exit code 만")
     ap.add_argument("--now", type=int, default=None,
                     help="현재 시각(epoch) 주입 — 테스트용. 미지정 시 시스템 시계")
+    ap.add_argument("--repo-root", default=REPO_ROOT, help="저장소 루트(테스트용)")
+    ap.add_argument("--ollama-url", default="", help="로컬 백엔드 점검 URL(테스트용)")
+    ap.add_argument("--backend", choices=["auto", "codex", "ollama"], default="auto",
+                    help="점검 대상 백엔드. 기본 auto = config 에서 판정")
     args = ap.parse_args()
+
+    # ── 어느 백엔드인가 ──
+    # 로컬(ollama) 이면 codex 한도는 착수 판정의 근거가 아니다. 소진 기록은 리셋 후 복귀
+    # 판단에 필요하므로 계속 **보여주되**, exit code 는 로컬 준비 상태로 정한다.
+    backend = args.backend if args.backend != "auto" else sb.active_backend(args.repo_root)
+    if backend in ("ollama",):
+        return main_local(args, backend)
 
     paths = log_files()
     if not paths:
@@ -138,6 +238,7 @@ def main() -> int:
 
     exhausted = bool(latest and latest["resets_at"] > now)
     report = {
+        "backend": backend,
         "exhausted": exhausted,
         "limit_record": latest,
         "seconds_to_reset": (latest["resets_at"] - now) if exhausted else 0,
@@ -149,6 +250,9 @@ def main() -> int:
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     elif not args.quiet:
+        print(f"── 백엔드 ──  {backend}"
+              + ("   ⚠️ 프로필마다 백엔드가 다르다 — `set_backend.py --show`"
+                 if backend == "mixed" else ""))
         print("── 사용량 ──")
         if ins:
             print(f"  기간 {ins.get('period', '?')} · 세션 {ins.get('sessions', '?')} · "
