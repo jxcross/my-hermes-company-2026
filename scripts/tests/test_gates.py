@@ -69,6 +69,11 @@ solver_pin = _load("solver_pin")
 doe_completeness = _load("doe_completeness")
 analysis_integrity = _load("analysis_integrity")
 
+proposal_format = _load("proposal_format")
+budget_integrity = _load("budget_integrity")
+call_alignment = _load("call_alignment")
+proposal_traceability = _load("proposal_traceability")
+
 
 # ── prisma_counts ────────────────────────────────────────────────────────
 def test_counts_parse():
@@ -1238,6 +1243,93 @@ def test_systems_block_parses_change_field():
         "- id: a\n  role: ablation\n  change: 리랭커 제거\n- id: b\n  role: baseline\n")
     assert got[0]["change"] == "리랭커 제거" and got[1]["role"] == "baseline"
 
+
+
+# ── 아키타입 Q: proposal_format ──────────────────────────────────────────
+def test_gantt_tasks_ignores_directives():
+    """`gantt`·`title`·`section` 은 task 가 아니다 — 원본은 블록 존재만 봤다."""
+    text = "```mermaid\ngantt\n    title 일정\n    dateFormat YYYY-MM-DD\n" \
+           "    section 활동\n    설계 :a1, 2026-03-01, 90d\n```"
+    assert proposal_format.gantt_tasks(text) == ["설계 :a1, 2026-03-01, 90d"]
+
+
+def test_gantt_tasks_empty_chart_is_not_none():
+    """빈 도표는 None(블록 없음)이 아니라 [] — 이 구별이 원본 결함의 자리다."""
+    assert proposal_format.gantt_tasks("```mermaid\ngantt\n```") == []
+    assert proposal_format.gantt_tasks("# 제목뿐") is None
+
+
+def test_ascii_ratio_detects_korean_abstract():
+    assert proposal_format.ascii_ratio("This is an English abstract.") == 1.0
+    assert proposal_format.ascii_ratio("이것은 국문 초록이다") < 0.3
+
+
+def test_section_path_accepts_korean_alias():
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    open(_os.path.join(d, "연구목표.md"), "w", encoding="utf-8").write("x")
+    assert proposal_format.section_path(d, "aims", {"aims": ["연구목표"]})
+    assert proposal_format.section_path(d, "aims", {}) is None
+
+
+# ── 아키타입 Q: budget_integrity ─────────────────────────────────────────
+def test_parse_amount_rejects_non_numeric():
+    """원본은 숫자가 아닌 셀을 0 으로 읽었다. 우리는 None(=FAIL)."""
+    assert budget_integrity.parse_amount(" 1,200,000 원 ") == 1200000
+    assert budget_integrity.parse_amount("") == 0
+    assert budget_integrity.parse_amount("삼천만원") is None
+    assert budget_integrity.parse_amount("1-2") is None
+
+
+def test_parse_amount_keeps_negative_visible():
+    """음수를 '읽지 못하는' 것이 아니라 읽고 정책으로 막는다(조정 행 우회)."""
+    assert budget_integrity.parse_amount("-160000000") == -160000000
+
+
+def test_parse_resources_reads_kind_and_missing_block():
+    """예산의 분모는 plan.md 선언이다 — 블록이 없으면 None(=FAIL)이어야 한다."""
+    import tempfile, os as _os
+    d = tempfile.mkdtemp()
+    p1 = _os.path.join(d, "plan.md")
+    open(p1, "w", encoding="utf-8").write(
+        "```resources\n- id: r1\n  kind: equipment\n  item: GPU 서버\n```\n")
+    assert budget_integrity.parse_resources(p1) == [
+        {"id": "r1", "kind": "equipment", "item": "GPU 서버"}]
+    p2 = _os.path.join(d, "empty.md")
+    open(p2, "w", encoding="utf-8").write("# 계획만 있고 자원 선언이 없다\n")
+    assert budget_integrity.parse_resources(p2) is None
+
+
+# ── 아키타입 Q: call_alignment ───────────────────────────────────────────
+def test_match_program_allows_suffix_but_not_unknown():
+    rules = {"신진": {"max_years_post_phd": 7}, "리더": {"min_years_post_phd": 10}}
+    assert call_alignment.match_program("신진연구자사업(2026)", rules)[0] == "신진"
+    # 원본은 여기서 자동 PASS 였다 — 우리는 None → FAIL
+    assert call_alignment.match_program("기본연구", rules)[0] is None
+    assert call_alignment.match_program("", rules)[0] is None
+
+
+def test_criteria_block_parsed_with_korean_ids():
+    import tempfile, os as _os
+    p = _os.path.join(tempfile.mkdtemp(), "outline.md")
+    open(p, "w", encoding="utf-8").write(
+        "```criteria\n- id: 창의성\n  section: aims\n  evidence: 근거 서술\n```\n")
+    got = call_alignment.parse_criteria(p)
+    assert got == [{"id": "창의성", "section": "aims", "evidence": "근거 서술"}]
+
+
+# ── 아키타입 Q: proposal_traceability ────────────────────────────────────
+def test_mentions_survives_korean_particles():
+    """`\\ba1\\b` 는 `a1을` 에서 실패한다(docs/13 §5). lookaround 로 잡는다."""
+    assert proposal_traceability.mentions("활동 a1을 먼저 수행한다", "a1")
+    assert proposal_traceability.mentions("a2의 결과를 (a3)와 비교한다", "a3")
+    assert not proposal_traceability.mentions("a10 은 다른 활동이다", "a1")
+
+
+def test_id_list_parses_bracket_and_bare():
+    assert proposal_traceability.id_list("[g1, g2]") == ["g1", "g2"]
+    assert proposal_traceability.id_list("g1") == ["g1"]
+    assert proposal_traceability.id_list("") == []
 
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@ HARNESSES = [
     ("dataset", "N 데이터셋 배포"),
     ("repro", "O 재현 패키지"),
     ("sim", "P 시뮬레이션 실험"),
+    ("proposal", "Q 연구제안서"),
 ]
 
 

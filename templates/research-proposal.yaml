@@ -1,0 +1,283 @@
+# 아키타입 Q — 연구제안서(연구비 신청) 15단계
+# 출처: other_projects/harness-templates/research-harnesses/project_proposalforge
+#       (.claude/skills/proposalforge/SKILL.md 9-stage + agents 15종). 변환 절차: docs/13
+#
+# 이 아키타입이 만드는 것: **제출 가능한 연구비 제안서 번들**이다. 공고(사업·마감·페이지
+# 한도·연차 예산 상한)를 확정하고, PI 이력과 선행 성과를 모으고, 학술·수행과제(NTIS)·특허
+# 지형을 병렬 조사해 **연구 공백**을 도출하고, 공백에서 세부목표·활동을 설계하고, 일정과
+# 예산을 짜고, 5개 절을 병렬 집필해 본문·영문 초록·예산표·간트·참고문헌 번들을 낸다.
+#
+# ⚠️ **이 아키타입의 산출물은 심사 전에 공개되면 안 된다.** 이 저장소는 PUBLIC 이고
+#    Deliver 가 `reports/<MID>/` 를 커밋·push 한다. 제안서 본문이 그대로 올라가면
+#    ① **아이디어 선점** ② 미발표 예비결과 공개 ③ PI 개인정보 노출이 한꺼번에 일어나고
+#    **되돌릴 수 없다**. 그래서:
+#      · `publication_policy.mode` 기본값이 **`local_only`** 다 — 본문·예산·PI 정보는
+#        `_private/`(gitignore) 에만 두고, 커밋되는 것은 `report/summary.md`(무엇을 만들었고
+#        게이트가 어떻게 판정했는지)와 출처 목록뿐이다.
+#      · `repo_commit`(본문도 커밋)은 **Sam 이 Scoping 과 Deliver 에서 두 번 승인**해야 한다.
+#      · `legal_safety` 가 선언한 mode 와 **실제 산출 위치**의 일치를 강제한다
+#        (아키타입 N 이 데이터에 하는 일을 문서에 한다 — 새 게이트를 만들지 않고 그 게이트에
+#        `publication_policy` 축을 열었다. docs/13 §5).
+#      · PI 개인정보(주민등록번호·계좌 등)는 **`_private/` 안에서도 평문 금지**다. 초안은
+#        플레이스홀더로 쓰고 실제 값은 사람이 NTIS 에 직접 입력한다(아키타입 H 의 규율).
+#
+# ⚠️ **제출은 사람이 한다.** 이 파이프라인은 NTIS 업로더가 아니고, 기관 연구처 검토를
+#    대신하지 않으며, 예산 항목은 추정치다. 고지를 `legal_safety` 가 강제한다.
+#
+# 변환 판단(요약 — 상세·근거는 docs/13 §2·§5):
+#  - **원본 게이트 2종에서 결함 8건을 실측**했다. 가장 큰 것: 섹션 파일 5개를 **전부 빈
+#    파일**로 두고 gantt 를 한 줄로 두면 Gate 1 이 `overall: PASS · exit=0` 이다.
+#    존재만 확인하고 **하한이 없다** — 아무것도 쓰지 않은 제안서가 가장 안전하게 통과한다.
+#  - Gate 2 는 **키워드를 셌다.** 5개 절에 `창의 창의 창의 novel 우수 …` 한 줄씩만 넣으면
+#    전 평가지표가 PASS 다. → **구조화된 대응 선언**(지표 → 절 → 근거)으로 판정 방식을 바꿨다.
+#  - cap 검사는 **음수 행·짧은 행·Sum 열 누락** 세 방법으로 빠져나갈 수 있었다(전부 실측).
+#  - "Gantt 는 methods 활동과 **1:1 매칭**"은 CLAUDE.md 의 선언일 뿐 코드에 없다
+#    → `proposal_traceability` 신설(이 아키타입의 핵심 불변식).
+#  - **기존 게이트 3종을 재사용했다** — `source_balance`·`recency_check`(지형 조사의 균형·
+#    최신성은 아키타입 A·G 와 하는 일이 같다) · `legal_safety`(고지 + 개인정보 + 공개 범위).
+#    **지금까지 변환 중 재사용이 가장 많다**(§2④).
+#  - `budget_build.py` 는 **판정하지 않으므로 게이트가 아니다** → `scripts/tools/` 로.
+#    `bib_export.py` 는 이미 우리 것이 있다. `bundle_export.py`·`runs_state.py` 는 미이식.
+#
+# 스키마 규약은 templates/trend-report.yaml 머리말 참조.
+
+name: research-proposal
+category: research
+display_name: 연구제안서(공고 정합·예산·일정 포함 제출 번들)
+maturity: draft
+goal_kr: 연구 아이디어와 PI 이력에서 출발해 공고 요건에 정합하는 제출 가능한 연구비 제안서 번들(본문·영문초록·예산표·일정·참고문헌)을 낸다.
+requires_profiles: [architect, developer]
+invariants: [scoping_gate, deliver_gate, writer_ne_reviewer, factchecker_ne_reader, sources_cited, revision_loop]
+
+policy:
+  # ── 공개 범위 ────────────────────────────────────────────────────────────────
+  # ⚠️ 기본이 local_only 다. 심사 전 제안서는 공개하지 않는다.
+  publication_policy:
+    mode: local_only            # local_only | repo_commit(Sam 2회 승인)
+    private_dir: _private
+    content_files:              # 본문에 해당하는 것 — 위치를 게이트가 강제한다
+      - bundle/proposal.md
+      - bundle/abstract-en.md
+      - bundle/sections
+      - bundle/budget.csv
+      - outline.md
+      - context.md
+
+  # ── 재사용: 지형 조사의 균형·최신성(아키타입 A·G 와 같은 일) ──────────────────
+  source_balance_policy:
+    # source_type = 지형의 갈래. 한쪽만 보면 제안서가 무너진다 — 논문만 보면 이미 국가가
+    # 수행 중인 과제와 중복되고(NTIS 미조사), 과제만 보면 학술적 신규성을 주장할 수 없다.
+    categories: [academic, funded, patent]
+    min_per_category:
+      academic: 6        # 동료심사 문헌
+      funded: 3          # NTIS 등 기수행/수행중 과제 — 중복 판정을 피하는 근거
+      patent: 2          # 특허 지형 — 실용화 주장의 근거
+    hard_block_if_missing: true
+  recency_policy:
+    cutoff_year_offset: -5
+    recent_ratio: 0.6
+    hard_block_year_offset: -15
+    seminal_exceptions: true    # 분야를 연 논문은 오래돼도 인용한다
+
+  # ── 이식한 Gate 1(형식) — 결함 5건 수정 ──────────────────────────────────────
+  format_policy:
+    bundle_dir: _private/bundle
+    sections_subdir: sections
+    sections: [aims, background, methods, impact, team]
+    section_aliases:
+      aims: [연구목표]
+      background: [연구배경]
+      methods: [연구방법]
+      impact: [기대효과]
+      team: [연구진]
+    required_artifacts: [proposal.md, abstract-en.md, budget.csv, budget.md,
+                         timeline.md, references.bib, sections]
+    words_per_page: 600         # 국문 어절 기준(A4 1쪽 ≈ 500~700 어절)
+    min_page_ratio: 0.5         # ⚠️ 하한 — 원본에는 상한만 있어 빈 제안서가 통과했다
+    min_section_words: 150      # ⚠️ 절마다 실질 분량(원본은 `is_file()` 만 봤다)
+    gantt_min_tasks: 4          # ⚠️ 빈 gantt 차단
+    timeline_file: timeline.md
+    proposal_file: proposal.md
+    min_assembly_ratio: 0.8     # 본문이 절을 실제로 담고 있는가(목차만 있는 조립 차단)
+    abstract_file: abstract-en.md
+    abstract_words: [150, 400]
+    abstract_min_ascii: 0.7     # ⚠️ 원본에 없다 — "초록은 영문"은 선언뿐이었다
+
+  # ── 이식한 Gate 1(예산) — 결함 3건 수정 ──────────────────────────────────────
+  budget_policy:
+    csv: _private/bundle/budget.csv
+    plan_file: _private/plan.md
+    require_sum_column: true    # ⚠️ 열이 없으면 원본은 아무 행도 대조하지 않고 'ok' 였다
+    sum_aliases: [Sum, 합계, 총계]
+    subtotal_row_prefix: 직접비_소계
+    indirect_row_prefix: 간접비
+    total_row_prefix: 연차_총계
+    allow_negative: false       # ⚠️ 음수 조정 행으로 연차 상한을 깎는 통로를 막는다
+    indirect_tolerance: 0.01
+    min_total_krw: 1
+    categories: [인건비]        # 최소 필수 비목. 나머지는 계획에 따라 달라진다
+    require_plan_basis: true    # 예산의 분모를 표 밖(plan.md)에 고정한다
+
+  # ── 이식한 Gate 2(공고 정합) — 판정 방식을 바꿨다 ────────────────────────────
+  call_policy:
+    # ⚠️ 자격창은 **정책 소유**다. 새 사업이면 여기에 추가하라 — 원본은 목록에 없는 사업명이면
+    #    자격 검사를 통째로 껐다(박사 30년차가 신진 사업에 PASS 했다).
+    eligibility:
+      신진: {max_years_post_phd: 7}
+      중견: {min_years_post_phd: 8}
+      리더: {min_years_post_phd: 10, min_representative_pubs: 5}
+      우수신진: {max_years_post_phd: 7}
+      기본연구: {min_years_post_phd: 0}
+    criteria: [창의성, 우수성, 구체성, 추진전략, 기대효과]
+    # ⚠️ 하한은 **국문 글자 수**다. 처음에 60자로 뒀더니 정상 픽스처의 실제 근거 문장
+    #    ("기존 계열은 공개 벤치마크에 그쳤다 본 연구는 …를 처음으로 제시한다" = 56자)이
+    #    반려됐다 — 국문은 정보 밀도가 높아 한 문장이 40~55자다. 40 이면 '창의적이다'(5자)·
+    #    '본 연구는 창의적이고 우수하다'(30자 미만) 류는 걸러지고 실제 서술은 통과한다.
+    #    (legalforge 의 '정상 문서를 반려하는 게이트' 교훈 — 픽스처가 잡았다)
+    min_evidence_chars: 40      # 지표당 대응 근거의 최소 서술(국문 글자)
+    min_section_words: 150
+    outline_file: _private/outline.md
+    context_file: _private/context.md
+    sections_dir: _private/bundle/sections
+
+  # ── 신설: 추적성 사슬(원본은 규약으로만 선언) ────────────────────────────────
+  trace_policy:
+    landscape_file: _private/landscape.md
+    outline_file: _private/outline.md
+    timeline_file: _private/bundle/timeline.md
+    methods_file: _private/bundle/sections/methods.md
+    min_gaps: 2
+    min_objectives: 2
+    max_objectives: 5           # 분모 자기결정 차단(목표 1개면 커버리지가 저절로 쉬워진다)
+    min_activities_per_objective: 1
+    require_gap_sources: true   # 공백은 조사에서 나와야 한다(환각 공백 차단)
+
+  # ── 재사용: 고지 + 개인정보 + 공개 범위 ──────────────────────────────────────
+  legal_safety_policy:
+    require_disclaimer: true
+    disclaimer_reason: "제안서는 소속 기관 연구처 검토와 신청자 본인의 제출을 전제로 한 초안이다"
+    disclaimer_terms:
+      - "소속 기관 연구처 검토"
+      - "실제 제출은 신청자"
+      - "회계·법률 자문이 아니"
+    disclaimer_files: [summary.md, proposal.md]
+    block_pii: true
+    allow_placeholder: true
+    pii_kinds: [주민등록번호, 외국인등록번호, 사업자등록번호, 여권번호, 계좌번호, 신용카드번호]
+
+stages:
+  - id: 1
+    name: Scoping
+    profile: default          # Solomon
+    sam_gate: true
+    upstream: []
+    body: "미션 스펙을 reports/<MID>/SCOPE.md 에 작성한다. **frontmatter 에 다음을 반드시 선언하라 — 게이트가 이 값을 분모로 쓴다**(표 안에서 닫히는 회계를 막는다):\n```\nnrf_program: 신진연구자      # 자격창 조회 키. call_policy.eligibility 에 있는 이름이어야 한다\npage_limit: 30              # 공고의 페이지 한도\nbudget_cap_per_year_krw: 150000000\nn_years: 5                  # 연구기간. 예산표의 연차 열 수와 대조된다\nindirect_rate: 0.17         # 기관 간접비율\ndeadline: 2026-09-30\npublication_mode: local_only\n```\n본문에는 연구 아이디어 요지 · 대상 공고 · 완료조건 · 제출 형태를 적는다. ⚠️ **공개 범위를 Sam 에게 분명히 알려라**: 기본값 `local_only` 에서 제안서 본문·예산·PI 정보는 `_private/`(커밋되지 않음)에만 남고 저장소에는 요약만 올라간다. **심사 전 제안서를 공개하면 아이디어를 선점당한다** — `repo_commit` 으로 바꾸려면 여기서 한 번, Deliver 에서 또 한 번 승인이 필요하다. ⚠️ **이 파이프라인은 제출을 대행하지 않는다** — 산출물은 NTIS 입력용 자료이고, 기관 연구처 검토와 실제 제출은 사람이 한다. ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라."
+  - id: 2
+    name: PI Context
+    profile: reader
+    upstream: [1]
+    body: "PI 이력과 선행 성과를 `_private/context.md` 에 정리하고 인용은 `_private/context-refs.bib` 에 담는다. **다음 두 가지는 형식을 정확히 지켜라**(게이트가 파싱한다):\n```\ncareer_years_post_phd: 4\n```\n```representative\n- bibkey: kim2024gnn\n  title: ...\n  venue: ...\n  role: 제1저자\n```\n⚠️ **```representative``` 블록에는 PI 본인의 대표 논문만 넣어라** — 원본 게이트는 파일 전체의 `- bibkey:` 를 세어 **남의 논문 인용 5건으로 리더연구자 자격이 충족**됐다. 참고문헌은 이 블록 밖에 둔다. ⚠️ **개인정보를 평문으로 쓰지 마라** — 주민등록번호·계좌번호·여권번호는 `_private/` 안에서도 금지다(플레이스홀더 `[주민등록번호]`·`000-00-00000`). 실제 값은 사람이 NTIS 에 직접 입력한다. 게이트가 막는다. ⚠️ 예비결과는 미발표 데이터다 — 요약과 지표만 적고 원자료를 옮기지 마라."
+  - id: 3
+    name: Landscape Scan
+    profile: scout
+    upstream: [2]
+    parallel:
+      mode: workers
+      # 세 갈래는 "지형을 조사해 출처를 낸다"는 같은 계약 = profile 아님, 워커다.
+      # 분할 기준은 **산출 taxonomy**(source_type) — 게이트가 워커 산출을 그대로 검사한다.
+      workers: [academic, funded, patent]
+      batch_size: 3
+      shard: "raw/landscape-<worker>.md"
+      merge_to: "raw/sources.yaml"
+    body: "담당 갈래의 지형을 조사해 `raw/landscape-<worker>.md` 에 정리하고, 출처는 `raw/sources.yaml` 에 **`source_type` 을 자기 갈래로** 적어 병합한다(`id`·`title`·`published_year`·`url`·`source_type`·`status`). 갈래별: **academic**=동료심사 문헌·최신 프리프린트(핵심 접근·성능·한계) · **funded**=NTIS 등 기수행/수행중 과제(과제명·수행기관·기간·예산·핵심 내용 — **중복 판정을 피하는 근거이므로 가장 중요하다**) · **patent**=관련 특허(출원인·등록 여부·청구 요지). ⚠️ **과제 번호·특허 번호를 지어내지 마라** — 검색 결과에 근거하고, 확인하지 못한 것은 적지 않는다(심사자는 NTIS 를 직접 조회한다). ⚠️ 출처가 한쪽 갈래로 쏠리면 게이트가 반려한다(academic 6·funded 3·patent 2 하한)."
+  - id: 4
+    name: Dedup·Relevance
+    profile: curator
+    upstream: [3]
+    body: "워커 산출을 병합·정제해 `raw/sources.yaml` 을 확정한다 — 중복 제거(같은 논문의 프리프린트/게재본, 같은 과제의 연차별 등록) · 주제 적합성으로 선별 · `source_type` 오분류 교정(산업 백서가 academic 으로 들어가 있지 않은가) · 연도 누락 보완. ⚠️ **버리는 것에도 사유를 남겨라**(`status: excluded` + 사유). ⚠️ id 는 뒤 단계가 인용하는 키다 — 여기서 확정한 뒤 바꾸지 마라(공백 인용이 환각으로 반려된다)."
+  - id: 5
+    name: Gap Synthesis
+    profile: synthesizer
+    upstream: [4]
+    body: "지형을 종합해 **연구 공백**을 `_private/landscape.md` 에 도출한다. 갈래별 요약(학술 동향·기수행 과제·특허 지형) + 그로부터 나오는 공백. **공백 블록의 형식을 정확히 지켜라**(게이트가 파싱한다):\n```gaps\n- id: g1\n  sources: [acad_kim_2024, ntis_2023_001]\n  statement: 제안 기법이 국내 산업 데이터에서 검증된 사례가 없다\n```\n⚠️ **모든 공백은 `sources:` 로 조사 근거를 대야 한다** — sources.yaml 에 없는 id 를 인용하면 환각으로 반려된다. **조사에서 나오지 않은 공백은 지어낸 공백이다.** ⚠️ 공백은 '아무도 안 했다' 가 아니라 **'무엇이 왜 아직 안 됐고 그래서 무엇이 막혀 있다'** 여야 한다. ⚠️ 기수행 과제와의 차별점을 여기서 분명히 하라 — 중복 판정은 탈락 사유다."
+  - id: 6
+    name: Landscape Verify
+    profile: fact-checker      # ≠ synthesizer
+    verifier: true
+    upstream: [5]
+    gate:
+      objective: [source_balance, recency_check]
+      llm: fact_checker_verdict
+      draft: "reports/<MID>/_private/landscape.md"
+    body: "지형 조사가 **사실이고 충분한지** 검증한다(객관 게이트는 갈래 균형과 최신성을 센다). 사람이 읽어야 할 것: ① **출처의 실재** — 논문 제목·저자·연도가 맞는가, NTIS 과제번호와 특허번호가 실제 형식인가(지어낸 번호는 심사에서 즉시 드러난다). ② **공백 진술이 인용한 출처와 맞는가** — 그 논문이 실제로 그 한계를 갖는가, 요약하며 '아직 안 됐다' 로 강해지지 않았는가. ③ **기수행 과제 누락** — 같은 주제의 과제가 조사에서 빠지면 중복 판정을 못 피한다(게이트는 건수만 센다). ④ 갈래 오분류(게이트가 세는 분모 자체가 틀리지 않았는가). 끝에 VERDICT: PASS|FAIL. ⚠️ 여기서 잡지 못하면 틀린 공백 위에 목표·활동·예산이 전부 쌓인다."
+  - id: 7
+    name: Narrative Design
+    profile: synthesizer
+    upstream: [6]              # 게이트: 6 PASS 시 게이트키퍼가 unblock
+    body: "공백에서 제안서의 뼈대를 `_private/outline.md` 에 설계한다 — 최종목표 1개 + 세부목표 2~5개 + 연차별 활동 + 기대효과. **세 블록의 형식을 정확히 지켜라**(게이트가 사슬을 대조한다):\n```objectives\n- id: s1\n  gaps: [g1]\n  statement: 국내 산업 데이터 기반 검증 체계를 구축한다\n```\n```activities\n- id: a1\n  objective: s1\n  year: 1\n  title: 데이터 수집·정제 프로토콜 설계\n```\n```criteria\n- id: 창의성\n  section: aims\n  evidence: 기존 X 계열은 …에 그쳤다. 본 연구는 Y 를 도입해 …를 처음으로 가능하게 한다\n```\n⚠️ **모든 세부목표는 `gaps:` 로 공백을 참조하고, 모든 세부목표는 최소 1개 활동을 가져야 한다** — 활동 없는 목표는 선언일 뿐이다(역방향 검사). ⚠️ **평가지표 5종 전건에 대응 선언이 필요하다.** 원본은 키워드 빈도를 셌고 `창의 창의 창의` 한 줄이면 통과했다 — 우리는 **어느 절이 어떤 근거로 그 지표를 받는지**를 본다(60자 이상). ⚠️ `year:` 는 SCOPE.md 의 연구기간 안이어야 한다."
+  - id: 8
+    name: Design Verify
+    profile: reviewer          # ≠ synthesizer
+    verifier: true
+    upstream: [7]
+    gate:
+      objective: [proposal_traceability, call_alignment]
+      llm: reviewer_verdict
+      draft: "reports/<MID>"
+    body: "**집필 전에** 설계를 검증한다(객관 게이트는 plan 모드로 돈다 — 공백↔목표↔활동 사슬과 자격·지표 대응 선언). ⚠️ **이 검증이 여기 있는 이유**: 5개 절을 다 쓴 뒤 목표 구성이 틀렸다고 판정되면 전부 다시 쓴다(원본은 집필·예산·일정을 다 만든 뒤 stage 8 에서야 검사한다 — 우리는 여섯 번 반복된 판단으로 앞으로 당겼다. docs/13 §5). 사람이 읽어야 할 것: ① **목표가 공백을 실제로 메우는가**(게이트는 id 참조만 본다 — 참조는 맞는데 내용이 어긋나는 경우를 네가 잡는다). ② **활동이 목표를 달성하기에 충분한가**(활동 1건으로 5년짜리 목표를 주장하지 않는가). ③ **연차 배치의 타당성** — 1차년도에 성과가 몰려 있지 않은가, 후반부가 비어 있지 않은가. ④ **평가지표 대응의 실질** — 근거 서술이 지표를 실제로 받는가('창의적이다' 를 길게 쓴 것이 아닌가). ⑤ **자격 적합** — 이 사업에 이 PI 가 맞는가(게이트는 연수만 센다). 끝에 VERDICT: PASS|FAIL."
+  - id: 9
+    name: Plan & Timeline
+    profile: architect
+    upstream: [8]              # 게이트: 8 PASS 시 unblock
+    body: "활동을 **일정과 자원으로 결정**한다. ① `_private/bundle/timeline.md` — mermaid gantt. **각 task 에 활동 id 를 넣어라**(게이트가 1:1 대조한다): `데이터 수집 프로토콜 설계 :a1, 2026-03-01, 120d`. 활동 전건이 배치돼야 하고, 활동에 없는 task 가 있으면 안 된다(계획 밖의 일정). ② `_private/plan.md` — 자원 소요 결정. **형식을 정확히 지켜라**(예산의 근거가 된다):\n```resources\n- id: r1\n  kind: personnel        # personnel | equipment | material | travel | meeting | etc\n  item: 박사후연구원 1인 (FTE 1.0)\n  year: 1\n  rationale: a1·a3 의 데이터 처리 전담\n```\n⚠️ **예산은 이 선언에서 나온다.** 여기에 없는 비목에 돈이 잡히면 '근거 없는 예산' 으로 반려되고, 여기 선언한 자원이 예산에 0 이면 '계획한 것을 계상하지 않았다' 로 반려된다. **분모를 예산표 밖에 고정하는 것이 이 단계의 목적이다** — 도구가 만든 표를 도구의 규칙으로 검사하면 언제나 맞는다(docs/13 §5). ⚠️ 인건비 단가는 NRF 기준을 쓰되 기관 규정이 다르면 rationale 에 적어라."
+  - id: 10
+    name: Budget Build
+    profile: developer
+    upstream: [9]
+    body: "예산표를 만든다. ① `_private/budget-spec.json` 에 명세를 쓴다(years·indirect_rate·team·equipment·materials·travel·meetings·other — **plan.md 의 ```resources``` 선언과 일치해야 한다**). ② 도구를 돌린다:\n`python3 scripts/tools/budget_build.py --input reports/<MID>/_private/budget-spec.json --md reports/<MID>/_private/bundle/budget.md --csv reports/<MID>/_private/bundle/budget.csv --cap <SCOPE 의 연차 상한>`\n⚠️ **연차 열 수는 SCOPE.md 의 `n_years` 와 같아야 한다** — 연차를 줄이면 연차별 상한 검사가 그만큼 헐거워지므로 게이트가 대조한다. ⚠️ **음수 조정 행을 쓰지 마라** — 원본에서 음수 행 하나로 연 3억 예산이 1.4억으로 보고됐다. 상한을 넘으면 **계획을 줄여라**(표를 손보지 말고 plan.md 로 돌아가라). ⚠️ 간접비는 SCOPE.md 의 `indirect_rate` × 직접비여야 한다(±1%). ⚠️ 셀을 비우거나 숫자가 아닌 값을 넣지 마라 — 원본은 그런 셀을 0 으로 읽었고 짧은 행은 통째로 건너뛰어 9억이 합계에서 증발했다."
+  - id: 11
+    name: Section Write
+    profile: writer
+    sam_gate: true             # 5개 절을 다시 쓰는 비용이 크다 — 집필 개시 전 Sam 승인
+    approval_artifact: "reports/<MID>/_private/outline.md"
+    upstream: [10]
+    parallel:
+      mode: workers
+      # 절마다 같은 계약(설계된 뼈대를 규격에 맞춰 쓴다) = profile 아님, 워커다.
+      workers: [aims, background, methods, impact, team]
+      batch_size: 3            # 5워커 = 3 + 2, 2라운드
+      shard: "_private/bundle/sections/<worker>.md"
+      merge_to: "_private/bundle/proposal.md"
+    body: "담당 절을 `_private/bundle/sections/<worker>.md` 에 쓴다. 본문 언어는 **한국어**. 절별: **aims**=최종목표·세부목표·차별점(공백 대비) · **background**=학술/과제/특허 지형과 필요성(모든 주장에 출처 인용) · **methods**=연차별 연구방법 — **활동 id(a1 …)를 본문에 명시하라**(게이트가 일정표·본문 배치를 대조한다) · **impact**=학문적·기술적·사회경제적 기대효과와 활용 계획 · **team**=연구진 구성·역할·수행 능력(개인정보는 플레이스홀더). ⚠️ **절마다 150 어절 이상**을 쓰고 전체는 페이지 한도의 50~100% 여야 한다 — 원본은 상한만 봐서 **빈 파일 5개가 '모두 존재 PASS'** 였다. ⚠️ **병합 담당은 다음을 함께 만든다**: `bundle/proposal.md`(절을 순서대로 합친 본문 — 목차만 두지 마라, 절 합계의 80% 이상이어야 한다) · `bundle/abstract-en.md`(**영문** 150~400 단어. 국문 초록을 넣으면 ASCII 비율 검사가 반려한다) · `bundle/references.bib`(`python3 scripts/tools/bib_export.py --sources reports/<MID>/raw/sources.yaml --out reports/<MID>/_private/bundle/references.bib`). ⚠️ 평가지표 대응 선언(outline 의 ```criteria```)이 가리키는 절은 실제로 그 내용을 담아야 한다."
+  - id: 12
+    name: Compliance Verify
+    profile: fact-checker      # ≠ writer
+    verifier: true
+    upstream: [11]
+    gate:
+      objective: [budget_integrity, call_alignment, legal_safety]
+      llm: fact_checker_verdict
+      draft: "reports/<MID>"
+    body: "**제출 요건과 사실**을 검증한다(객관 게이트: 예산 회계·상한·계획 근거 / 자격·지표 대응 / 고지·개인정보·공개 범위). 사람이 읽어야 할 것: ① **인용의 사실성** — 본문의 모든 주장이 sources.yaml 의 출처로 뒷받침되는가, references.bib 의 키가 본문 인용과 맞는가(게이트는 파일 존재만 본다). ② **예비결과 서술의 정직성** — 미발표 데이터를 과장하지 않았는가, '예정' 을 '완료' 로 쓰지 않았는가. ③ **예산의 현실성** — 단가·수량이 기관 규정과 맞는가(게이트는 산술만 본다). ④ **공고 요건의 나머지** — 마감일·양식 버전·제출 서류 목록이 SCOPE.md 와 맞는가. ⑤ **개인정보** — 게이트가 잡지 못하는 형태(생년월일 서술·주소 일부·이메일)가 남아 있지 않은가. 끝에 VERDICT: PASS|FAIL."
+  - id: 13
+    name: Quality Review
+    profile: reviewer          # ≠ fact-checker
+    verifier: true
+    upstream: [12]
+    gate:
+      objective: [proposal_format, proposal_traceability]
+      llm: reviewer_verdict
+      draft: "reports/<MID>"
+    body: "심사자의 눈으로 **설득력과 완결성**을 본다(객관 게이트: 규격·분량·번들 구성 / 공백→목표→활동→일정→방법 사슬). 사람이 읽어야 할 것: ① **신규성 주장이 지형 조사로 방어되는가** — 기수행 과제와의 차별점이 분명한가(중복 판정은 탈락 사유다). ② **실현 가능성** — 인력·기간·예산으로 이 활동이 되는가, 1차년도 계획이 과하지 않은가. ③ **절 간 일관성** — methods 의 활동과 impact 의 약속이 어긋나지 않는가, team 의 역량이 methods 를 감당하는가. ④ **가독성** — 심사자가 처음 읽고 3분 안에 무엇을 왜 하는지 아는가(aims 첫 문단). ⑤ **영문 초록의 품질**(게이트는 ASCII 비율과 분량만 본다). 끝에 VERDICT: PASS|FAIL."
+  - id: 14
+    name: Wiki Update
+    profile: curator
+    upstream: [13]            # 게이트: 13 PASS 시 unblock
+    body: "이 미션에서 얻은 것을 llm-wiki 에 반영한다 — 연구 분야 지형(핵심 연구자·기관·기수행 과제 계보·특허 보유자) · 공고별 요건과 자격창 · 예산 단가·간접비율 실무 지식 · 심사 관점의 재사용 가능한 판단(무엇이 중복 판정을 부르는가). entities/concepts + reflection + 재사용률 갱신. ⚠️ **제안서 본문·예비결과는 위키에 옮기지 마라** — llm-wiki 도 저장소다. 지형과 요건 지식만 남긴다."
+  - id: 15
+    name: Deliver
+    profile: default          # Solomon
+    sam_gate: true
+    approval_artifact: "reports/<MID>/report/summary.md"
+    upstream: [14]
+    body: "① `reports/<MID>/report/summary.md` 를 쓴다(**커밋되는 유일한 산출물**): 무엇을 만들었는지 · 대상 공고와 마감 · 페이지·총예산·연차별 총계 · **게이트 5종 판정** · 번들의 위치(`_private/bundle/`) · **제출 안내**(NTIS 입력 항목·기관 연구처 검토 절차·남은 사람 작업: 개인정보 입력·서명·첨부서류) · 고지(소속 기관 연구처 검토 필요 · 실제 제출은 신청자 본인 · 회계·법률 자문이 아님). ⚠️ **여기에 연구 아이디어의 상세·예비결과·방법을 옮겨 적지 마라** — 이 파일은 PUBLIC 저장소에 올라간다. ② 커밋 + git push(컨테이너 GITHUB_TOKEN 자격) + Slack 요약. ⚠️ **`publication_policy.mode` 를 다시 확인하고 Sam 에게 무엇이 커밋되는지 명시하라** — `local_only` 면 본문은 올라가지 않는다. `repo_commit` 으로 바꾸려면 **Scoping 에 이어 여기서 두 번째 승인**이 필요하고, 심사 전 공개의 위험(아이디어 선점)을 그때 다시 말하라. ③ Slack 게시는 반드시 `hermes send --to slack:#mission-log \"<요약+커밋링크>\"`(Web API)로 하라 — 에이전트 slack 도구는 인바운드 Socket Mode 어댑터에 의존해 실패할 수 있다(현재 flapping)."
