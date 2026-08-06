@@ -50,7 +50,7 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
   ⚠️ **창을 바꾸면 파생본 이름(`-256k`)도 바꿔라** — `--build-models` 는 존재를 **이름으로만** 판정해서, 이름을 그대로 두면 "이미 있음"을 찍고 서버는 옛 창을 계속 서빙한다(config 는 새 값을 주장).
   💡 **창은 생각보다 싸다(2026-08-05 (3) 실측)**: `gemma4:26b` 는 131072 → 262144 로 2배 올려도 메모리가 17.50GB → 17.64GB, **+0.8%** 다. `docs/14 §3.1` 의 "창 하나로 3.7배"는 `llama3.1:8b` 숫자이고 **모델 계열을 건너뛰지 않는다** — 모델마다 다시 재라.
   ⚠️ **`compression.*`·`agent.*` 는 루트 config 에서 프로필로 상속되지 않는다**(docs/14 §3.3) — named 프로필은 자기 `config.yaml` 만 읽는다. `set_backend.py` 가 프로필마다 직접 쓴다.
-  ⚠️ **작성자≠검증자를 모델 계열 수준에서 포기했다**(Sam 지시 2026-08-05 (3) · 전 티어 `gpt-5.5` 단일화). `BACKENDS["ollama"]["shared_verifier_model"]` 선언이 없으면 테스트가 FAIL 시킨다 — 불변식을 조용히 잃지 않기 위해서다. 남는 분리는 profile·SOUL·객관 게이트 63종이다.
+  ⚠️ **작성자≠검증자를 모델 계열 수준에서 포기했다**(Sam 지시 2026-08-05 (3) · 전 티어 `gpt-5.5` 단일화). `BACKENDS["ollama"]["shared_verifier_model"]` 선언이 없으면 테스트가 FAIL 시킨다 — 불변식을 조용히 잃지 않기 위해서다. 남는 분리는 profile·SOUL·객관 게이트 62종이다.
   **배치는 추측이 아니라 측정으로 정했다** — `python3 scripts/probe_protocol.py`(도구 인자 충실도·부작용·종료 호출·VERDICT 포맷을 재는 프로브 · `docs/14 §2.1`). 후보 8종을 쟀고 채택 모델은 전 항목 100%. ⚠️ **tok/s 로 고르지 마라 — 벽시계로 골라라**(e4b 는 12b 보다 tok/s 가 1.7배인데 벽시계는 2배 빨랐다). ⚠️ **게이트를 재기 전에 게이트가 무엇을 읽는지 읽어라** — 처음에 VERDICT 를 "마지막 줄에 정확히"로 쟀다가 `glm-4.7-flash` 를 0%로 오판했다(`gate_keeper.py:53` 은 `.search()` 라 본문 어디든 되고, 다시 재니 100%였다).
   ⚠️ **`ollama_num_ctx` 만으로는 창이 안 잡힌다(실측)** — Ollama 의 `/v1` 은 `options.num_ctx` 를 **무시한다**(`/api/chat` 은 지킨다). 그래서 배치 모델은 Modelfile 로 창을 못박은 **`-256k` 파생본**이다(원본과 blob 공유 · 디스크 안 늘어남). 넣은 설정이 **반영됐는지 `ollama ps` 의 CONTEXT 로 확인하라**(`docs/14 §3.1`) — 파일이 아니라 서버가 보고하는 값을 봐라.
 - **인프라 정비 완료**: `HERMES_WRITE_SAFE_ROOT=/opt/data:/work/company:/work/llm-wiki`(워커 직접쓰기, 복사 불필요) · **Tavily 웹검색**(키는 repo `.env`의 `TAVILY_API_KEY`, 전 프로필 os.environ 노출 필수) · **`WIKI_PATH=/work/llm-wiki`**(Curator의 karpathy-llm-wiki 스킬).
@@ -140,7 +140,7 @@ git add reports/$MID && git commit          # 단계마다 (커밋 전까진 백
 
 | 무엇이 무너졌나 | 무엇으로 막았나 |
 |---|---|
-| stage 5 분석 11편 중 **8편이 원문 미독**(`raw/` 에 원문이 다 있는데) | **`scripts/gates/analysis_substance.py`** (신규 · 게이트 63종) |
+| stage 5 분석 11편 중 **8편이 원문 미독**(`raw/` 에 원문이 다 있는데) | **`scripts/gates/analysis_substance.py`** (신규 · 게이트 62종) |
 | 객관 게이트가 `sources.yaml` 만 읽어 **산출물을 아예 안 봄** | 위 게이트를 `academic-paper`·`systematic-review`·`lit-monitor` 에 배선 |
 | LLM 검증자가 11건 중 2·5건만 대조하고 **두 번 다 PASS** | 객관 게이트가 두 번 다 뒤집었다(실전 확인) |
 | 승인 요청문이 **틀린 판정을 그대로 사람에게 전달** | `gate_keeper.artifact_inspection()` — 승인문에 산출물 실측치 |
@@ -228,7 +228,7 @@ park 하라(`block` 2회는 `promoted` 로 되돌아온다 · `docs/14 §6.5 ①
 | 변환 | **20/20 ✅ 완료** — A `trend-report`(**proven**) · B `academic-paper` · B' `systematic-review`(PRISMA) · D `webapp-build` · E `lit-monitor`(주기 실행 — 미션 간 지속 상태 `monitors/`) · F `patent-spec`(고지 강제) · G `policy-brief`(4포맷 동시 산출 + 3게이트) · H `legal-draft`(계약서·의견서·자문서·약관 + **개인정보 차단**) · I `code-docs`(코드베이스 문서화 — **AST 대조 검증**) · J `lecture-course`(강의 자료 — LO·Bloom 사슬) · K `code-migration`(마이그레이션 — **실제 코드 변경·git 대조**) · L `security-audit`(보안 감사 — **공개 범위 분리**) · M `agent-eval`(RAG/Agentic 시스템 구축·평가 — **평가셋·통계·재현성 3중 검증**, 산출물이 아키타입 B 의 입력) · N `dataset-release`(데이터셋 큐레이션·배포 — **개인정보·라이선스·공개범위 3중 강제**) · O `repro-package`(재현 패키지 — **실행 증거 요구·미검증 경로 공시 강제**) · P `sim-experiment`(DOE 파라미터 스윕 — **해시 재계산·입력 드리프트·민감도 불변식**) · Q `research-proposal`(연구비 제안서 — **추적성 사슬·예산 회계·자격 요건**, 기본 비공개) · R `reviewer-response`(리뷰어 응답서 — **원문 대조·원고 실변경 대조**, 기본 비공개) · S `outreach-content`(성과 발신 — **수치↔claim 값 대조·공개 근거 강제**) · T `conference-slides`(학회 발표 슬라이드 — **발표 분량 양방향·번들 미치환 검출·재사용 4종**). **A 외 전부 `draft`** |
 | **다음 단계** | 변환 끝. **실미션을 하나씩**(Sam 이 순서를 정한다) · 그 전에 Slack 도달성 확인 |
 | profile | **11종** — 기존 8 + `architect`·`developer`·`tester`(아키타입 D 도입 시 신설) |
-| 객관 게이트 | **63종** `scripts/gates/` — **analysis_substance**(신규 · 산출물 실체성)·recency·source_balance·doc_consistency·test_run·prisma_counts·prisma_checklist·seen_dedup·digest_shape·claim_consistency·patent_format·evidence_grade·stakeholder_coverage·format_consistency·clause_completeness·law_citation·legal_safety·symbol_truth·api_coverage·doc_links·objective_coverage·bloom_distribution·course_consistency·content_accessibility·atomic_commit·test_pass_rate·behavior_diff·owasp_coverage·cve_remediation·finding_completeness·secret_redaction·eval_set_quality·stat_significance·repro_determinism·run_completeness·pii_presence·license_compat·schema_conformance·datasheet_completeness·result_tolerance·env_consistency·install_evidence·reproduce_doc·bit_exact·solver_pin·doe_completeness·analysis_integrity·proposal_format·budget_integrity·call_alignment·proposal_traceability·comment_fidelity·comment_coverage·change_consistency·response_quality·claim_provenance·channel_format·outreach_tone·release_readiness·**slide_budget·deck_format·diagram_integrity** |
+| 객관 게이트 | **62종** `scripts/gates/` — **analysis_substance**(신규 · 산출물 실체성)·recency_check·source_balance·doc_consistency·test_run·prisma_counts·prisma_checklist·seen_dedup·digest_shape·claim_consistency·patent_format·evidence_grade·stakeholder_coverage·format_consistency·clause_completeness·law_citation·legal_safety·symbol_truth·api_coverage·doc_links·objective_coverage·bloom_distribution·course_consistency·content_accessibility·atomic_commit·test_pass_rate·behavior_diff·owasp_coverage·cve_remediation·finding_completeness·secret_redaction·eval_set_quality·stat_significance·repro_determinism·run_completeness·pii_presence·license_compat·schema_conformance·datasheet_completeness·result_tolerance·env_consistency·install_evidence·reproduce_doc·bit_exact·solver_pin·doe_completeness·analysis_integrity·proposal_format·budget_integrity·call_alignment·proposal_traceability·comment_fidelity·comment_coverage·change_consistency·response_quality·claim_provenance·channel_format·outreach_tone·release_readiness·**slide_budget·deck_format·diagram_integrity** |
 | 산출 도구 | 4종 `scripts/tools/` — bib_export·monitor_state·relevance_score·budget_build |
 | 운영 도구 | **`scripts/preflight_gates.py`**(빈 입력 반려 확인) · **`scripts/lint_gate_drafts.py`**(하네스↔템플릿 draft 정합) · `scripts/match_template.py`(미션→템플릿 3-way 매처 · `--rebuild` 로 manifest 생성) · `scripts/usage_report.py`(착수 전 점검 · **LLM 미호출** · 백엔드별 판정 + **서버 실효 설정·창 대조**) · **`scripts/set_backend.py`**(백엔드 전환 + **`--host-setup`** 호스트 서버 설정 · `docs/14`) · **`scripts/probe_protocol.py`**(도구 프로토콜 준수도 — 모델 선정 근거) · **`scripts/probe_parallel.py`**(동시 요청이 실제로 병렬인지 — 2026-08-06 신규) |
 | 검증 | `python3 scripts/lint_template.py --all`(20/20) · 테스트 **355종**(35 템플릿·보드 + 34 게이트키퍼 + 214 게이트 + 8 매처 + 12 사용량 + 30 백엔드 + 22 기타) · **E2E 하네스 `scripts/tests/fixtures/run_all.py`(14종 510케이스)** |
@@ -268,7 +268,7 @@ park 하라(`block` 2회는 `promoted` 로 되돌아온다 · `docs/14 §6.5 ①
 2026-08-05 (3) 이 만든 것:
 | 신규 | 무엇 |
 |---|---|
-| `scripts/gates/analysis_substance.py` | 산출물 실체성 게이트(게이트 **63종**). 자가선언 탐지 + 개수 항등 + 분량 상하한 + **위치 지정 인용**(가장 잘 드는 검사) |
+| `scripts/gates/analysis_substance.py` | 산출물 실체성 게이트(게이트 **62종**). 자가선언 탐지 + 개수 항등 + 분량 상하한 + **위치 지정 인용**(가장 잘 드는 검사) |
 | `scripts/preflight_gates.py` | 빈 미션에 게이트를 돌려 전부 반려하는지. A~F 하네스 부재의 대체. **20/20 누출 없음** |
 | `scripts/lint_gate_drafts.py` | 하네스 per-gate draft ↔ 템플릿 stage draft 대조. **FAIL 8·WARN 5 발견** |
 | `gate_keeper.artifact_inspection()` | 승인 요청문에 산출물 실측치(파일 수·크기·의심 문구) |
@@ -307,7 +307,7 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 8 https://slack.com/api/auth
 ⚠️ **Slack 은 2026-08-06 기준 다시 도달 불가**(`curl 000`). 승인 게이트 자동 게시가 안 되므로
 **게이트 승인은 Claude 가 직접 한다**(Sam 위임 2026-08-05).
 
-**§2④ 를 먼저 하라(이번 세션의 가장 큰 교훈):** 게이트를 새로 만들기 전에 `ls scripts/gates/`(63종)로 **이미 가진 것과 하는 일이 겹치는지** 보라. 재사용은 *하는 일*이 같을 때지 *이름*이 비슷할 때가 아니다(O 는 2종 재사용 · P 는 이름이 비슷한 `run_completeness` 를 일부러 재사용하지 않았다). **Q 에서 `legal_safety` 에 연 `publication_policy` 축이 바로 다음 변환(R)에서 그대로 쓰였다 — 쌍둥이 게이트를 만드는 대신 축을 여는 판단의 실증이다.**
+**§2④ 를 먼저 하라(이번 세션의 가장 큰 교훈):** 게이트를 새로 만들기 전에 `ls scripts/gates/`(62종 · 세어서 적어라)로 **이미 가진 것과 하는 일이 겹치는지** 보라. 재사용은 *하는 일*이 같을 때지 *이름*이 비슷할 때가 아니다(O 는 2종 재사용 · P 는 이름이 비슷한 `run_completeness` 를 일부러 재사용하지 않았다). **Q 에서 `legal_safety` 에 연 `publication_policy` 축이 바로 다음 변환(R)에서 그대로 쓰였다 — 쌍둥이 게이트를 만드는 대신 축을 여는 판단의 실증이다.**
 
 **이식 시 1순위 확인 항목(공집합이 11회 반복됐다):** 입력이 **비었을 때** 그 게이트가 PASS 하는지부터 보라 — `len(s) <= 1` · `all(...)` · `not any(...)` · `glob` 결과 0건 · 항목 0개는 전부 공집합에서 참이다. **그리고 아키타입 Q 에서 새 모양이 나왔다 — 검사 대상이 있는데 측정값이 0 인 경우다**(빈 섹션 파일 5개 + 빈 간트가 '규격 통과'). **분량·개수를 재는 게이트에는 상한과 하한을 짝으로 둬라.**
 
