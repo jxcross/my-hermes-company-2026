@@ -375,6 +375,46 @@ def test_active_boards_skips_archived():
         gk.kanban_json = orig
 
 
+
+# ── 리비전 지시문에 게이트 **사유**가 실리는가 (2026-08-06 · M-2026-006 ⑨-g) ──
+# ★ 이 묶음의 존재 이유: 리비전 카드 본문이
+#     `[객관 게이트 실패 gates=['symbol_truth']] <LLM 검증자의 PASS 요약>`
+#   이었다. 게이트 이름만 있고 사유가 없으며, 이어지는 문장은 "다 잘 됐다" 였다.
+#   워커는 무엇을 고칠지 알 수 없다. 출력을 capture 해 놓고 returncode 만 쓴 탓이다.
+
+GATE_MSG = ("FAIL(usage): SCOPE.md frontmatter 에 `codebase:` 가 없다 — "
+            "무엇과 대조할지 알 수 없다. fail-closed")
+
+
+def test_gate_failure_detail_carries_the_reason_not_just_the_name():
+    """★ 결함 재현: 사유가 실려야 워커가 고칠 수 있다."""
+    d = gk.format_gate_failures([("symbol_truth", GATE_MSG)])
+    assert "symbol_truth" in d
+    assert "frontmatter" in d and "codebase" in d, f"게이트 사유가 실리지 않았다: {d}"
+
+
+def test_gate_failure_detail_is_bounded():
+    """카드 본문은 다음 워커의 프롬프트다 — 무한정 실으면 지시가 묻힌다."""
+    d = gk.format_gate_failures([("g", "x" * 5000)])
+    assert len(d) < gk.GATE_MSG_CHARS + 300, f"길이 상한이 없다: {len(d)}"
+    assert "생략" in d, "잘랐다는 사실을 적지 않았다"
+
+
+def test_silent_gate_is_reported_as_silent_not_as_no_reason():
+    """★ 반대 방향 — 게이트가 아무 말도 안 하면 그 사실 자체를 적어야 한다.
+
+    빈 문자열을 그대로 실으면 '사유 없음'이 되어 침묵과 구분되지 않는다.
+    """
+    d = gk.format_gate_failures([("g", "")])
+    assert "출력하지 않았다" in d or "사유" in d, d
+
+
+def test_multiple_failed_gates_all_appear():
+    d = gk.format_gate_failures([("api_coverage", "커버리지 61% < 90%"),
+                                 ("doc_links", "끊어진 앵커 3건")])
+    assert "api_coverage" in d and "doc_links" in d
+    assert "61%" in d and "앵커" in d, d
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

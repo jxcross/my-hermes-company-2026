@@ -285,6 +285,36 @@ def load_pipeline(mission: str) -> dict | None:
         return None
 
 
+# 리비전 카드에 실을 게이트 사유의 길이 상한. 카드 본문이 다음 워커의 프롬프트가 되므로
+# 무한정 실으면 지시가 묻힌다 — 게이트당 앞부분만, 잘랐다는 사실을 함께 적는다.
+GATE_MSG_CHARS = 500
+
+
+def format_gate_failures(failures: list[tuple[str, str]]) -> str:
+    """실패한 객관 게이트의 **사유**를 리비전 지시문에 실을 형태로 만든다.
+
+    ⚠️ **왜 필요한가 (실측 2026-08-06 · M-2026-006 ⑨-g)**
+       이전 구현은 `subprocess.run(..., capture_output=True)` 로 출력을 잡아 놓고
+       `.returncode` 만 썼다. 그래서 리비전 카드 본문이
+         `[객관 게이트 실패 gates=['symbol_truth']] <LLM 검증자의 PASS 요약>`
+       이 됐다 — **게이트 이름만 있고 사유가 없으며, 이어지는 문장은 "다 잘 됐다"** 였다.
+       워커는 무엇을 고칠지 알 수 없다. `docs/11 §7 ⑧-c`("틀린 판정을 그대로 사람에게
+       전달")와 같은 결함이고, 이번에는 읽는 쪽이 사람이 아니라 **다음 워커**다.
+    """
+    parts = []
+    for g, msg in failures:
+        body = " ".join((msg or "").split())          # 개행·중복 공백 정리(카드 본문용)
+        # ⚠️ 빈 사유를 그대로 실으면 '사유 없음'이 되어 **침묵과 구분되지 않는다.**
+        #    방어는 호출부가 아니라 **렌더링 경계**에 둔다 — 어느 경로로 들어와도 걸린다.
+        if not body:
+            body = "(게이트가 사유를 출력하지 않았다 — 게이트 자체를 확인하라)"
+        if len(body) > GATE_MSG_CHARS:
+            body = body[:GATE_MSG_CHARS] + f" …(생략 · 전체는 `python3 scripts/gates/{g}.py` 로 재현)"
+        parts.append(f"· {g}: {body}")
+    names = [g for g, _ in failures]
+    return f"gates={names}\n" + "\n".join(parts)
+
+
 def objective_verdict(vid: str, title: str) -> tuple[str, str]:
     """검증자 task 의 객관(Python) 게이트 실행. 반환 (status, detail).
     status: PASS(모두 exit0) · FAIL(하나라도 실패; usage/missing 도 fail-closed) · SKIP(선언 없음/구 미션)."""
@@ -309,21 +339,31 @@ def objective_verdict(vid: str, title: str) -> tuple[str, str]:
     draft = gate.get("draft")
     draft_abs = os.path.join(COMPANY_ROOT, draft) if draft else None
     results = []
+    failures: list[tuple[str, str]] = []
     for g in objs:
         script = os.path.join(COMPANY_ROOT, "scripts", "gates", f"{g}.py")
         cmd = ["python3", script, "--policy", policy, "--sources", sources]
         if draft_abs:
             cmd += ["--draft", draft_abs]
         try:
-            rc = subprocess.run(cmd, capture_output=True, text=True, timeout=60).returncode
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            rc = proc.returncode
+            # ⚠️ 게이트는 **왜** 반려했는지를 stderr/stdout 에 쓴다. 그 문장이 리비전 카드의
+            #    실질 내용이다 — 버리면 워커는 무엇을 고칠지 알 수 없다(실측: M-2026-006 ⑨-g).
+            msg = ((proc.stderr or "") + "\n" + (proc.stdout or "")).strip()
         except Exception as e:  # noqa: BLE001
             log(f"  객관게이트 {g}: 실행오류 {e} → fail-closed")
-            rc = 2
+            rc, msg = 2, f"게이트 실행 자체가 실패했다: {type(e).__name__}: {e}"
         ok = rc == 0
         note = "PASS" if ok else ("FAIL(입력없음·fail-closed)" if rc == 2 else "FAIL")
         log(f"  객관게이트 {g}: exit={rc} {note}")
+        if not ok:
+            # 메시지가 비어 있으면 그 사실을 적는다 — 침묵을 '사유 없음'으로 넘기지 않는다.
+            failures.append((g, msg or f"(게이트가 사유를 출력하지 않았다 · exit={rc})"))
         results.append(ok)
-    return ("PASS" if all(results) else "FAIL"), f"gates={objs}"
+    if all(results):
+        return "PASS", f"gates={objs}"
+    return "FAIL", format_gate_failures(failures)
 
 
 def task_assignee(task_id: str) -> str | None:
@@ -541,7 +581,16 @@ def _poll_board(slug: str, processed: set, dry: bool) -> None:
         else:
             instr = verifier_instruction(show, assignee)
             if obj_status == "FAIL":
-                instr = f"[객관 게이트 실패 {obj_detail}] " + instr
+                # ⚠️ LLM 이 PASS 라 했는데 객관 게이트가 뒤집은 경우, 검증자 요약은
+                #    **"다 잘 됐다"** 이다. 그걸 수정 지시로 주면 워커를 적극적으로
+                #    오도한다(실측 M-2026-006 ⑨-g) — 무엇이 진짜 사유인지 못박는다.
+                if llm_verdict == "PASS":
+                    instr = (f"[객관 게이트 실패 — 실제 반려 사유]\n{obj_detail}\n\n"
+                             f"⚠️ LLM 검증자({assignee})는 PASS 라고 했으나 객관 게이트가 뒤집었다. "
+                             f"아래 검증자 요약은 **참고일 뿐 사실이 아니다** — 위 게이트 사유를 고쳐라.\n"
+                             f"[검증자 요약(신뢰하지 마라)] {instr}")
+                else:
+                    instr = f"[객관 게이트 실패 — 실제 반려 사유]\n{obj_detail}\n\n{instr}"
             handle_fail(vid, title, assignee, parents, actionable, instr, dry)
         if not dry:
             processed.add(key)
