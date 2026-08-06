@@ -1,11 +1,18 @@
-# named 프로필은 루트(default) config 를 상속하지 않으므로 provider/model 을 명시한다.
-# 인증(OAuth)은 hermes-home/auth.json 및 `hermes auth` 의 pooled 자격을 계정 단위로 공유한다.
-# 이 블록은 scripts/set_backend.py 가 생성한다 — 직접 고치지 말 것.
+# 로컬 Ollama 백엔드 — scripts/set_backend.py 가 생성한다. 직접 고치지 말 것.
+# 전환: python3 scripts/set_backend.py --backend codex|ollama   (docs/14 참조)
 model:
-  default: "gpt-5.5"
-  provider: "openai-codex"
-  base_url: "https://chatgpt.com/backend-api/codex"
+  default: "gemma4-26b-256k"
+  provider: "ollama"
+  base_url: "http://host.docker.internal:11434/v1"
+  api_key: "ollama"
+  api_mode: "chat_completions"
+  context_length: 262144
+  ollama_num_ctx: 262144
+  max_tokens: 16384
 agent:
   max_turns: 150
   reasoning_effort: medium
 
+
+compression:
+  threshold: 0.85

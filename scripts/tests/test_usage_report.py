@@ -288,6 +288,20 @@ def test_context_mismatch_is_detected_from_the_server_not_the_config():
         ur.ollama_ps = orig_ps
 
 
+def test_context_mismatch_ignores_models_outside_the_batch():
+    """★ 프로브가 올린 다른 모델까지 경고하면 소음이 된다 — 소음이 나는 검사는 무시된다.
+
+    실제로 `devstral-small-2:24b`(프로브용 창 16384)가 배치 불일치로 잡혔다.
+    """
+    orig_ps = ur.ollama_ps
+    ur.ollama_ps = lambda url="": ([{"name": "devstral-small-2:24b",
+                                     "context_length": 16384, "size": 18_600_000_000}], "")
+    try:
+        assert ur.check_runtime()["context_mismatch"] == [], "배치 밖 모델을 경고했다"
+    finally:
+        ur.ollama_ps = orig_ps
+
+
 def test_no_context_mismatch_when_server_matches():
     """반대 방향 — 맞는 창에 경고가 뜨면 경고가 의미를 잃는다."""
     import set_backend as sb

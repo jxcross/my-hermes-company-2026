@@ -169,11 +169,17 @@ def check_runtime(url: str = "") -> dict:
     host = sb.host_env_state()          # 걸어 놨는가 (launchctl)
     server = sb.server_env_state()      # **반영됐는가** (서버 기동 배너) ← 이쪽이 권위다
     loaded, err = ollama_ps(url)
+    # ⚠️ **배치 모델만** 대조한다. 프로브·다른 작업이 올린 모델까지 경고하면 소음이 되고,
+    #    소음이 나는 검사는 곧 무시된다(그러면 진짜 불일치도 같이 묻힌다).
+    batch = set(sb.backend_models("ollama"))
     ctx_mismatch = []
     for m in (loaded or []):
+        name = m.get("name", "")
+        if name not in batch and name.split(":")[0] not in batch:
+            continue
         got = m.get("context_length")
         if got is not None and got != sb.OLLAMA_NUM_CTX:
-            ctx_mismatch.append({"model": m.get("name", "?"), "serving": got,
+            ctx_mismatch.append({"model": name or "?", "serving": got,
                                  "expected": sb.OLLAMA_NUM_CTX})
     # 걸어 놨는데 반영이 안 된 것 — 재시작만 하면 되는 상태다. 진단이 처방으로 이어지도록
     # 이 조합을 따로 이름 붙여 둔다("설정은 맞는데 왜 느리지"가 가장 오래 걸리는 질문이다).

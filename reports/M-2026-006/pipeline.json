@@ -1,0 +1,188 @@
+{
+  "mission": "M-2026-006",
+  "template": "code-docs",
+  "topic": "my-hermes-company-2026 파이프라인 운영 도구 계층 문서화 — 대상 코드베이스 /work/company/scripts (게이트 63종·운영 도구·번역기), 독자: 유지보수자",
+  "board": "m-2026-006",
+  "policy_file": "reports/M-2026-006/SCOPE.md",
+  "sources_file": "reports/M-2026-006/raw/sources.yaml",
+  "policy": {
+    "symbol_policy": {
+      "ast_languages": [
+        "python"
+      ],
+      "min_declared_ratio": 0.8,
+      "check_signatures": true,
+      "exclude_dirs": [
+        ".git",
+        "__pycache__",
+        "node_modules",
+        ".venv",
+        "venv",
+        "build",
+        "dist",
+        "tests",
+        "test"
+      ]
+    },
+    "api_policy": {
+      "threshold": 0.9,
+      "symbols_file": "symbols.md",
+      "api_ref": "api-ref.md",
+      "check_reverse": true,
+      "min_body_chars": 40
+    },
+    "link_policy": {
+      "min_cross_links": 3,
+      "check_anchors": true,
+      "allow_external": true
+    },
+    "doc_policy": {
+      "doc_types": [
+        "api-ref",
+        "architecture",
+        "adr",
+        "tutorial"
+      ],
+      "adr_format": "nygard",
+      "tutorial_words": 1000
+    }
+  },
+  "stages": [
+    {
+      "id": 1,
+      "name": "Scoping",
+      "task_id": "t_0d7a382d",
+      "profile": "default",
+      "verifier": false,
+      "sam_gate": true,
+      "upstream_task_ids": []
+    },
+    {
+      "id": 2,
+      "name": "Codebase Ingest",
+      "task_id": "t_65796610",
+      "profile": "reader",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_0d7a382d"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Symbol Parse",
+      "task_id": "t_f98c6bc3",
+      "profile": "reader",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_65796610"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Symbol Verify",
+      "task_id": "t_1c29cbc1",
+      "profile": "fact-checker",
+      "verifier": true,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_f98c6bc3"
+      ],
+      "gate": {
+        "objective": [
+          "symbol_truth"
+        ],
+        "llm": "fact_checker_verdict",
+        "draft": "reports/M-2026-006/symbols.md"
+      }
+    },
+    {
+      "id": 5,
+      "name": "Dependency Graph",
+      "task_id": "t_ee4b662e",
+      "profile": "architect",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_1c29cbc1"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Doc Write",
+      "task_id": "t_ead2d419",
+      "profile": "writer",
+      "verifier": false,
+      "sam_gate": true,
+      "upstream_task_ids": [
+        "t_ee4b662e"
+      ],
+      "approval_artifact": "reports/M-2026-006/graph.md",
+      "parallel": {
+        "mode": "workers",
+        "workers": [
+          "api-ref",
+          "architecture",
+          "adr",
+          "tutorial"
+        ],
+        "batch_size": 3,
+        "merge_to": null
+      }
+    },
+    {
+      "id": 7,
+      "name": "Cross-Link",
+      "task_id": "t_46ba2f1e",
+      "profile": "curator",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_ead2d419"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "Doc Review",
+      "task_id": "t_ca6b6a3f",
+      "profile": "reviewer",
+      "verifier": true,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_46ba2f1e"
+      ],
+      "gate": {
+        "objective": [
+          "api_coverage",
+          "doc_links"
+        ],
+        "llm": "reviewer_verdict",
+        "draft": "reports/M-2026-006/docs"
+      }
+    },
+    {
+      "id": 9,
+      "name": "Wiki Update",
+      "task_id": "t_f220f02e",
+      "profile": "curator",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_ca6b6a3f"
+      ]
+    },
+    {
+      "id": 10,
+      "name": "Deliver",
+      "task_id": "t_f2a9b90f",
+      "profile": "default",
+      "verifier": false,
+      "sam_gate": true,
+      "upstream_task_ids": [
+        "t_f220f02e"
+      ],
+      "approval_artifact": "reports/M-2026-006/docs/api-ref.md"
+    }
+  ]
+}
