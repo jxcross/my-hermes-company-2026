@@ -31,7 +31,7 @@
 
 사용
   python3 scripts/probe_parallel.py                      # 배치 모델(set_backend 표) · 동시 3
-  python3 scripts/probe_parallel.py -m gemma4-12b-mlx-256k -n 3
+  python3 scripts/probe_parallel.py -m devstral-24b-96k -n 3
   python3 scripts/probe_parallel.py --json
 
 exit: 0 병렬(또는 판정 보류) · 1 **직렬 검출**(병렬화 이득 없음) · 2 Ollama 에 닿지 못함
@@ -65,7 +65,7 @@ def _default_model() -> str:
 
         return sb.backend_models("ollama")[0]
     except Exception:
-        return "gemma4-12b-mlx-256k"
+        return "devstral-24b-96k"
 
 
 DEFAULT_MODEL = _default_model()
