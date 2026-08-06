@@ -201,6 +201,11 @@ BACKENDS: dict[str, dict] = {
             "provider": "openai-codex",
             "base_url": "https://chatgpt.com/backend-api/codex",
         },
+        # codex 로 돌아가면 추론 강도를 되살린다 — ollama 가 "none" 으로 낮춰 두기 때문이다.
+        # (`gpt-5.5` 는 reasoning_effort 를 지원한다. 아래 ollama 쪽 주석 참조.)
+        "patch_keys": {
+            "agent": {"reasoning_effort": "medium"},
+        },
         "header": [
             "# named 프로필은 루트(default) config 를 상속하지 않으므로 provider/model 을 명시한다.",
             "# 인증(OAuth)은 hermes-home/auth.json 및 `hermes auth` 의 pooled 자격을 계정 단위로 공유한다.",
@@ -270,6 +275,24 @@ BACKENDS: dict[str, dict] = {
         # ⚠️ 루트 hermes-home/config.yaml 의 compression 은 named 프로필에 **상속되지 않는다.**
         "extra_blocks": {
             "compression": {"threshold": COMPRESSION_THRESHOLD},
+        },
+        # ⚠️⚠️ **블록이 아니라 키 하나만 고쳐야 하는 것** (2026-08-06 (3) 실미션이 잡아냈다).
+        #    `agent.reasoning_effort` 는 codex(`gpt-5.5`) 시절의 값 `medium` 이 그대로 남아
+        #    로컬 백엔드로 전달됐다. `custom` 프로바이더가 이걸 **top-level `reasoning_effort`**
+        #    로 실어 보내는데(plugins/model-providers/custom/__init__.py), thinking 능력이 없는
+        #    모델은 Ollama 가 **HTTP 400 `"<model>" does not support thinking`** 으로 거절한다.
+        #    → 워커가 툴콜 0회·1초 만에 죽고, 카드에는 `protocol violation` 만 남는다.
+        #      **증상과 원인이 두 층 떨어진 실패다** — 로그를 봐야 보인다.
+        #    실측(2026-08-06): `devstral-24b-96k` 에 `reasoning_effort:"high"` → 400 ·
+        #      `"none"` / `think:false` / 미지정 → 전부 200. `medium` 도 같은 계열이라 400 이다.
+        #    `"none"` 이면 프로바이더가 `reasoning_effort:"none"` + `think:False` 를 함께 보내
+        #    thinking 가능 모델(gemma4 계열)에서도 안전하게 꺼진다.
+        #
+        # ⚠️ **`agent:` 를 extra_blocks 로 통째 치환하면 안 된다** — 루트 config 의 `agent:`
+        #    에는 `personalities` 등이 들어 있어 블록 교체가 그것들을 지운다. 그래서
+        #    `patch_keys` 는 **블록 안의 그 키 한 줄만** 바꾼다(키가 없으면 손대지 않는다).
+        "patch_keys": {
+            "agent": {"reasoning_effort": "none"},
         },
         "header": [
             "# 로컬 Ollama 백엔드 — scripts/set_backend.py 가 생성한다. 직접 고치지 말 것.",
@@ -396,6 +419,38 @@ def render_extra_block(backend: str, name: str) -> list[str]:
                            for k, v in BACKENDS[backend].get("extra_blocks", {})[name].items()]
 
 
+def patch_block_keys(lines: list[str], backend: str) -> list[str]:
+    """`patch_keys` 선언대로 **블록 안의 그 키 한 줄만** 바꾼다.
+
+    블록 교체(`splice`)와 다른 도구가 필요한 이유는 `agent:` 때문이다 — 루트 config 의
+    `agent:` 에는 `personalities` 같은 것이 들어 있어 통째로 갈아치우면 지워진다.
+
+    ⚠️ **키가 없으면 만들지 않는다.** 이 함수가 고치는 것은 *다른 백엔드가 남긴 값*이지,
+       Hermes 가 안 쓰는 키를 새로 심는 것이 아니다. 없는 파일에 심으면 스키마를 우리가
+       발명하는 셈이 된다.
+    """
+    patches = BACKENDS[backend].get("patch_keys", {})
+    if not patches:
+        return lines
+    out = list(lines)
+    for block_name, kv in patches.items():
+        span = find_block(out, block_name)
+        if span is None:
+            continue
+        start, end = span
+        for key, value in kv.items():
+            for i in range(start, min(end, len(out))):
+                stripped = out[i].lstrip()
+                if not stripped.startswith(f"{key}:"):
+                    continue
+                indent = out[i][: len(out[i]) - len(stripped)]
+                if indent == "":          # 최상위 키는 이 블록의 것이 아니다
+                    continue
+                out[i] = f"{indent}{key}: {value}"
+                break
+    return out
+
+
 def apply_to_file(path: str, backend: str, model: str, with_header: bool) -> tuple[bool, str]:
     """(변경됨?, 메시지). 파일이 없으면 (False, 사유)."""
     if not os.path.isfile(path):
@@ -412,6 +467,7 @@ def apply_to_file(path: str, backend: str, model: str, with_header: bool) -> tup
         return lines_[:start] + block + lines_[end:]
 
     lines = splice(lines, "model", render_model_block(backend, model, with_header))
+    lines = patch_block_keys(lines, backend)
     # 다른 백엔드에서 남은 블록은 지우고, 이 백엔드가 요구하는 것만 남긴다
     for name in set(BACKENDS["codex"].get("extra_blocks", {})) \
             | set(BACKENDS["ollama"].get("extra_blocks", {})):

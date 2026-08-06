@@ -52,6 +52,7 @@ database:
   journal_mode: wal
 agent:
   max_turns: 150
+  reasoning_effort: medium
   personalities:
     pirate: 'Arrr! Ye be talkin'' to Captain Hermes!'
 platform_toolsets:
@@ -246,11 +247,18 @@ def test_nested_keys_are_not_read_as_top_level():
 
 # ── 안 건드려야 할 것 ───────────────────────────────────────────────────────
 def test_preserves_agent_block_in_source_config():
+    """`agent:` 블록은 살아남는다.
+
+    ⚠️ `reasoning_effort` 는 **백엔드가 정한다**(ollama → `none`). 이 테스트는 원래
+       `medium` 이 남는 것을 단언했는데, 그건 **버그를 못박아 둔 것**이었다 —
+       그 값이 그대로 로컬로 전달돼 thinking 없는 모델을 HTTP 400 으로 죽였다.
+    """
     d = _repo()
     path = os.path.join(d, "profiles-src", "scout", "config.yaml")
     sb.apply_to_file(path, "ollama", "qwen3.6:35b", with_header=True)
     text = _read(path)
-    assert "agent:" in text and "max_turns: 150" in text and "reasoning_effort: medium" in text, text
+    assert "agent:" in text and "max_turns: 150" in text, text
+    assert sb.parse_model_block(text.splitlines(), "agent")["reasoning_effort"] == "none", text
 
 
 def test_writes_compression_block_and_keeps_other_blocks():
@@ -263,6 +271,57 @@ def test_writes_compression_block_and_keeps_other_blocks():
     assert float(cfg["threshold"]) == sb.COMPRESSION_THRESHOLD, cfg
     assert "agent:" in text and "max_turns: 150" in text, "agent 블록이 사라졌다"
     assert sb.parse_model_block(text.splitlines())["provider"] == "ollama"
+
+
+def test_ollama_turns_off_reasoning_effort_left_behind_by_codex():
+    """★ codex 의 `reasoning_effort: medium` 이 남으면 로컬 모델이 **HTTP 400 으로 죽는다.**
+
+    실측 2026-08-06 (3): `custom` 프로바이더가 이 값을 top-level `reasoning_effort` 로
+    실어 보내고, thinking 능력이 없는 모델(devstral)은 Ollama 가
+    `"<model>" does not support thinking` 400 으로 거절한다. 워커는 툴콜 0회로 죽고
+    카드에는 `protocol violation` 만 남아 **증상과 원인이 두 층 떨어진다.**
+    """
+    d = _repo()
+    for name in ("scout",):
+        path = os.path.join(d, "profiles-src", name, "config.yaml")
+        assert "reasoning_effort: medium" in _read(path), "픽스처 전제가 깨졌다"
+        sb.apply_to_file(path, "ollama", sb.BACKENDS["ollama"]["models"]["writer"],
+                         with_header=True)
+        agent = sb.parse_model_block(_read(path).splitlines(), "agent")
+        assert agent["reasoning_effort"] == "none", agent
+        assert agent["max_turns"] == "150", "같은 블록의 다른 키를 건드렸다"
+
+
+def test_codex_switch_restores_reasoning_effort():
+    """★ 되돌릴 때 추론 강도도 같이 돌아와야 한다 — 안 그러면 codex 가 조용히 약해진다."""
+    d = _repo()
+    path = os.path.join(d, "profiles-src", "scout", "config.yaml")
+    sb.apply_to_file(path, "ollama", sb.BACKENDS["ollama"]["models"]["writer"], with_header=True)
+    assert sb.parse_model_block(_read(path).splitlines(), "agent")["reasoning_effort"] == "none"
+    sb.apply_to_file(path, "codex", sb.BACKENDS["codex"]["models"]["writer"], with_header=True)
+    assert sb.parse_model_block(_read(path).splitlines(), "agent")["reasoning_effort"] == "medium"
+
+
+def test_patching_a_key_never_eats_the_rest_of_the_block():
+    """★ `agent:` 를 블록 교체하면 루트 config 의 `personalities` 가 사라진다.
+
+    그래서 `patch_keys` 는 splice 가 아니라 **그 키 한 줄만** 바꾼다.
+    """
+    d = _repo()
+    path = os.path.join(d, "hermes-home", "config.yaml")
+    assert "personalities:" in _read(path), "픽스처 전제가 깨졌다"
+    sb.apply_to_file(path, "ollama", sb.BACKENDS["ollama"]["models"]["writer"], with_header=False)
+    text = _read(path)
+    assert "personalities:" in text, "agent 블록의 나머지가 지워졌다"
+    assert "max_turns: 150" in text, text
+    assert sb.parse_model_block(text.splitlines(), "agent")["reasoning_effort"] == "none"
+
+
+def test_patch_keys_does_not_invent_absent_keys():
+    """★ 없는 키를 심지 않는다 — 우리가 Hermes 스키마를 발명하면 안 된다."""
+    lines = ["model:", "  default: x", "agent:", "  max_turns: 150"]
+    out = sb.patch_block_keys(lines, "ollama")
+    assert "reasoning_effort" not in "\n".join(out), out
 
 
 def test_codex_switch_removes_the_ollama_only_compression_block():

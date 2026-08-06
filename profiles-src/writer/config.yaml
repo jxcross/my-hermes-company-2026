@@ -11,7 +11,7 @@ model:
   max_tokens: 16384
 agent:
   max_turns: 150
-  reasoning_effort: medium
+  reasoning_effort: none
 
 
 compression:
