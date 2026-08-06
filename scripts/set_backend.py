@@ -194,16 +194,18 @@ BASE_MODELS: dict[str, dict] = {
 BACKENDS: dict[str, dict] = {
     "codex": {
         "label": "openai-codex (ChatGPT OAuth)",
-        # ⚠️ 2026-08-05 (3) Sam 지시로 **전 티어 `gpt-5.5` 단일화**.
-        #    배경: 로컬 `gemma4-26b-256k` 가 실미션에서 두 번 무너졌다 — 산출물 날조
-        #    (분석 11편 중 8편)와 **작업 보고 날조**(디스크 무변경인데 완료 선언).
-        #    창을 262144 로 올려도 같았다. 자세한 것은 docs/11 §7 ⑧·⑧-d.
-        #    ↩︎ 이전 배치(참고): writer/coder `gpt-5.6-terra` · verifier `gpt-5.6-sol`.
-        #       티어를 다시 가르려면 아래 3줄만 바꾸면 된다.
+        # ⚠️ **2026-08-06 (6) Sam 지시로 전 티어 `gpt-5.6-terra` · 추론강도 `low`.**
+        #    (그 전 배치: 2026-08-05 (3) ~ 08-06 전 티어 `gpt-5.5` · `medium`.)
+        #    ⚠️ 한도 소진 중에 건 설정이다 — codex 는 **계정 전체가 429** 다(모델별이
+        #    아니다 · `gpt-5.4-mini` 로 직접 확인 · docs/11 §7 ⑪-e). 즉 이 배치는
+        #    **2026-08-09 14:07 리셋 이후에 실제로 검증된다.** 그때 `usage_report.py`
+        #    로 한도 해제를 먼저 확인하라.
+        #    ↩︎ 티어를 다시 가르려면 아래 3줄만 바꾸면 된다
+        #       (예: writer/coder `gpt-5.6-terra` · verifier `gpt-5.6-sol`).
         "models": {
-            "writer":   "gpt-5.5",
-            "verifier": "gpt-5.5",
-            "coder":    "gpt-5.5",
+            "writer":   "gpt-5.6-terra",
+            "verifier": "gpt-5.6-terra",
+            "coder":    "gpt-5.6-terra",
         },
         # ⚠️ **작성자≠검증자를 모델 계열 수준에서 다시 포기했다** — 의도된 예외다.
         #    Sam 지시(2026-08-05 (3)): "전체 모델을 codex 5.5 로 모두 바꿔라".
@@ -213,16 +215,19 @@ BACKENDS: dict[str, dict] = {
         #    대조하고 PASS), 잡아낸 것은 객관 게이트였다. 즉 지금 실질적인 독립검증은
         #    모델 계열이 아니라 `scripts/gates/` 다. 검증자를 다시 다른 모델로 가르고
         #    싶으면 verifier 를 `gpt-5.5-pro` 나 `gpt-5.6-sol` 로 되돌려라.
-        "shared_verifier_model": "Sam 지시 2026-08-05 (3): 전 티어 gpt-5.5 단일화",
+        "shared_verifier_model": "Sam 지시 2026-08-06 (6): 전 티어 gpt-5.6-terra 단일화",
         # 모든 프로필에 공통으로 들어가는 model 키 (default 는 티어별로 채운다)
         "common": {
             "provider": "openai-codex",
             "base_url": "https://chatgpt.com/backend-api/codex",
         },
         # codex 로 돌아가면 추론 강도를 되살린다 — ollama 가 "none" 으로 낮춰 두기 때문이다.
-        # (`gpt-5.5` 는 reasoning_effort 를 지원한다. 아래 ollama 쪽 주석 참조.)
+        # ⚠️ **`low` 는 Sam 지시다(2026-08-06 (6))** — 이전 값은 `medium` 이었다.
+        #    한도 소진을 겪은 뒤의 선택이므로 **토큰 절약이 의도**라고 읽는다.
+        #    ⚠️ 되돌릴 때 `models` 3줄만 바꾸고 이 줄을 잊지 마라 — 배치와 추론강도는
+        #    **함께 선언된 한 쌍**이다(모델만 올리고 강도를 낮게 두면 조용히 약해진다).
         "patch_keys": {
-            "agent": {"reasoning_effort": "medium"},
+            "agent": {"reasoning_effort": "low"},
         },
         "header": [
             "# named 프로필은 루트(default) config 를 상속하지 않으므로 provider/model 을 명시한다.",

@@ -24,13 +24,22 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 - 격리 컨테이너 **`hermes-solomon`** (`docker-compose.yml`, 공식 이미지 nousresearch/hermes-agent). 인증: OAuth(ChatGPT), provider `openai-codex`.
 - **프로필 11종**: default(Solomon)·scout·reader·curator·synthesizer·writer(작성자) · **fact-checker·reviewer·tester**(검증자) · **architect·developer**(코더). 소스=`profiles-src/`. architect·developer·tester는 2026-08-04 아키타입 D 도입으로 신설(`docs/13 §7`).
 - **⚠️ 추론 백엔드는 갈아끼운다 — 모델을 손으로 고치지 마라**(2026-08-05 신설 · `docs/14`). `model:` 블록은 **`scripts/set_backend.py` 가 생성**한다. 배치표는 그 스크립트 상단 `TIERS`·`BACKENDS` 한 곳에만 있다.
-  | 티어 | 프로필 | `codex` | **`ollama`(현재)** |
+  | 티어 | 프로필 | **`codex`(현재)** | `ollama` |
   |---|---|---|---|
-  | 작성자 | default·scout·reader·curator·synthesizer·writer | `gpt-5.5` | **`gemma4-26b-256k`** |
-  | 검증자 | fact-checker·reviewer·tester | `gpt-5.5` | **`gemma4-26b-256k`** |
-  | 코더 | architect·developer | `gpt-5.5` | **`gemma4-26b-256k`** |
+  | 작성자 | default·scout·reader·curator·synthesizer·writer | **`gpt-5.6-terra`** | `gemma4-26b-256k` |
+  | 검증자 | fact-checker·reviewer·tester | **`gpt-5.6-terra`** | `gemma4-26b-256k` |
+  | 코더 | architect·developer | **`gpt-5.6-terra`** | `gemma4-26b-256k` |
 
-  **창은 262144 다**(2026-08-06 (4) 에 98304 에서 되돌렸다 — 커밋 `25ed214`).
+  **추론강도: codex → `low` · ollama → `none`**(`BACKENDS[*]["patch_keys"]`).
+  ⚠️ **배치와 추론강도는 함께 선언된 한 쌍이다** — 모델만 바꾸고 강도를 잊으면 조용히 약해진다.
+  `low` 는 Sam 지시(2026-08-06 (6) · 이전 `medium`). 한도 소진을 겪은 뒤의 선택이다.
+
+  ⛔ **지금 codex 는 한도 소진 상태다 — 리셋 2026-08-09 14:07**(`usage_report.py` exit 1).
+  `gpt-5.6-terra` 배치는 **리셋 이후에 실제로 검증된다.** 한도는 **계정 전체**라
+  싼 모델로 우회할 수 없다(`gpt-5.4-mini` 로 확인 · `docs/11 §7 ⑪-e`).
+  세 보드(`m-2026-006`·`007`·`008`) 모두 park 이라 지금 디스패치될 카드는 없다.
+
+  **로컬(`ollama`) 창은 262144 다**(2026-08-06 (4) 에 98304 에서 되돌렸다 — 커밋 `25ed214`).
   98304 은 **devstral 이 감당하는 창**이었지 우리 창이 아니었다. KV 비용은 모델마다 다르다:
   `devstral` 262144→**83GB·CPU 로 흘러넘침** ❌ · 98304→40GB ✅ ·
   **`gemma4-26b` 262144→17GB·100% GPU ✅**(실측 확인 — 같은 창에서 devstral 의 1/4.6).

@@ -293,13 +293,22 @@ def test_ollama_turns_off_reasoning_effort_left_behind_by_codex():
 
 
 def test_codex_switch_restores_reasoning_effort():
-    """★ 되돌릴 때 추론 강도도 같이 돌아와야 한다 — 안 그러면 codex 가 조용히 약해진다."""
+    """★ 되돌릴 때 추론 강도도 같이 돌아와야 한다 — 안 그러면 codex 가 조용히 약해진다.
+
+    ⚠️ **기대값을 배치표에서 읽는다.** 예전엔 `"medium"` 을 박아 뒀는데, 2026-08-06 (6)
+       Sam 이 `low` 로 낮추자 이 테스트가 깨졌다 — 검사하려던 성질(**전환이 강도를
+       되살리는가**)은 그대로인데 상수만 낡은 것이다. 같은 함정을 이 세션에 두 번
+       밟았다(`test_usage_report` 의 '틀린 창' 상수 131072). **상수는 언젠가 진짜 값이 된다.**
+    """
     d = _repo()
     path = os.path.join(d, "profiles-src", "scout", "config.yaml")
+    want = sb.BACKENDS["codex"]["patch_keys"]["agent"]["reasoning_effort"]
+    off = sb.BACKENDS["ollama"]["patch_keys"]["agent"]["reasoning_effort"]
+    assert want != off, "두 백엔드의 추론 강도가 같으면 이 테스트는 아무것도 안 잰다"
     sb.apply_to_file(path, "ollama", sb.BACKENDS["ollama"]["models"]["writer"], with_header=True)
-    assert sb.parse_model_block(_read(path).splitlines(), "agent")["reasoning_effort"] == "none"
+    assert sb.parse_model_block(_read(path).splitlines(), "agent")["reasoning_effort"] == off
     sb.apply_to_file(path, "codex", sb.BACKENDS["codex"]["models"]["writer"], with_header=True)
-    assert sb.parse_model_block(_read(path).splitlines(), "agent")["reasoning_effort"] == "medium"
+    assert sb.parse_model_block(_read(path).splitlines(), "agent")["reasoning_effort"] == want
 
 
 def test_patching_a_key_never_eats_the_rest_of_the_block():
