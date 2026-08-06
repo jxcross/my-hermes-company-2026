@@ -90,7 +90,7 @@ stages:
     profile: default          # Solomon
     sam_gate: true
     upstream: []
-    body: "강의 범위를 확정해 reports/<MID>/SCOPE.md 에 작성 — 과목명·대상 학습자·선수 지식 · 운영 기간 · 다루지 않을 것 · 완료조건. ⚠️ **frontmatter 에 다음을 반드시 선언**하라(객관 게이트가 이 값으로 판정 기준을 고른다):\n`education_level: undergraduate|graduate|adult|mooc` · `weeks: 16` · `outputs: [syllabus, slides, assignments, quiz]`. ⚠️ 교육 수준에 따라 Bloom 분포 기준이 달라진다(학부는 평가+창안 ≥10%, 대학원은 ≥20%). ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라. 오직 SCOPE.md 산출과 이 task 완료만."
+    body: "강의 범위를 확정해 reports/<MID>/SCOPE.md 에 작성 — 과목명·대상 학습자·선수 지식 · 운영 기간 · 다루지 않을 것 · 완료조건. ⚠️ **SCOPE.md 맨 첫 줄부터 `---` 로 감싼 YAML frontmatter 블록에 다음을 반드시 선언**하라(⚠️ 본문 코드블록 안에 적으면 게이트가 못 읽는다 — 게이트는 SCOPE.md **파일 맨 앞**만 본다. 객관 게이트가 이 값으로 판정 기준을 고른다):\n`education_level: undergraduate|graduate|adult|mooc` · `weeks: 16` · `outputs: [syllabus, slides, assignments, quiz]`. ⚠️ 교육 수준에 따라 Bloom 분포 기준이 달라진다(학부는 평가+창안 ≥10%, 대학원은 ≥20%). ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라. 오직 SCOPE.md 산출과 이 task 완료만."
   - id: 2
     name: Source Gather
     profile: scout

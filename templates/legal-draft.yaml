@@ -117,7 +117,7 @@ stages:
     profile: default          # Solomon
     sam_gate: true
     upstream: []
-    body: "작성 범위를 확정해 reports/<MID>/SCOPE.md 에 작성 — 사안 개요 · 당사자 **역할**(갑·을, 개인/법인 구분만) · 거래 요지 · 마감 · 완료조건. ⚠️ **frontmatter 에 `doc_types: [contract, ...]` 와 `domain: general|it_sw|research|employment` 를 반드시 선언**하라(객관 게이트가 이 선언으로 문서 존재와 필수 조항을 검사한다). ⚠️ **실제 개인정보(주민등록번호·사업자등록번호·계좌·주소 상세)를 SCOPE.md 나 이후 어떤 산출물에도 적지 마라** — 이 저장소는 PUBLIC 이고 Deliver 가 push 한다. 플레이스홀더(`[갑의 사업자등록번호]`)로 쓰고 실제 값은 Sam 이 저장소 밖에서 채운다. ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라. 오직 SCOPE.md 산출과 이 task 완료만."
+    body: "작성 범위를 확정해 reports/<MID>/SCOPE.md 에 작성 — 사안 개요 · 당사자 **역할**(갑·을, 개인/법인 구분만) · 거래 요지 · 마감 · 완료조건. ⚠️ **SCOPE.md 맨 첫 줄부터 `---` 로 감싼 YAML frontmatter 블록에 `doc_types: [contract, ...]` 와 `domain: general|it_sw|research|employment` 를 반드시 선언**하라(⚠️ 본문 코드블록 안에 적으면 게이트가 못 읽는다 — 게이트는 SCOPE.md **파일 맨 앞**만 본다. 객관 게이트가 이 선언으로 문서 존재와 필수 조항을 검사한다). ⚠️ **실제 개인정보(주민등록번호·사업자등록번호·계좌·주소 상세)를 SCOPE.md 나 이후 어떤 산출물에도 적지 마라** — 이 저장소는 PUBLIC 이고 Deliver 가 push 한다. 플레이스홀더(`[갑의 사업자등록번호]`)로 쓰고 실제 값은 Sam 이 저장소 밖에서 채운다. ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라. 오직 SCOPE.md 산출과 이 task 완료만."
   - id: 2
     name: Context Intake
     profile: reader

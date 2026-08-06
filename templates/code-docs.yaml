@@ -67,7 +67,7 @@ stages:
     profile: default          # Solomon
     sam_gate: true
     upstream: []
-    body: "문서화 범위를 확정해 reports/<MID>/SCOPE.md 에 작성 — 대상 코드베이스 · 독자(신규 개발자/외부 이용자/유지보수자 중 택1, 문서 깊이가 여기서 갈린다) · 산출 문서 종류 · 다루지 않을 것 · 완료조건. ⚠️ **frontmatter 에 다음을 반드시 선언**하라(객관 게이트가 이 값으로 코드와 대조한다):\n`codebase: <경로>`(컨테이너에서 접근 가능한 절대경로 또는 미션 디렉터리 기준 상대경로) · `languages: [python, ...]` · `doc_types: [api-ref, architecture, adr, tutorial]`. ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라. 오직 SCOPE.md 산출과 이 task 완료만."
+    body: "문서화 범위를 확정해 reports/<MID>/SCOPE.md 에 작성 — 대상 코드베이스 · 독자(신규 개발자/외부 이용자/유지보수자 중 택1, 문서 깊이가 여기서 갈린다) · 산출 문서 종류 · 다루지 않을 것 · 완료조건. ⚠️ **SCOPE.md 맨 첫 줄부터 `---` 로 감싼 YAML frontmatter 블록에 다음을 반드시 선언**하라(⚠️ 본문 코드블록 안에 적으면 게이트가 못 읽는다 — 게이트는 SCOPE.md **파일 맨 앞**만 본다. 객관 게이트가 이 값으로 코드와 대조한다):\n`codebase: <경로>`(컨테이너에서 접근 가능한 절대경로 또는 미션 디렉터리 기준 상대경로) · `languages: [python, ...]` · `doc_types: [api-ref, architecture, adr, tutorial]`. ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라. 오직 SCOPE.md 산출과 이 task 완료만."
   - id: 2
     name: Codebase Ingest
     profile: reader

@@ -24,18 +24,28 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 - 격리 컨테이너 **`hermes-solomon`** (`docker-compose.yml`, 공식 이미지 nousresearch/hermes-agent). 인증: OAuth(ChatGPT), provider `openai-codex`.
 - **프로필 11종**: default(Solomon)·scout·reader·curator·synthesizer·writer(작성자) · **fact-checker·reviewer·tester**(검증자) · **architect·developer**(코더). 소스=`profiles-src/`. architect·developer·tester는 2026-08-04 아키타입 D 도입으로 신설(`docs/13 §7`).
 - **⚠️ 추론 백엔드는 갈아끼운다 — 모델을 손으로 고치지 마라**(2026-08-05 신설 · `docs/14`). `model:` 블록은 **`scripts/set_backend.py` 가 생성**한다. 배치표는 그 스크립트 상단 `TIERS`·`BACKENDS` 한 곳에만 있다.
-  | 티어 | 프로필 | **`codex`(현재)** | `ollama` |
+  | 티어 | 프로필 | `codex` | **`ollama`(현재)** |
   |---|---|---|---|
-  | 작성자 | default·scout·reader·curator·synthesizer·writer | **`gpt-5.5`** | `gemma4-26b-256k` |
-  | 검증자 | fact-checker·reviewer·tester | **`gpt-5.5`** | `gemma4-26b-256k` |
-  | 코더 | architect·developer | **`gpt-5.5`** | `gemma4-26b-256k` |
+  | 작성자 | default·scout·reader·curator·synthesizer·writer | `gpt-5.5` | **`gemma4-26b-256k`** |
+  | 검증자 | fact-checker·reviewer·tester | `gpt-5.5` | **`gemma4-26b-256k`** |
+  | 코더 | architect·developer | `gpt-5.5` | **`gemma4-26b-256k`** |
 
   ```bash
   python3 scripts/set_backend.py --show               # 현재 백엔드(불일치면 exit 1)
   python3 scripts/set_backend.py --build-models       # -256k 파생본 생성(없는 것만)
-  python3 scripts/set_backend.py --backend codex      # 현재 · ★ 한도 리셋 2026-08-09 14:07
-  python3 scripts/set_backend.py --backend ollama     # 로컬 폴백(한도 없음 · 단 아래 ⚠️ 를 읽어라)
+  python3 scripts/set_backend.py --host-setup         # ★ 호스트 서버 설정(launchctl) — 아래 ⚠️⚠️
+  python3 scripts/set_backend.py --backend ollama     # 현재 (Sam 지시 2026-08-06)
+  python3 scripts/set_backend.py --backend codex      # 한도 리셋 2026-08-09 14:07 이후 복귀 가능
   ```
+  ⚠️⚠️ **호스트 서버 설정을 `--host-setup` 으로 걸고 Ollama 를 재시작하라 — 안 하면 스테이지
+  내 병렬화가 조용히 직렬화된다**(2026-08-06 실측 · `docs/14 §5.1·§5.2`). `OLLAMA_NUM_PARALLEL`
+  이 없으면 subagent 3개의 동시 요청을 서버가 큐에 세운다 — **오류도 로그도 없이 3배 느릴 뿐**이다
+  (합산 처리량 73.1 < 단일 86.7 tok/s, 이득이 **음수**). 걸면 103.1 tok/s(+26%)·메모리 +1.4%.
+  ⚠️ **`launchctl getenv` 는 "걸어 놨다"이지 "반영됐다"가 아니다.** Ollama 프로세스가 **53일째**
+  돌고 있어서 `docs/14 §5` 가 지시한 설정이 **어떤 미션에서도 실효된 적이 없었다**(M-2026-005 포함).
+  `usage_report.py` 가 이제 **서버 기동 배너**를 읽어 착수 전에 대조하고, '안 걸었다'와 '걸었는데
+  반영 안 됐다'를 구분해 보고한다. `osascript quit` 이 안 먹을 수 있으니 `ps -o etime` 으로
+  경과 시간이 리셋됐는지 확인하라.
   ⚠️⚠️ **`context_length − max_tokens > 64000` 을 반드시 지켜라(docs/14 §3.2).** 못 지키면 Hermes 압축이 **퇴화 분기**로 떨어져 창의 85%에서 상시 발동하고 `compression.threshold` 가 **완전히 무력**해진다 — M-2026-005 stage 5 가 이걸로 압축 루프에 갇혀 멈췄다(65536−16384=49152 < 64000 → 41,779 토큰에서 발동). 현재 **262144−16384=245760 → 208,896**. 테스트가 강제한다.
   ⚠️ **창을 바꾸면 파생본 이름(`-256k`)도 바꿔라** — `--build-models` 는 존재를 **이름으로만** 판정해서, 이름을 그대로 두면 "이미 있음"을 찍고 서버는 옛 창을 계속 서빙한다(config 는 새 값을 주장).
   💡 **창은 생각보다 싸다(2026-08-05 (3) 실측)**: `gemma4:26b` 는 131072 → 262144 로 2배 올려도 메모리가 17.50GB → 17.64GB, **+0.8%** 다. `docs/14 §3.1` 의 "창 하나로 3.7배"는 `llama3.1:8b` 숫자이고 **모델 계열을 건너뛰지 않는다** — 모델마다 다시 재라.
@@ -72,39 +82,47 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 
 ---
 
-## ▶ 이어서 할 일 (2026-08-05 (3) 세션 종료 · **다음 세션은 2026-08-09 14:07 이후**)
+## ▶ 이어서 할 일 (2026-08-06 세션 · **M-2026-006 진행 중**)
 
-### ⏳ 지금은 아무것도 못 돌린다 — codex 한도 리셋 대기
+### 진행 중: M-2026-006 (아키타입 I `code-docs`) — 로컬 백엔드 첫 실미션
 
-Sam 지시로 **전 프로필 11종을 `codex` / `gpt-5.5` 로 되돌렸다.** 그런데 codex 한도가
-**2026-08-09 14:07** 까지 소진 상태다. `python3 scripts/usage_report.py` 가 `exit 1` 을
-낸다 — **그게 정상이고, 그 상태로 미션을 걸면 워커가 60초마다 크래시한다.**
+**Sam 지시(2026-08-06)로 로컬 `ollama` 백엔드로 전환하고 실미션을 착수했다.** codex 한도
+리셋(2026-08-09 14:07)까지 78시간을 기다리는 대신이다 — 2026-08-05 (3) 의 "codex 복귀"
+지시를 갱신하는 결정이다.
 
 ```bash
-python3 scripts/set_backend.py --show     # codex · gpt-5.5 · 11종 (exit 0)
-python3 scripts/usage_report.py           # ★ exit 0 이 될 때까지 미션 금지
+python3 scripts/set_backend.py --show     # ollama · gemma4-26b-256k · 11종 (exit 0)
+python3 scripts/usage_report.py           # exit 0 + 서버 설정 5종 일치여야 한다
+docker exec hermes-solomon hermes kanban --board m-2026-006 list    # 10단계
 ```
 
-### ▶ 리셋 후 첫 순서 (Sam 지시: **처음부터 다시 테스트**)
+- 보드 **`m-2026-006`**(미션 전용) · 대상 코드베이스 `/work/company/scripts` · 독자 유지보수자
+- 이 아키타입을 첫 번째로 고른 이유: 객관 게이트가 저장소 **AST 와 대조**해서 **날조로는
+  통과할 수 없다.** 로컬 모델이 무너졌던 지점이 정확히 날조였다(`docs/11 §7 ⑧`).
+- **stage 6 이 4워커 팬아웃**이라 2026-08-06 에 고친 `NUM_PARALLEL` 이 실제로 쓰인다.
+- ⚠️ **산출물 실사를 단계마다 하라** — 워커의 완료 보고는 증거가 아니다:
+  `grep -rniE "simulat|placeholder|TBD|가상의|Synthesized from" reports/M-2026-006/`
 
-1. `docker compose up -d` → `usage_report.py` **exit 0 확인**
-2. ⚠️ **`hermes kanban reclaim <tid>`** — 컨테이너를 정지시켜 넘겼으므로 실행 중이던
-   `t_a895d1c8` 에 **stale claim lock 이 남아 있다.** 안 풀면 카드가 `ready` 인데
-   디스패처가 **영영 안 집고 로그도 안 남는다**(`docs/14 §6.5 ④`).
-3. 신규 미션은 **`code-docs`(아키타입 I) 부터** — 객관 게이트가 우리 저장소 **AST 와
-   대조**해서 **날조로는 통과할 수 없는** 유일한 저비용 후보다. 그 다음
-   `policy-brief`(G) → `lecture-course`(J) → `systematic-review`(B′) →
-   `lit-monitor`(E) → `patent-spec`(F).
-   ⚠️ G 전에 `policy.py` 의 `DRAFTS` 누락, J 전에 `lecture.py` 의 `source_balance`
-   누락을 고쳐라 — `python3 scripts/lint_gate_drafts.py <template>` 가 알려준다.
-4. **미션마다 보드가 새로 생긴다**(이번 세션 신규). `instantiate_template.py` 가
-   `--board`(기본 = 미션 id 소문자)로 만든다.
+### 그 다음 아키타입 순서
+
+`policy-brief`(G) → `lecture-course`(J) → `systematic-review`(B′) → `lit-monitor`(E) →
+`patent-spec`(F). ⚠️ G 전에 `policy.py` 의 `DRAFTS` 누락, J 전에 `lecture.py` 의
+`source_balance` 누락을 고쳐라 — `python3 scripts/lint_gate_drafts.py <template>` 가 알려준다.
+(`code-docs` 는 draft 정합 ✓ 라 이번엔 해당 없음.)
+
+### M-2026-005 는 세워 뒀다 — 재개하지 않는다
+
+컨테이너 재기동 시 G6R Revision 카드가 **stale claim 때문에 `running` 으로 보였다.** 락
+상태에 의존해 멈춰 있는 것은 불안정하므로 활성 카드 3종을 **`schedule` 로 명시적으로 park**
+했다(`docs/14 §6.5 ⑤`). 사유에 `[운영 메모 · 산출물 지시 아님]` 접두를 붙였다.
 
 ### 미션 착수 런북 (신규 도구 3종이 앞에 붙었다)
 
 ```bash
-MID=M-2026-006; TPL=code-docs; BOARD=$(echo $MID | tr 'A-Z' 'a-z')
+MID=M-2026-007; TPL=policy-brief; BOARD=$(echo $MID | tr 'A-Z' 'a-z')
 python3 scripts/set_backend.py --show && python3 scripts/usage_report.py   # 둘 다 exit 0
+# ↑ 로컬 백엔드면 usage_report 가 **서버 실효 설정 5종 일치**까지 확인한다(WARN 이면 재시작)
+python3 scripts/probe_parallel.py   # 팬아웃이 있는 템플릿이면 '병렬' 인지 확인
 docker exec hermes-solomon sh -c "cd /work/company && python3 scripts/preflight_gates.py $TPL"      # 빈 입력을 반려하는가
 docker exec hermes-solomon sh -c "cd /work/company && python3 scripts/lint_gate_drafts.py $TPL"     # 하네스≠템플릿 draft
 docker exec hermes-solomon sh -c "cd /work/company && python3 scripts/lint_template.py $TPL"
@@ -212,7 +230,7 @@ park 하라(`block` 2회는 `promoted` 로 되돌아온다 · `docs/14 §6.5 ①
 | profile | **11종** — 기존 8 + `architect`·`developer`·`tester`(아키타입 D 도입 시 신설) |
 | 객관 게이트 | **63종** `scripts/gates/` — **analysis_substance**(신규 · 산출물 실체성)·recency·source_balance·doc_consistency·test_run·prisma_counts·prisma_checklist·seen_dedup·digest_shape·claim_consistency·patent_format·evidence_grade·stakeholder_coverage·format_consistency·clause_completeness·law_citation·legal_safety·symbol_truth·api_coverage·doc_links·objective_coverage·bloom_distribution·course_consistency·content_accessibility·atomic_commit·test_pass_rate·behavior_diff·owasp_coverage·cve_remediation·finding_completeness·secret_redaction·eval_set_quality·stat_significance·repro_determinism·run_completeness·pii_presence·license_compat·schema_conformance·datasheet_completeness·result_tolerance·env_consistency·install_evidence·reproduce_doc·bit_exact·solver_pin·doe_completeness·analysis_integrity·proposal_format·budget_integrity·call_alignment·proposal_traceability·comment_fidelity·comment_coverage·change_consistency·response_quality·claim_provenance·channel_format·outreach_tone·release_readiness·**slide_budget·deck_format·diagram_integrity** |
 | 산출 도구 | 4종 `scripts/tools/` — bib_export·monitor_state·relevance_score·budget_build |
-| 운영 도구 | **`scripts/preflight_gates.py`**(빈 입력 반려 확인) · **`scripts/lint_gate_drafts.py`**(하네스↔템플릿 draft 정합) · `scripts/match_template.py`(미션→템플릿 3-way 매처 · `--rebuild` 로 manifest 생성) · `scripts/usage_report.py`(착수 전 점검 · **LLM 미호출** · 백엔드별 판정) · **`scripts/set_backend.py`**(추론 백엔드 codex↔ollama 전환 · `docs/14`) · **`scripts/probe_protocol.py`**(로컬 모델 도구 프로토콜 준수도 측정 — 모델 선정 근거) |
+| 운영 도구 | **`scripts/preflight_gates.py`**(빈 입력 반려 확인) · **`scripts/lint_gate_drafts.py`**(하네스↔템플릿 draft 정합) · `scripts/match_template.py`(미션→템플릿 3-way 매처 · `--rebuild` 로 manifest 생성) · `scripts/usage_report.py`(착수 전 점검 · **LLM 미호출** · 백엔드별 판정 + **서버 실효 설정·창 대조**) · **`scripts/set_backend.py`**(백엔드 전환 + **`--host-setup`** 호스트 서버 설정 · `docs/14`) · **`scripts/probe_protocol.py`**(도구 프로토콜 준수도 — 모델 선정 근거) · **`scripts/probe_parallel.py`**(동시 요청이 실제로 병렬인지 — 2026-08-06 신규) |
 | 검증 | `python3 scripts/lint_template.py --all`(20/20) · 테스트 **355종**(35 템플릿·보드 + 34 게이트키퍼 + 214 게이트 + 8 매처 + 12 사용량 + 30 백엔드 + 22 기타) · **E2E 하네스 `scripts/tests/fixtures/run_all.py`(14종 510케이스)** |
 
 **Sam 지시:** 실미션은 **전체 변환을 마친 뒤 하나씩** 돌린다(변환 중에는 dry-run만).
@@ -223,11 +241,31 @@ park 하라(`block` 2회는 `promoted` 로 되돌아온다 · `docs/14 §6.5 ①
 
 **⚠️ 보안 미결(변함없음)**: 진단 중 `SLACK_BOT_TOKEN` 값이 세션 로그에 노출됨 → **재발급(rotate) 권장**(Slack 앱 Regenerate → `.env` 갱신 → `docker compose up -d --force-recreate hermes-solomon hermes-gatekeeper`).
 
-**세션 종료 상태(2026-08-05 (3) · 날조 결함 발견·차단 · codex 복귀):**
-커밋 7건(`0e76dce`·`879f5c4`·`fb63865`·`6e6ef0b`·`5434b15`·`ffd485d`·`e512617`+).
-**컨테이너 정지 · 백엔드 `codex`/`gpt-5.5` 11종 · codex 한도 리셋 2026-08-09 14:07 대기.**
+**세션 상태(2026-08-06 · 로컬 백엔드 재전환 · 호스트 서버 튜닝 · M-2026-006 진행 중):**
+커밋 `4e593c0`(호스트 튜닝)·`bab2ac3`(전환·미션 착수)+.
+**컨테이너 기동 · 백엔드 `ollama`/`gemma4-26b-256k` 11종 · M-2026-006 실행 중.**
 
-이번 세션이 만든 것:
+2026-08-06 이 만든 것:
+| 신규 | 무엇 |
+|---|---|
+| **`scripts/probe_parallel.py`** | 동시 요청이 **실제로 병렬인지** 측정. 판정을 순수 함수로 분리해 서버 없이 검사한다 |
+| **`set_backend.py --host-setup`** + `HOST_ENV`/`HOST_ENV_OMITTED` | 호스트 서버 설정을 **한 곳에** 선언 — 선언·적용·검사가 같은 표를 본다. **넣으면 안 되는 것**(`OLLAMA_CONTEXT_LENGTH`)도 이유와 함께 선언 |
+| **`usage_report.py` 서버 실효 설정 대조** | 서버 기동 배너 + `/api/ps` 창을 착수 전에 대조(**WARN 전용** — 느려지는 것과 못 도는 것은 다르다) |
+| `docs/14 §5.1·§5.2·§5.3` | 걸어 놓은 것 ≠ 반영된 것 · 병렬화 실측 · **외부 가이드 대조표** |
+
+2026-08-06 이 측정으로 확인한 것:
+- ⚠️⚠️ **`docs/14 §5` 가 지시한 설정이 어떤 미션에서도 실효된 적이 없었다.** Ollama 프로세스가
+  **53일째**(2026-06-13 기동) 돌고 있었고 `launchctl setenv` 는 이후 기동 프로세스에만 붙는다.
+  이 저장소가 이미 아는 규율(**"파일이 아니라 서버가 보고하는 값을 봐라"**)을 환경변수에는
+  적용하지 않고 있었다.
+- ⚠️ **스테이지 내 팬아웃이 로컬에서 직렬로 돌고 있었다.** `NUM_PARALLEL` 미설정 → 합산
+  처리량 73.1 < 단일 86.7 tok/s(**이득이 음수**). 설정 후 103.1 tok/s(**+26%**) · 메모리 +1.4%.
+- **판정 함수를 한 번 틀렸고 측정이 그것을 반증했다** — 총 벽시계 비율로는 완전한 병렬을
+  "부분병렬"로 읽는다(GPU 는 병렬이어도 요청당 느려진다). 종료 시각 분산 + 처리량 이득으로 교체.
+- **`devstral-small-2:24b` 기각** — 외부 가이드의 코딩 1순위. 벽시계는 더 빠른데(44 vs 52초)
+  `must_finish` 가 3회·5회 모두 **80%** 다. 카드에 이유 없이 `protocol violation` 으로만 남는다.
+
+2026-08-05 (3) 이 만든 것:
 | 신규 | 무엇 |
 |---|---|
 | `scripts/gates/analysis_substance.py` | 산출물 실체성 게이트(게이트 **63종**). 자가선언 탐지 + 개수 항등 + 분량 상하한 + **위치 지정 인용**(가장 잘 드는 검사) |
@@ -247,22 +285,27 @@ park 하라(`block` 2회는 `promoted` 로 되돌아온다 · `docs/14 §6.5 ①
 
 **새 세션 시작 시(3분 점검):**
 
-⚠️ **컨테이너는 정지 상태로 넘겼다.** `docker compose ps` 가 비어 있는 것이 **정상**이다.
-⚠️ **2026-08-09 14:07 전에는 미션을 걸지 마라** — codex 한도 소진 중이다.
+⚠️ **컨테이너는 기동 상태로 넘겼다.** M-2026-006 이 진행 중이다.
+⚠️ **호스트 Ollama 를 재시작했다면 `--host-setup` 을 다시 걸어라** — `launchctl setenv` 는
+로그인 세션 단위라 **재부팅하면 사라진다.** `usage_report.py` 가 잡아 준다.
 
 ```bash
-git log --oneline -6                     # HEAD: codex/gpt-5.5 복귀
-python3 scripts/set_backend.py --show    # ★ codex · gpt-5.5 · 11종 (exit 1 이면 불일치)
-python3 scripts/usage_report.py          # ★ exit 0 이어야 미션 착수 가능(현재는 1)
-docker compose up -d                     # ← 미션을 이어갈 때만
+git log --oneline -6                     # HEAD: 로컬 전환 + M-2026-006 착수
+python3 scripts/set_backend.py --show    # ★ ollama · gemma4-26b-256k · 11종 (exit 1 이면 불일치)
+python3 scripts/usage_report.py          # ★ exit 0 + '서버 실효 설정 5종 일치'
+docker compose ps                        # hermes-solomon · hermes-gatekeeper Up
+docker exec hermes-solomon hermes kanban --board m-2026-006 list                                     # 10단계 진행상황
 docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/lint_template.py --all'        # 20/20
 docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/preflight_gates.py --all'      # 누출 0
 docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/lint_gate_drafts.py'           # 미해결 FAIL 8
 docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/fixtures/run_all.py'     # 14/14
+python3 scripts/tests/test_set_backend.py && python3 scripts/tests/test_usage_report.py              # 30 · 27
 curl -s -o /dev/null -w '%{http_code}\n' --max-time 8 https://slack.com/api/auth.test               # 200 이면 정상
 ```
 
-**→ 다음은 `code-docs`(아키타입 I) 신규 미션이다**(위 '▶ 이어서 할 일' 참조).
+**→ M-2026-006(`code-docs`)이 진행 중이다**(위 '▶ 이어서 할 일' 참조).
+⚠️ **Slack 은 2026-08-06 기준 다시 도달 불가**(`curl 000`). 승인 게이트 자동 게시가 안 되므로
+**게이트 승인은 Claude 가 직접 한다**(Sam 위임 2026-08-05).
 
 **§2④ 를 먼저 하라(이번 세션의 가장 큰 교훈):** 게이트를 새로 만들기 전에 `ls scripts/gates/`(63종)로 **이미 가진 것과 하는 일이 겹치는지** 보라. 재사용은 *하는 일*이 같을 때지 *이름*이 비슷할 때가 아니다(O 는 2종 재사용 · P 는 이름이 비슷한 `run_completeness` 를 일부러 재사용하지 않았다). **Q 에서 `legal_safety` 에 연 `publication_policy` 축이 바로 다음 변환(R)에서 그대로 쓰였다 — 쌍둥이 게이트를 만드는 대신 축을 여는 판단의 실증이다.**
 

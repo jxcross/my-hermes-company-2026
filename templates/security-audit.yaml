@@ -76,7 +76,7 @@ stages:
     profile: default          # Solomon
     sam_gate: true
     upstream: []
-    body: "감사 범위를 확정해 reports/<MID>/SCOPE.md 에 작성 — 대상과 **범위 밖** · 감사 유형(OWASP/CWE/CVE/STRIDE 중 선택) · 입력 종류(소스·매니페스트·Dockerfile·환경설정) · 완료조건. ⚠️ **frontmatter 에 `codebase: <경로>` 와 `audit_types: [owasp, cwe, cve, stride]` 를 선언**하라. ⚠️ **안전 규약**: ① 감사 대상은 **우리가 권한을 가진 코드**여야 한다 — 남의 시스템을 스캔하지 마라. ② 이 파이프라인은 **읽기만 한다** — 취약점을 고치거나 익스플로잇을 만들지 않는다(수정은 별도 미션). ③ **산출물을 둘로 나눈다**: 상세 발견은 `reports/<MID>/_private/`(gitignore·커밋 안 됨), 공유용 요약은 `reports/<MID>/report/`. 이 저장소는 PUBLIC 이고 Deliver 가 push 하므로 **위치·재현 정보와 비밀값을 커밋 대상에 넣으면 안 된다.** ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라."
+    body: "감사 범위를 확정해 reports/<MID>/SCOPE.md 에 작성 — 대상과 **범위 밖** · 감사 유형(OWASP/CWE/CVE/STRIDE 중 선택) · 입력 종류(소스·매니페스트·Dockerfile·환경설정) · 완료조건. ⚠️ **SCOPE.md 맨 첫 줄부터 `---` 로 감싼 YAML frontmatter 블록에 `codebase: <경로>` 와 `audit_types: [owasp, cwe, cve, stride]` 를 선언**하라. ⚠️ **안전 규약**: ① 감사 대상은 **우리가 권한을 가진 코드**여야 한다 — 남의 시스템을 스캔하지 마라. ② 이 파이프라인은 **읽기만 한다** — 취약점을 고치거나 익스플로잇을 만들지 않는다(수정은 별도 미션). ③ **산출물을 둘로 나눈다**: 상세 발견은 `reports/<MID>/_private/`(gitignore·커밋 안 됨), 공유용 요약은 `reports/<MID>/report/`. 이 저장소는 PUBLIC 이고 Deliver 가 push 하므로 **위치·재현 정보와 비밀값을 커밋 대상에 넣으면 안 된다.** ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라."
   - id: 2
     name: Target Ingest
     profile: reader

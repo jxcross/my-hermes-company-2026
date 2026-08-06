@@ -60,7 +60,7 @@ stages:
     profile: default          # Solomon
     sam_gate: true
     upstream: []
-    body: "출원 범위를 확정해 reports/<MID>/SCOPE.md 에 작성 — 기술분야·발명자·출원 관할·마감·완료조건. ⚠️ **frontmatter 에 `jurisdictions: [kipo, uspto, ...]` 를 반드시 선언**하라(객관 게이트가 이 목록으로 관할별 문서 존재를 검사한다). ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라. 오직 SCOPE.md 산출과 이 task 완료만."
+    body: "출원 범위를 확정해 reports/<MID>/SCOPE.md 에 작성 — 기술분야·발명자·출원 관할·마감·완료조건. ⚠️ **SCOPE.md 맨 첫 줄부터 `---` 로 감싼 YAML frontmatter 블록에 `jurisdictions: [kipo, uspto, ...]` 를 반드시 선언**하라(⚠️ 본문 코드블록 안에 적으면 게이트가 못 읽는다 — 게이트는 SCOPE.md **파일 맨 앞**만 본다. 객관 게이트가 이 목록으로 관할별 문서 존재를 검사한다). ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라. 오직 SCOPE.md 산출과 이 task 완료만."
   - id: 2
     name: Invention Intake
     profile: reader

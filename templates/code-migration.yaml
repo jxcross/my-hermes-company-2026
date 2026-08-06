@@ -73,7 +73,7 @@ stages:
     profile: default          # Solomon
     sam_gate: true
     upstream: []
-    body: "마이그레이션 범위를 확정해 reports/<MID>/SCOPE.md 에 작성 — 출발/목표(예: Python 3.8→3.12 · JS→TS · React 16→18) · 대상 범위와 **제외 범위** · 허용 위험도 · 마감 · 완료조건. ⚠️ **frontmatter 에 다음을 반드시 선언**하라(객관 게이트가 이 값으로 실제 저장소와 대조한다):\n`codebase: <경로>` · `migration_types: [version, type, framework, storage]` 중 해당 항목 · `test_command: <테스트 실행 명령>`.\n⚠️ **안전 규약**: ① `codebase` 는 `HERMES_WRITE_SAFE_ROOT`(`/opt/data`·`/work/company`·`/work/llm-wiki`) 안이어야 워커가 쓸 수 있다. ② **`/work/company` 자신을 대상으로 삼지 마라** — 파이프라인이 자기 코드를 고치게 되고 게이트키퍼가 도는 중에 게이트키퍼가 바뀐다. ③ 대상 저장소는 **깨끗한 작업 트리**여야 한다(커밋 안 된 변경이 있으면 원자 커밋 검사가 무의미해진다). ④ 이 파이프라인은 **force push 를 하지 않는다** — 되돌리기는 `git revert` 로만. ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라."
+    body: "마이그레이션 범위를 확정해 reports/<MID>/SCOPE.md 에 작성 — 출발/목표(예: Python 3.8→3.12 · JS→TS · React 16→18) · 대상 범위와 **제외 범위** · 허용 위험도 · 마감 · 완료조건. ⚠️ **SCOPE.md 맨 첫 줄부터 `---` 로 감싼 YAML frontmatter 블록에 다음을 반드시 선언**하라(⚠️ 본문 코드블록 안에 적으면 게이트가 못 읽는다 — 게이트는 SCOPE.md **파일 맨 앞**만 본다. 객관 게이트가 이 값으로 실제 저장소와 대조한다):\n`codebase: <경로>` · `migration_types: [version, type, framework, storage]` 중 해당 항목 · `test_command: <테스트 실행 명령>`.\n⚠️ **안전 규약**: ① `codebase` 는 `HERMES_WRITE_SAFE_ROOT`(`/opt/data`·`/work/company`·`/work/llm-wiki`) 안이어야 워커가 쓸 수 있다. ② **`/work/company` 자신을 대상으로 삼지 마라** — 파이프라인이 자기 코드를 고치게 되고 게이트키퍼가 도는 중에 게이트키퍼가 바뀐다. ③ 대상 저장소는 **깨끗한 작업 트리**여야 한다(커밋 안 된 변경이 있으면 원자 커밋 검사가 무의미해진다). ④ 이 파이프라인은 **force push 를 하지 않는다** — 되돌리기는 `git revert` 로만. ⚠️ 파이프라인 카드는 이미 생성돼 있다 — 하위 task를 새로 만들거나 kanban decompose 하지 마라."
   - id: 2
     name: Codebase Ingest
     profile: reader
