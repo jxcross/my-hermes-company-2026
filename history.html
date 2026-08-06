@@ -25,6 +25,31 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#57 — 계정은 갈아끼우는 게 아니라 <b>풀에 더한다</b> · <b>로그의 429 는 과거의 기록이지 현재의 판정이 아니다</b> · 한도 상시 표시</h2>
+    <div class="meta">2026-08-06 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "회사에서 슬랙이 차단되어 사용하기가 쉽지 않다. <b>discord 추가가 가능한가?</b>" → "codex 새로운 계정으로 연결하려고 한다. <b>hermes setup 어떻게 실행하나?</b>" → (계정 추가 후) "①부터 해줘"(<code>usage_report.py</code> 풀 인식 수정) → "이제부터는 <b>codex 토큰 리밋을 항상 보여달라</b>"</div>
+    <div class="label">진행:</div>
+    <ol class="steps">
+      <li><b>Discord 는 조사·설계까지</b>(코드 없음). 실측으로 전제를 먼저 갈랐다 — <code>discord.com</code> <b>200(0.06s)</b> · <code>slack.com</code> <b>타임아웃</b>. Hermes 에 <code>discord</code> 플랫폼 플러그인이 <b>이미 번들</b>돼 있고(adapter 10,036줄 — Slack 9,085줄보다 크다) <code>DISCORD_BOT_TOKEN</code> <b>하나로</b> 자동 활성된다(Slack 은 봇+앱 토큰 2개). 우리가 짠 Slack 코드는 <code>gate_keeper.slack_api()</code> <b>함수 하나·엔드포인트 2개</b>뿐. Sam 선택: <b>Slack 유지 + Discord 병렬 추가</b> · 3채널 이식 · 템플릿 20종은 인스턴스화 시 주입. ⚠️ 조사가 찾은 함정: <code>platform_toolsets.discord</code> 가 <b>툴셋 1종</b>(slack 은 17종) — 토큰만 넣으면 Discord 의 Solomon 이 <b>조용히 무능</b>해진다.</li>
+      <li><b><code>hermes setup</code> 이 아니었다.</b> 그것은 모델·게이트웨이 마법사라 <code>set_backend.py</code> 가 관리하는 배치표와 충돌한다. 맞는 것은 <code>hermes auth add</code> — <code>auth.json</code> 에 이미 <code>credential_pool</code> 이 있었고 <code>auth_commands.py:322-332</code> 에 <b>두 번째 계정이 첫 계정 항목을 덮어쓰지 않게 하는 처리(#39236)</b>가 명시돼 있다. <b>다계정이 설계된 용도다.</b> device code 흐름이라 localhost 콜백이 없어 컨테이너에서 그대로 된다.</li>
+      <li><b>같은 계정을 다시 승인하는 함정을 미리 막았다</b> — 브라우저가 기존 계정으로 로그인돼 있으면 승인이 <b>소진된 그 계정에 묶여</b> 쓸모없는 항목이 하나 더 생긴다(<code>auth list</code> 는 2개로 보이는데 둘 다 429). 승인 후 <b>JWT 클레임을 대조해 서로 다른 계정임을 증명</b>했다(<code>sub</code>·<code>chatgpt_account_id</code> 상이 · #1 <code>team</code> 소진 · #2 <code>plus</code> 정상). 실호출 <code>OK</code> · exit 0.</li>
+      <li><b>그리고 게이트가 틀렸다.</b> 추론이 <b>성공하는데</b> <code>usage_report.py</code> 는 <code>exit 1</code>("미션을 새로 시작하지 마라")을 냈다. 근거를 워커 로그의 429 <b>에서만</b> 읽었기 때문이다. 그 기록은 여전히 참이다 — "그 자격이 그때 소진됐다". 다만 <b>착수 가능 여부와는 무관해졌다.</b> → 판정을 둘로 갈랐다: <b>막을지 말지는 <code>credential_pool</code></b> 이, <b>왜 멈췄나는 로그</b>가. 풀을 못 읽으면 옛 판정으로 폴백(하위호환).</li>
+      <li><b>테스트를 먼저 쓰고 FAIL 을 확인한 뒤 구현했다</b> — 10종 전부 FAIL(구현 부재) → 구현 → 통과. 반대 방향도 짝으로 뒀다(전부 소진이면 여전히 막는가 · 빈 풀은 '모른다'가 아니라 '없다'). 토큰 유출은 <b>카나리 문자열</b>로 잰다(이 저장소는 PUBLIC 이고 <code>--json</code> 은 로그에 붙는다).</li>
+      <li>⚠️⚠️ <b>기존 테스트가 개발자 PC 의 실제 <code>auth.json</code> 을 읽고 있었다.</b> <code>test_main_exit_codes</code> 는 <code>LOG_DIRS</code> 만 격리했고, 풀 인식을 넣자 <b>진짜 계정 상태 때문에 통과해</b> 버렸다. 로그 판정을 재려던 테스트가 조용히 환경 의존이 돼 있었던 것이다 — <b>격리한다고 믿는 것과 실제로 격리한 것은 다르다.</b> <code>AUTH_PATHS</code> 도 격리하도록 고쳤다.</li>
+      <li><b>한도 상시 표시</b>(Sam 요청). 전역 <code>statusLine</code> 은 <code>ccstatusline</code> 이 이미 쓰고 있어 덮으면 <b>다른 프로젝트까지</b> 영향을 받는다 → Sam 선택은 <b>프로젝트 전용 훅</b>(SessionStart + Stop). <code>--brief</code> 는 <b>파일 하나만 읽는다</b> — <code>hermes insights</code> 를 <code>docker exec</code> 로 부르는 정식 경로는 초 단위라 상시 표시에 쓸 수 없다. 실측 <b>50ms</b> · subprocess 호출 0회(테스트가 강제).</li>
+      <li>⚠️ <b>표시는 착수를 막지 않는다</b>(<code>--brief</code> 는 exit 0 고정 · 테스트로 못박음). 표시가 사람을 막으면 사람이 그것을 끄고, 그러면 <b>진짜 판정도 같이 사라진다.</b></li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      커밋 <code>8070cc9</code>(풀 인식 판정) + 본 커밋(상시 표시 훅).
+      검증: <code>test_usage_report</code> <b>42/42</b>(27→42) · <code>test_set_backend</code> <b>39/39</b> · E2E 하네스 <b>14/14</b> · 호스트·컨테이너 양쪽 <code>exit 0</code> · <code>--json</code> 토큰 유출 없음 · <code>jq -e</code> 훅 스키마 검증 통과.
+      <b>codex 는 다시 돈다</b>(<code>codex ✓ 1/2 [account2]</code> · #1 은 08-09 14:07 리셋 후 <code>priority</code> 순으로 복귀).
+      ⚠️ 새 계정은 <code>plus</code> 라 <code>team</code> 보다 한도가 작다 — 소진 속도 관찰 필요.
+      ⚠️ Discord 는 <b>설계까지만</b>. 구현은 미착수.
+      ⚠️ 발견한 문서 드리프트: <code>CLAUDE.md</code> 가 배치를 <code>ollama</code> 로 적고 있었으나 실제는 <code>codex</code>(<code>--show</code> 로 확인 · 갱신함).
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#56 — <b>지시로 능력을 살 수 없다</b> · 금지를 못박은 직후 그 금지를 그대로 어긴 모델 · <b>판정은 카드가 아니라 파일 mtime 으로</b></h2>
     <div class="meta">2026-08-06 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "일단 codex 복원되기 전까지는 <code>gemma4-26b-256k</code> 로 하자. 이 모델로 전부 바꾸고, <code>trend-report.yaml</code> 예제로 실제 미션 테스트하라. <b>llm-wiki 관련 내용</b>으로 하자. 승인은 네가 판단하여 자체적으로 하라." → (실패 후) "아무래도 모델을 바꿔야겠다. codex/gpt-5.5 가 복원될 때까지 기다리자. <b>oauth 방식으로 지원하는 저렴한 모델은 없나?</b>" → "<code>gpt-oss:20b</code> 로 한번만 더 테스트해보자. 이것도 안되면 codex 복원까지 기다린다."</div>

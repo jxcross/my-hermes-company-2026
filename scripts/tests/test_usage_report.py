@@ -546,6 +546,49 @@ def test_main_fail_closed_when_no_logs():
         ur.LOG_DIRS = orig
 
 
+def test_brief_shows_usable_count_and_next_reset():
+    """상시 표시(statusline·hook)용 한 줄. 쓸 수 있는 자격과 다음 리셋을 함께 보여준다."""
+    p = _auth({"openai-codex": [_cred("a1", "old", "exhausted", RESETS),
+                                _cred("b2", "account2")]})
+    s = ur.brief_line("codex", now=RESETS - 3600, paths=[p])
+    assert "1/2" in s and "account2" in s, s
+    assert "08-09" in s, s
+
+
+def test_brief_marks_full_exhaustion():
+    p = _auth({"openai-codex": [_cred("a1", "old", "exhausted", RESETS)]})
+    s = ur.brief_line("codex", now=RESETS - 3600, paths=[p])
+    assert "0/1" in s and "⚠️" in s, s
+
+
+def test_brief_says_so_when_pool_is_unknown():
+    """모르면 모른다고 적는다 — '정상'으로 보이면 안 된다(fail-visible)."""
+    s = ur.brief_line("codex", now=RESETS, paths=["/nonexistent/auth.json"])
+    assert "정보 없음" in s, s
+
+
+def test_brief_on_local_backend_says_no_limit():
+    assert "한도 없음" in ur.brief_line("ollama", now=RESETS)
+
+
+def test_brief_never_blocks_and_never_calls_a_subprocess(monkeypatch=None):
+    """★ 상시 표시가 착수를 막으면 사람이 그것을 끄고, 그러면 진짜 판정도 같이 사라진다.
+       그리고 statusline 은 자주 렌더되므로 subprocess 를 부르면 안 된다."""
+    import subprocess as _sp
+    orig_run, called = _sp.run, []
+    _sp.run = lambda *a, **k: called.append(a) or orig_run(*a, **k)
+    orig_auth = ur.AUTH_PATHS
+    ur.AUTH_PATHS = [_auth({"openai-codex": [_cred("a1", "old", "exhausted", RESETS)]})]
+    try:
+        sys.argv = ["usage_report", "--brief", "--backend", "codex",
+                    "--now", str(RESETS - 3600)]
+        assert ur.main() == 0, "표시가 exit 1 로 착수를 막았다"
+        assert not called, f"subprocess 를 불렀다: {called}"
+    finally:
+        _sp.run = orig_run
+        ur.AUTH_PATHS = orig_auth
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

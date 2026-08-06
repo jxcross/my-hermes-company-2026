@@ -390,9 +390,37 @@ def main_local(args, backend: str) -> int:
     return 0 if ok else 1
 
 
+def brief_line(backend: str, now: int, paths: list[str] | None = None) -> str:
+    """한 줄 요약. **파일 하나만 읽는다** — subprocess·네트워크 없음.
+
+    ⚠️ 상시 표시(statusline·hook)에 쓰려고 만들었다. `main()` 은 `hermes insights` 를
+       `docker exec` 로 부르므로 초 단위가 걸린다 — 매 렌더마다 부를 수 없다.
+       여기서는 `insights` 도 로그 스캔도 하지 않는다."""
+    prov = backend_provider(backend)
+    if backend != "codex":
+        return f"{backend} · 한도 없음(로컬)"
+    pv = pool_verdict(read_credential_pool(prov, paths), now)
+    if not pv["known"]:
+        return "codex · 자격 풀 정보 없음"
+    ok = [c for c in pv["creds"] if c["usable"]]
+    if not ok:
+        nxt = min((c["reset_at"] for c in pv["creds"] if c["reset_at"]), default=None)
+        when = dt.datetime.fromtimestamp(nxt).strftime("%m-%d %H:%M") if nxt else "?"
+        h = f" ({(nxt - now) / 3600:.0f}h)" if nxt else ""
+        return f"codex ⚠️ 소진 0/{pv['total']} · 리셋 {when}{h}"
+    tail = ""
+    spent = [c for c in pv["creds"] if not c["usable"] and c["reset_at"]]
+    if spent:
+        w = dt.datetime.fromtimestamp(min(c["reset_at"] for c in spent)).strftime("%m-%d %H:%M")
+        tail = f" · 소진 {len(spent)} 리셋 {w}"
+    return f"codex ✓ {pv['usable']}/{pv['total']} [{ok[0]['label']}]{tail}"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--brief", action="store_true",
+                    help="한 줄 요약만(파일 1개만 읽는다 — statusline·hook 용)")
     ap.add_argument("--json", action="store_true", help="기계 판독 출력")
     ap.add_argument("--quiet", action="store_true", help="exit code 만")
     ap.add_argument("--now", type=int, default=None,
@@ -407,6 +435,15 @@ def main() -> int:
     # 로컬(ollama) 이면 codex 한도는 착수 판정의 근거가 아니다. 소진 기록은 리셋 후 복귀
     # 판단에 필요하므로 계속 **보여주되**, exit code 는 로컬 준비 상태로 정한다.
     backend = args.backend if args.backend != "auto" else sb.active_backend(args.repo_root)
+    if args.brief:
+        # ⚠️ 상시 표시는 **판정을 막지 않는다** — exit 0 고정. 표시가 착수를 막으면
+        #    사람이 그것을 끄게 되고, 그러면 진짜 판정도 같이 사라진다.
+        now = args.now if args.now is not None else int(dt.datetime.now().timestamp())
+        line = brief_line(backend, now)
+        # `--brief --json` = Claude Code 훅 형식. 셸에서 따옴표를 겹쳐 JSON 을 짓는 것보다
+        # 여기서 만드는 편이 안전하다(줄바꿈·따옴표·이모지가 그대로 통과한다).
+        print(json.dumps({"systemMessage": line}, ensure_ascii=False) if args.json else line)
+        return 0
     if backend in ("ollama",):
         return main_local(args, backend)
 
