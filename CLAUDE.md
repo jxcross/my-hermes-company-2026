@@ -153,6 +153,35 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 
 **로컬 모델로는 여기까지다. `codex` 복원(2026-08-09 14:07)까지 기다린다**(Sam 결정 2026-08-06).
 
+### ★ 복원 직후 반드시 할 것 — 툴셋 절감 실측 (Sam 지시 2026-08-06 (6))
+
+**"codex 복원되면 실측으로 확인하자."** 절감 추정치(−26%)는 **접두 감소분에서 계산한
+것이지 청구 실측이 아니다.** 리셋 후 미션을 한 번 돌리고 아래로 대조하라.
+
+⚠️⚠️ **기준선을 지금 박아 둔다 — `hermes insights` 는 30일을 누적하므로 사후에는
+옛 세션과 섞여 갈라낼 수 없다.** 2026-08-06 (6) 시점, **툴셋 정리 이전** 값:
+
+| 모델 | 세션 | input | output | cache_read | **세션당 총합** |
+|---|---|---|---|---|---|
+| `gpt-5.6-terra` | 26 | 1,395,901 | 89,576 | 8,236,032 | **373,904** |
+| `gpt-5.5` | 5 | 161,792 | 7,745 | 1,096,704 | 253,248 |
+
+**판정 기준: `gpt-5.6-terra` 의 세션당 총합이 373,904 에서 ~275,000 근처로 내려가면
+추정이 맞은 것이다**(−26%). 세션 길이·단계 종류가 다르면 비교가 흐려지니 **같은
+템플릿(`trend-report`)의 같은 stage 로 비교하라.**
+
+```bash
+# 리셋 후 미션 1회 실행한 뒤 — 새 세션만 골라서 본다
+docker exec hermes-solomon python3 -c "
+import sqlite3; c=sqlite3.connect('/opt/data/state.db')
+for r in c.execute('''select model, count(*), sum(input_tokens), sum(output_tokens),
+  sum(cache_read_tokens), (sum(input_tokens)+sum(output_tokens)+sum(cache_read_tokens))/count(*)
+  from sessions where created_at > '2026-08-09' group by 1'''): print(r)"
+```
+
+⚠️ 이때 **`output` 비중도 다시 봐라** — `medium` 으로 되돌렸으니 0.92% 에서 얼마나
+올랐는지가 "추론은 손잡이가 아니다"(`⑪-f`)의 재확인이다. 크게 올랐으면 그 판단을 갱신하라.
+
 ```bash
 # 8/09 14:07 이후 — 이 한 줄이 재개의 시작이다
 python3 scripts/set_backend.py --backend codex && python3 scripts/set_backend.py --show
