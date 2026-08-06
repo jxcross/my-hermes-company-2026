@@ -36,17 +36,22 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
   유효 창 81920 > 64000 이라 압축 퇴화 분기는 피한다.
   ⚠️ **`OLLAMA_NUM_CTX` 를 "우리 창"이라고 부르지 마라 — 그 모델이 감당하는 창이다.**
 
-  ⚠️⚠️ **`must_finish` 80% 를 알고 채택했다**(Sam 지시). 5번에 1번 `kanban_complete` 를 빠뜨려
-  카드에 `protocol violation` 만 남고 **이유는 안 남는다** — 11단계 미션당 기대 스톨 2건이다.
-  **미션 중에는 스톨을 감시하고 재디스패치하라.** Ollama 0.32.6 으로 올린 뒤 재측정했는데
-  80% 가 그대로였다(reps 5→100% · 3→66.7% · **10→80%**). **간헐적 실패는 표본을 키워서 재라** —
-  5회 100% 에서 멈췄으면 "고쳐졌다"고 오판했다.
+  ⛔⛔ **로컬 모델 중 실미션을 이행한 것은 `gemma4-26b-256k` 뿐이다 — 지금 배치(devstral)로는
+  미션을 돌리지 마라.** 2026-08-06 에 같은 카드(stage 1 · 산출물 `SCOPE.md` 1개)로 통제 비교했다:
 
-  ⚠️ **`gemma4:12b-mlx` 는 반나절 만에 되돌아왔다 — 속도만 보고 다시 집어들지 마라.**
-  프로브 7항목 100% · 3회 **26.5초**(최속) · 7.6GB 인데, `academic-paper` stage 1 에서
-  **3회 연속 산출물 0건**이었다(오독 2 · **날조 1**). 동일 카드에 26b 만 꽂은 대조 실험은
-  **첫 시도에 성공** → 변수는 모델로 확정. **프로브 100% 는 도구 규약을 잰 것이지
-  과제 이행을 잰 것이 아니다.** MLX 는 `OLLAMA_NUM_PARALLEL` 도 안 따른다(별도 러너 · slot 없음).
+  | 모델 | 시도 | 산출물 | 실패 양상 |
+  |---|---|---|---|
+  | `gemma4:12b-mlx` | 3회 | **0건** | 오독 2 · **날조 1** |
+  | `devstral-24b-96k`(현 배치) | 1회·656초 | **0건** | 파일 쓰기 도구 **미호출** → nudge → **날조** |
+  | `gemma4-26b-256k` | 1회 | **성공** | 정책값까지 정확 |
+
+  **→ Sam 결정(2026-08-06): 실미션은 `codex` 복귀(2026-08-09 14:07) 후에 한다.**
+  그때 `python3 scripts/set_backend.py --backend codex`. 상세 `docs/11 §7 ⑩`.
+
+  ⚠️ **프로브 100% 는 과제 이행을 보증하지 않는다** — `gemma4:12b-mlx` 는 7항목 100%·최속인데
+  산출물이 0건이었다. **배치 채택 기준에 "실미션 stage 1 통과"를 넣어라.**
+  ⚠️ **`must_finish` 80%**(devstral · reps 10). 5회에서는 100% 라 **표본을 키워야 보였다.**
+  ⚠️ MLX 는 `OLLAMA_NUM_PARALLEL` 을 안 따른다(별도 러너 · slot 없음 → 팬아웃 직렬화).
 
   ```bash
   python3 scripts/set_backend.py --show               # 현재 백엔드(불일치면 exit 1)
@@ -100,9 +105,31 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 
 ---
 
-## ▶ 이어서 할 일 (2026-08-06 세션 · **M-2026-006 진행 중**)
+## ▶ 이어서 할 일 (2026-08-06 (3) 갱신 · **실미션은 codex 복귀까지 중단**)
 
-### 진행 중: M-2026-006 (아키타입 I `code-docs`) — 로컬 백엔드 첫 실미션
+### ⛔ 지금 상태 — 먼저 읽어라
+
+**실미션 2건(M-2026-006 · M-2026-007)이 모두 세워져 있고, 재개하지 않는다.**
+로컬 모델 3종을 같은 카드로 갈랐는데 **`gemma4-26b-256k` 만 실제로 일을 했다**
+(`gemma4:12b-mlx` 3회·`devstral` 1회 모두 산출물 0건 · 상세 `docs/11 §7 ⑩`).
+
+**Sam 결정: `codex` 한도 리셋(2026-08-09 14:07) 이후에 실미션을 재개한다.**
+
+```bash
+# 8/09 14:07 이후 — 이 한 줄이 재개의 시작이다
+python3 scripts/set_backend.py --backend codex && python3 scripts/set_backend.py --show
+python3 scripts/usage_report.py            # 한도가 실제로 풀렸는지 확인(exit 0)
+docker compose up -d --force-recreate hermes-solomon hermes-gatekeeper
+# 그 다음 Sam 이 재개 대상을 정한다: M-2026-007(B) 재시작 · M-2026-006(I) 이어서 · 새 미션
+```
+
+- 현재 배치는 `ollama` / **`devstral-24b-96k`** (Sam 지시로 전환) — **이 배치로 미션을 돌리지 마라.**
+  백엔드 자체는 정상 동작한다(`--show` exit 0 · 회귀 전건 통과). 문제는 **모델의 과제 이행**이다.
+- `M-2026-007` 보드 `m-2026-007`: stage 1 이 `done` 이지만 **산출물이 없다**(날조). 재개하려면
+  stage 1 부터 다시다. 나머지 카드는 전부 `scheduled` 로 park(`dispatch --dry-run` → `spawned: []` 확인).
+- `M-2026-006` 보드 `m-2026-006`: stage 5 `blocked` · 3장 `scheduled` (이전 세션에서 park).
+
+### ↩︎ 보류: M-2026-006 (아키타입 I `code-docs`) — 로컬 백엔드 첫 실미션
 
 **Sam 지시(2026-08-06)로 로컬 `ollama` 백엔드로 전환하고 실미션을 착수했다.** codex 한도
 리셋(2026-08-09 14:07)까지 78시간을 기다리는 대신이다 — 2026-08-05 (3) 의 "codex 복귀"
@@ -259,11 +286,33 @@ park 하라(`block` 2회는 `promoted` 로 되돌아온다 · `docs/14 §6.5 ①
 
 **⚠️ 보안 미결(변함없음)**: 진단 중 `SLACK_BOT_TOKEN` 값이 세션 로그에 노출됨 → **재발급(rotate) 권장**(Slack 앱 Regenerate → `.env` 갱신 → `docker compose up -d --force-recreate hermes-solomon hermes-gatekeeper`).
 
-**세션 상태(2026-08-06 · 로컬 백엔드 재전환 · 호스트 서버 튜닝 · M-2026-006 진행 중):**
-커밋 `4e593c0`(호스트 튜닝)·`bab2ac3`(전환·미션 착수)+.
-**컨테이너 기동 · 백엔드 `ollama`/`gemma4-26b-256k` 11종 · M-2026-006 실행 중.**
+**세션 상태(2026-08-06 (3) · 로컬 모델 3종 비교 · 실미션 중단):**
+커밋 `ab60a81`(12b-mlx 전환)·`bd6bde4`(devstral 전환)·`b0d1f85`(reasoning_effort 400 수정)+.
+**컨테이너 기동 · 백엔드 `ollama`/`devstral-24b-96k` 11종 · 호스트 Ollama `0.32.6` ·
+실미션 2건 모두 park · 재개는 codex 복귀(2026-08-09 14:07) 이후.**
 
-2026-08-06 이 만든 것:
+2026-08-06 (3) 이 만든 것:
+| 신규 | 무엇 |
+|---|---|
+| `set_backend.py` **`patch_keys`** + `patch_block_keys()` | 블록 교체가 아니라 **키 한 줄만** 바꾼다. codex 의 `agent.reasoning_effort: medium` 잔재가 thinking 없는 로컬 모델을 **HTTP 400** 으로 죽이고 있었다(ollama→`none` · codex→`medium` 복원) |
+| `docs/11 §7 ⑩` | 로컬 모델 3종 통제 비교 + **nudge 가 날조를 만드는 경로** 특정 |
+| 회귀 4종 (`test_set_backend` **34/34**) | 잔재를 끄는가 · 되살리는가 · 블록의 나머지를 먹지 않는가 · 없는 키를 심지 않는가 |
+
+2026-08-06 (3) 이 측정으로 확인한 것:
+- ⛔ **로컬 모델 중 실미션을 이행한 것은 `gemma4-26b-256k` 뿐이다.** 같은 카드로 비교했다 —
+  `gemma4:12b-mlx` 3회 0건(오독 2·날조 1) · `devstral` 1회 0건(쓰기 미호출→nudge→날조) · 26b 1회 성공.
+- ⚠️⚠️ **하네스 nudge 가 `protocol violation` 을 거짓 `done` 으로 바꾼다.** 워커는 원래
+  아무것도 못 하고 나가려던 것이었고(그러면 카드에 **보인다**), nudge 가 완료를 지어내게 했다.
+  **관측 가능한 실패를 관측 불가능하게 만드는 개선은 개선이 아니다.**
+- ⚠️ **`protocol violation` 은 증상이다** — 4연속 실패의 진짜 원인은 `reasoning_effort` 400 이었다.
+  **카드 문구로 진단하지 말고 `hermes kanban log <tid>` 를 봐라.**
+- ⚠️ **테스트가 버그를 못박아 두고 있었다** — 픽스처가 실제 config 와 달라 400 경로를 못 봤다.
+- ⚠️ **자원 비용은 모델마다 재라** — devstral 은 같은 창에서 26b 의 **4.6배**(262144 에서 83GB
+  vs 17.9GB → CPU 로 흘러넘침). `OLLAMA_NUM_CTX` 를 **98304** 로 낮춰 40GB·100% GPU.
+- **Ollama 0.30.8 → 0.32.6 업그레이드**(MLX 는 0.32+ 필요 · 0.30.8 은 `pull` 이 412).
+  그 재기동으로 `HOST_ENV` 5종이 **53일 만에 처음 실효**됐다.
+
+2026-08-06 (1) 이 만든 것:
 | 신규 | 무엇 |
 |---|---|
 | **`scripts/probe_parallel.py`** | 동시 요청이 **실제로 병렬인지** 측정. 판정을 순수 함수로 분리해 서버 없이 검사한다 |
@@ -303,25 +352,27 @@ park 하라(`block` 2회는 `promoted` 로 되돌아온다 · `docs/14 §6.5 ①
 
 **새 세션 시작 시(3분 점검):**
 
-⚠️ **컨테이너는 기동 상태로 넘겼다.** M-2026-006 이 진행 중이다.
+⚠️ **컨테이너는 기동 상태로 넘겼다. 실미션 2건은 모두 park 돼 있고 재개하지 않는다** —
+재개는 **codex 복귀(2026-08-09 14:07) 이후**다(위 '⛔ 지금 상태' 참조).
 ⚠️ **호스트 Ollama 를 재시작했다면 `--host-setup` 을 다시 걸어라** — `launchctl setenv` 는
 로그인 세션 단위라 **재부팅하면 사라진다.** `usage_report.py` 가 잡아 준다.
 
 ```bash
-git log --oneline -6                     # HEAD: 로컬 전환 + M-2026-006 착수
-python3 scripts/set_backend.py --show    # ★ ollama · gemma4-26b-256k · 11종 (exit 1 이면 불일치)
+git log --oneline -8                     # HEAD: reasoning_effort 400 수정 + 로컬 모델 3종 비교
+python3 scripts/set_backend.py --show    # ★ ollama · devstral-24b-96k · 11종 (exit 1 이면 불일치)
 python3 scripts/usage_report.py          # ★ exit 0 + '서버 실효 설정 5종 일치'
 docker compose ps                        # hermes-solomon · hermes-gatekeeper Up
-docker exec hermes-solomon hermes kanban --board m-2026-006 list                                     # 10단계 진행상황
+# ★ 두 보드 모두 활성 카드가 없어야 한다(spawned 가 비어야 한다 — 상태 표시와 별개다)
+for b in m-2026-006 m-2026-007; do docker exec hermes-solomon hermes kanban --board $b dispatch --dry-run --json; done
 docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/lint_template.py --all'        # 20/20
 docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/preflight_gates.py --all'      # 누출 0
 docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/lint_gate_drafts.py'           # 미해결 FAIL 8
 docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/fixtures/run_all.py'     # 14/14
-python3 scripts/tests/test_set_backend.py && python3 scripts/tests/test_usage_report.py              # 30 · 27
+python3 scripts/tests/test_set_backend.py && python3 scripts/tests/test_usage_report.py              # 34 · 27
 curl -s -o /dev/null -w '%{http_code}\n' --max-time 8 https://slack.com/api/auth.test               # 200 이면 정상
 ```
 
-**→ M-2026-006(`code-docs`)이 진행 중이다**(위 '▶ 이어서 할 일' 참조).
+**→ 실미션은 중단 상태다.** codex 복귀(2026-08-09 14:07) 전까지 재개하지 않는다(위 '⛔ 지금 상태' 참조).
 ⚠️ **Slack 은 2026-08-06 기준 다시 도달 불가**(`curl 000`). 승인 게이트 자동 게시가 안 되므로
 **게이트 승인은 Claude 가 직접 한다**(Sam 위임 2026-08-05).
 

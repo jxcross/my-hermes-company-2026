@@ -418,6 +418,74 @@ gates=['symbol_truth']
 >    게이트를 고칠 때마다 **그 결과를 누가 읽는가**(사람? 다음 워커?)를 함께 봐라.
 >    출력을 capture 해 놓고 returncode 만 쓰는 코드가 있으면 사유는 이미 버려진 것이다.
 
+### ⑩ M-2026-007(아키타입 B `academic-paper`) — 로컬 모델 3종을 stage 1 하나로 갈랐다 (2026-08-06)
+
+Sam 지시로 로컬 배치를 두 번 갈아 끼우며 같은 카드(stage 1 Scoping · 산출물 = `SCOPE.md` 1개)를
+반복 실행했다. **템플릿·카드·워크스페이스가 모두 동일한 통제된 비교**다.
+
+| 모델 | 시도 | 산출물 | 무슨 일이 있었나 |
+|---|---|---|---|
+| `gemma4:12b-mlx` | 3회 | **0건** | 오독 2회(자기가 산출자인 걸 이해 못 하고 "먼저 만들어 달라"며 블록) · **날조 1회** |
+| `devstral-small-2:24b` | 1회 (656초) | **0건** | 파일 쓰기 도구를 **한 번도 호출하지 않음** → 하네스 nudge → **날조 완료** |
+| `gemma4-26b-256k` | 1회 | **성공** | 정책값(`source_balance` 6/2/1 · recency 3년 50%)까지 정확히 반영 |
+
+**⑩-a ⚠️ 프로브 100% 는 과제 이행을 보증하지 않는다 — 값을 치르고 확인했다.**
+`gemma4:12b-mlx` 는 `probe_protocol.py` 7항목이 **전부 100%** 였고 벽시계도 최속(3회 26.5초)이었다.
+그 숫자만 보고 배치를 바꿨는데 **실미션에서는 산출물이 0건**이었다. 프로브는 *도구 규약*
+(인자 충실도·종료 호출·VERDICT 포맷)을 재지 *과제 이행*(요구한 파일을 실제로 만드는가)을 재지 않는다.
+→ **배치 채택 기준에 "실미션 stage 1 통과"를 넣어라.** 프로브는 필요조건이지 충분조건이 아니다.
+
+**⑩-b ⚠️⚠️ 하네스의 nudge 가 `protocol violation` 을 `done` 으로 바꿔 놓는다 — 악화다.**
+`devstral` 의 656초 세션 로그가 그대로 보여준다:
+
+```
+┊ ⚡ kanban_show                     ← 카드를 읽음
+                                     ← 파일 쓰기 도구는 **한 번도 부르지 않음**
+⚠️ Kanban worker tried to exit without kanban_complete/kanban_block — nudging to finish
+"…새로운 SCOPE.md 파일을 만드는 것이 확인되었습니다. 작업을 완료한 후 kanban_complete 를…"
+┊ ⚡ kanban_complete                 ← **아무것도 안 만들고 완료 선언**
+```
+
+워커는 원래 **아무것도 못 하고 그냥 나가려던 것**이었다(그러면 `protocol violation` 으로
+카드에 **보이게** 남는다). nudge 가 "끝났으면 종료 도구를 불러라"고 밀어 넣자, 모델이
+그 요구에 맞춰 **완료를 지어냈다.** 관측 가능한 실패가 관측 불가능한 실패로 바뀐 것이다.
+→ **`⑧-d 워커의 허위 완료 보고`의 발생 경로 하나를 특정했다.** 대책은 그대로다 —
+게이트키퍼가 작업 카드 완료 시 **산출물 변경(mtime·해시)을 대조**해야 한다. 사람이
+`ls` 로 잡아낸 것을 코드가 잡아야 한다.
+
+**⑩-c ⚠️ `protocol violation` 은 증상일 뿐 — 원인은 두 층 아래에 있을 수 있다.**
+`devstral` 이 4회 연속 `protocol violation` 을 냈을 때 나는 "프로브가 예고한 `must_finish` 80%
+가 실현됐다"고 읽었다. **틀렸다.** 로그를 보니 이랬다:
+
+```
+HTTP 400: "devstral-24b-96k" does not support thinking
+Duration 1s · Messages 1 · tool calls 0
+```
+
+codex(`gpt-5.5`) 시절의 `agent.reasoning_effort: medium` 이 프로필 11종에 남아 있었고,
+`custom` 프로바이더가 이를 top-level `reasoning_effort` 로 실어 보낸다 → thinking 능력이 없는
+모델은 Ollama 가 400 으로 거절 → **워커가 시작조차 못 한다.** 카드에는 `protocol violation`
+만 남는다. `set_backend.py` 의 `patch_keys` 로 고쳤다(ollama→`none` · codex→`medium` 복원).
+→ **카드의 실패 문구를 진단으로 쓰지 마라. `hermes kanban log <tid>` 를 봐라.**
+
+**⑩-d ⚠️ 테스트가 버그를 못박아 두고 있었다.**
+`test_preserves_agent_block_in_source_config` 는 "ollama 로 바꿔도 `reasoning_effort: medium`
+이 남아야 한다"고 단언하고 있었다 — 그게 바로 400 을 만든 동작이다. 루트 픽스처에도
+`reasoning_effort` 가 없어 이 경로를 **볼 수 없었다.** ⑧-c 의 "검사하는 쪽도 검사받아야 한다"가
+한 겹 더 있다: **픽스처가 실제 파일 모양과 다르면, 테스트는 존재하지 않는 세계를 지킨다.**
+
+**⑩-e 창은 모델마다 다시 재라.** `devstral` 은 같은 창에서 `gemma4-26b` 의 **4.6배**를 먹는다
+(262144 에서 83GB vs 17.9GB — 64GB 기기에서 CPU 로 흘러넘쳤다). `OLLAMA_NUM_CTX` 를
+98304 로 낮춰 40GB·100% GPU 로 맞췄다. 상세 `docs/14 §2.1`.
+
+**교훈(⑩)**
+> ① **프로브 100% ≠ 과제 이행.** 배치 채택 기준에 실미션 stage 1 통과를 넣어라(⑩-a).
+> ② **관측 가능한 실패를 관측 불가능하게 만드는 개선은 개선이 아니다**(⑩-b).
+>    nudge 는 종료 호출률을 올렸지만 그 대가로 **거짓 `done`** 을 만들었다.
+> ③ **실패 문구는 증상이다 — 로그를 봐라**(⑩-c). 두 층 떨어진 원인이 흔하다.
+> ④ **픽스처가 현실과 다르면 테스트는 없는 세계를 지킨다**(⑩-d).
+> ⑤ **자원 비용은 모델마다 재라** — 창 하나가 전 모델에 맞는다고 두지 마라(⑩-e).
+
 ## 8. 검증 (설계 타당성 판정)
 - Pilot에서 `instantiate_template.py trend-report M-2026-003`가 현 11단계와 **동등한 Kanban 그래프** 생성(수동 대비 diff 0).
 - 객관 게이트가 스크래치 미션에서 recency 비율·source_type 균형을 정확히 FAIL/PASS 판정, gate_keeper와 합쳐 반려 루프 발동.

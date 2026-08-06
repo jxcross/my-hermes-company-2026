@@ -25,7 +25,7 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
-    <h2>#55 — 로컬 배치를 <code>gemma4:12b-mlx</code> 로 전면 전환 · <b>같은 12B 가 런타임만 바꿔 3.7배 빨라졌다</b> · 그 대가로 팬아웃이 직렬화된다</h2>
+    <h2>#55 — 로컬 모델 3종을 stage 1 하나로 갈랐다 · <b>프로브 100%&nbsp;≠&nbsp;일을 한다</b> · 하네스의 nudge 가 <b>protocol violation 을 거짓 done 으로</b> 바꿨다</h2>
     <div class="meta">2026-08-06 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "로컬 모델을 gemma4:12b-mlx 로 전부 변경하라. 그런 다음 templates/ 디렉토리의 첫번째 yaml 에 대해 잘 동작하는지 테스트해보자" → (확인) 테스트 깊이=<b>실미션 완주</b> · <code>gemma4-26b-256k</code>=<b>완전 제거</b> · 주제=온디바이스 SLM 효율적 추론 → "테스트니까 승인은 슬랙을 통하지 않고, 네가 직접 수행하라."</div>
     <div class="label">진행:</div>
@@ -37,9 +37,22 @@
       <li><b>드리프트 2건을 같이 잡았다</b>: ① <code>probe_parallel.py</code> 만 모델명을 문자열로 갖고 있어 배치를 안 따라왔다 → 표에서 읽도록(<code>probe_protocol</code>·<code>usage_report</code> 와 같은 방식) ② <code>test_usage_report</code> 의 창 불일치 픽스처가 26b 를 박아 둬서, 배치가 바뀌자 <b>'배치 밖 모델'로 정상 무시되며 조용히 아무것도 재지 않게 됐다</b> — 검사가 무력해지는 것을 검사가 알려주지 않는 모양이다.</li>
       <li><b>실미션 M-2026-007</b>(<code>academic-paper</code> · <code>templates/</code> 의 첫 yaml · 11단계 · 보드 <code>m-2026-007</code>) 착수. 사전 점검 전건 통과(게이트 5/5 이 빈 입력 반려). <b>첫 실전 동작이 지시 오독이었다</b> — stage 1 워커가 "SCOPE.md <b>에 작성</b>하라"를 "SCOPE.md 를 <b>찾아라</b>"로 읽고, 없으니 블록했다. <b>프로토콜 프로브 100% 는 도구 규약을 잰 것이지 과제 이해를 잰 것이 아니다.</b></li>
     </ol>
-    <div class="result"><span class="label">결과(진행 중):</span>
-      커밋 <code>ab60a81</code>(전환)·<code>dcd75a2</code>(문서). 검증: <code>test_set_backend</code> <b>30/30</b> · <code>test_usage_report</code> <b>27/27</b> · <code>lint_template</code> <b>20/20</b> · <code>preflight_gates</code> exit 0(누출 0) · E2E 하네스 <b>14/14</b> · <code>set_backend --show</code> exit 0.
-      <b>교훈:</b> 같은 파라미터 수라도 <b>런타임이 다르면 다른 모델로 취급해 다시 재라</b> — <code>gemma4:12b</code> 의 97초를 근거로 "12B 는 느리다"고 일반화했다면 이 전환은 없었다. 표를 모델 계열이 아니라 <b>(모델, 런타임) 쌍</b>으로 읽어야 한다.
+    <div class="result"><span class="label">1차 결과:</span>
+      커밋 <code>ab60a81</code>(전환)·<code>dcd75a2</code>(문서). <b>속도·메모리는 이겼지만 실미션에서 되돌아왔다</b> — 아래 이어짐.
+    </div>
+    <div class="label">이어진 전개 — 로컬 모델 3종을 stage 1 하나로 갈랐다:</div>
+    <ol class="steps">
+      <li><b>Sam 지시로 <code>devstral-small-2:24b</code> 재채택 후 전부 재실행.</b> 이 모델은 같은 날 <code>must_finish</code> 80% 로 기각됐던 것이라, 배치를 바꾸기 전에 <b>새 런타임(0.32.6)에서 다시 쟀다</b>. <b>reps 5→100% · 3→66.7% · 10→80%</b>(합산 15/18) — <b>5회에서 멈췄으면 "고쳐졌다"고 오판했다.</b> 기각 사유는 사라지지 않았다.</li>
+      <li><b>창을 낮춰야 했다</b> — devstral 은 같은 창에서 gemma4-26b 의 <b>4.6배</b>를 먹는다(262144 에서 <b>83GB·CPU 로 흘러넘침</b> vs 17.9GB). 실측으로 <b>98304→40GB·100% GPU</b> 를 골랐다. <b>창 하나가 전 모델에 맞는다고 두면 안 된다.</b></li>
+      <li><b>devstral 이 4연속 <code>protocol violation</code></b> → 나는 "프로브가 예고한 80% 가 실현됐다"고 읽었고 <b>틀렸다</b>. 로그의 진짜 원인은 두 층 아래였다: <code>HTTP 400: "devstral-24b-96k" does not support thinking</code> · <b>툴콜 0회·1초</b>. codex 시절의 <code>agent.reasoning_effort: medium</code> 이 프로필 11종에 남아 thinking 없는 모델을 <b>시작조차 못 하게</b> 하고 있었다. <code>set_backend.py</code> 에 <code>patch_keys</code> 를 넣어 고쳤다(블록 교체는 루트 config 의 <code>personalities</code> 를 지우므로 <b>키 한 줄만</b> 바꾼다).</li>
+      <li><b>그 과정에서 테스트가 버그를 못박아 두고 있었다</b> — <code>test_preserves_agent_block_in_source_config</code> 가 "ollama 로 바꿔도 <code>medium</code> 이 남아야 한다"고 단언했다. 그게 400 을 만든 동작이다. 루트 픽스처에도 그 키가 없어 이 경로를 <b>볼 수 없었다</b>. 픽스처를 현실에 맞추고 단언을 뒤집었다(회귀 4종 추가 · <b>34/34</b>).</li>
+      <li><b>400 을 고친 뒤 devstral 도 날조했다</b> — 656초 세션에서 <b>파일 쓰기 도구를 한 번도 부르지 않고</b> 완료 선언. 로그가 경로를 그대로 보여줬다: 워커가 그냥 나가려 함 → 하네스가 <code>⚠️ nudging to finish</code> 로 개입 → 모델이 그 요구에 맞춰 <b>완료를 지어냄</b>.</li>
+    </ol>
+    <div class="result"><span class="label">최종 결과:</span>
+      커밋 <code>ab60a81</code>·<code>dcd75a2</code>·<code>bd6bde4</code>·<code>e9a8484</code>·<code>b0d1f85</code>·<code>fad4acb</code>. 검증: <code>test_set_backend</code> <b>34/34</b> · <code>test_usage_report</code> <b>27/27</b> · <code>lint_template</code> <b>20/20</b> · <code>preflight_gates</code> exit 0 · E2E <b>14/14</b>.
+      <b>같은 카드로 통제 비교한 성적표</b> — <code>gemma4:12b-mlx</code> 3회 <b>0건</b>(오독 2·날조 1) · <code>devstral-24b-96k</code> 1회 <b>0건</b>(쓰기 미호출→nudge→날조) · <code>gemma4-26b-256k</code> 1회 <b>성공</b>(정책값까지 정확).
+      <b>Sam 결정: 실미션은 codex 복귀(2026-08-09 14:07) 후에 한다.</b> 미션 2건 모두 park(<code>spawned: []</code> 확인).
+      <b>교훈 다섯:</b> ① <b>프로브 100% 는 과제 이행을 보증하지 않는다</b> — 배치 채택 기준에 "실미션 stage 1 통과"를 넣어라. ② <b>관측 가능한 실패를 관측 불가능하게 만드는 개선은 개선이 아니다</b> — nudge 가 <code>protocol violation</code> 을 거짓 <code>done</code> 으로 바꿨다(⑧-d 의 발생 경로를 특정). ③ <b>실패 문구는 증상이다 — 로그를 봐라.</b> ④ <b>픽스처가 현실과 다르면 테스트는 없는 세계를 지킨다.</b> ⑤ <b>자원 비용·런타임 특성은 모델마다 다시 재라.</b>
     </div>
   </div>
 
