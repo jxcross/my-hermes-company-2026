@@ -26,20 +26,27 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 - **⚠️ 추론 백엔드는 갈아끼운다 — 모델을 손으로 고치지 마라**(2026-08-05 신설 · `docs/14`). `model:` 블록은 **`scripts/set_backend.py` 가 생성**한다. 배치표는 그 스크립트 상단 `TIERS`·`BACKENDS` 한 곳에만 있다.
   | 티어 | 프로필 | `codex` | **`ollama`(현재)** |
   |---|---|---|---|
-  | 작성자 | default·scout·reader·curator·synthesizer·writer | `gpt-5.5` | **`gemma4-12b-mlx-256k`** |
-  | 검증자 | fact-checker·reviewer·tester | `gpt-5.5` | **`gemma4-12b-mlx-256k`** |
-  | 코더 | architect·developer | `gpt-5.5` | **`gemma4-12b-mlx-256k`** |
+  | 작성자 | default·scout·reader·curator·synthesizer·writer | `gpt-5.5` | **`devstral-24b-96k`** |
+  | 검증자 | fact-checker·reviewer·tester | `gpt-5.5` | **`devstral-24b-96k`** |
+  | 코더 | architect·developer | `gpt-5.5` | **`devstral-24b-96k`** |
 
-  ⚠️⚠️ **MLX 배치는 호스트 Ollama 0.32.0+ 를 요구한다**(2026-08-06 전환 · 호스트 0.32.6).
-  0.30.8 에서는 `ollama pull gemma4:12b-mlx` 가 **HTTP 412** 로 거부된다. 채택 근거는 측정이다
-  (`docs/14 §2.1`): 프로토콜 7항목 **전부 100%** · 3회 벽시계 **26.5초**(26b 45초 · 12b GGUF 97초)
-  · 메모리 **7.6GB**(26b 17.9GB). **같은 12B 인데 런타임만 바꿔 3.7배 빨라졌다** —
-  표는 모델 계열이 아니라 **(모델, 런타임) 쌍**으로 읽어라.
-  ⚠️ **대가: MLX 러너는 `OLLAMA_NUM_PARALLEL` 을 안 따른다 — 스테이지 내 팬아웃이 직렬화된다.**
-  MLX 는 별도 `mlx runner` 서브프로세스라 llama.cpp 의 slot 이 없고, 이 버전에 MLX 병렬
-  손잡이가 **없다**. 그래도 3샤드 총 벽시계는 **12b-mlx 3.66초 < 26b 4.58초** 라 판단은
-  뒤집히지 않는다. **`probe_parallel.py` 가 '직렬'을 보고하는 것이 MLX 배치에서는 정상이다** —
-  사실이므로 끄지 않았다(끄면 GGUF 회귀를 놓친다).
+  **창은 262144 이 아니라 98304 다** — 모델마다 KV 비용이 다르기 때문이다(2026-08-06 (3) 실측).
+  `devstral` 은 같은 창에서 `gemma4-26b` 의 **4.6배**를 먹는다: 262144→**83GB·CPU 로 흘러넘침** ❌ ·
+  131072→48GB · **98304→40GB·100% GPU ✅**(대조: gemma4-26b 는 262144 에서 17.9GB).
+  유효 창 81920 > 64000 이라 압축 퇴화 분기는 피한다.
+  ⚠️ **`OLLAMA_NUM_CTX` 를 "우리 창"이라고 부르지 마라 — 그 모델이 감당하는 창이다.**
+
+  ⚠️⚠️ **`must_finish` 80% 를 알고 채택했다**(Sam 지시). 5번에 1번 `kanban_complete` 를 빠뜨려
+  카드에 `protocol violation` 만 남고 **이유는 안 남는다** — 11단계 미션당 기대 스톨 2건이다.
+  **미션 중에는 스톨을 감시하고 재디스패치하라.** Ollama 0.32.6 으로 올린 뒤 재측정했는데
+  80% 가 그대로였다(reps 5→100% · 3→66.7% · **10→80%**). **간헐적 실패는 표본을 키워서 재라** —
+  5회 100% 에서 멈췄으면 "고쳐졌다"고 오판했다.
+
+  ⚠️ **`gemma4:12b-mlx` 는 반나절 만에 되돌아왔다 — 속도만 보고 다시 집어들지 마라.**
+  프로브 7항목 100% · 3회 **26.5초**(최속) · 7.6GB 인데, `academic-paper` stage 1 에서
+  **3회 연속 산출물 0건**이었다(오독 2 · **날조 1**). 동일 카드에 26b 만 꽂은 대조 실험은
+  **첫 시도에 성공** → 변수는 모델로 확정. **프로브 100% 는 도구 규약을 잰 것이지
+  과제 이행을 잰 것이 아니다.** MLX 는 `OLLAMA_NUM_PARALLEL` 도 안 따른다(별도 러너 · slot 없음).
 
   ```bash
   python3 scripts/set_backend.py --show               # 현재 백엔드(불일치면 exit 1)
