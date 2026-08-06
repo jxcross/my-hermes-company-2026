@@ -120,6 +120,42 @@ def test_shipped_template_declares_batch_size_on_every_parallel_stage():
         assert isinstance(s["parallel"].get("batch_size"), int), f"stage {s['id']} batch_size 미선언"
 
 
+# ── <MID> 치환 ────────────────────────────────────────────────────────────
+# 2026-08-06 실미션이 발견: `resolve()` 가 gate.draft·approval_artifact 만 치환하고
+# **body 를 빠뜨려**, 카드 본문이 워커에게 `reports/<MID>/SCOPE.md` 를 문자 그대로 보냈다.
+# 강한 모델은 문맥에서 미션 id 를 해석해 버려 codex 시절 내내 드러나지 않았다.
+def test_resolve_substitutes_mid_in_body():
+    """★ 워커가 읽는 것은 body 다 — 여기에 플레이스홀더가 남으면 지시가 깨진다."""
+    tpl = {"stages": [{"id": 1, "name": "S", "profile": "default", "upstream": [],
+                       "body": "reports/<MID>/SCOPE.md 에 작성"}]}
+    out = it.resolve(tpl, "M-2026-007")
+    assert out["stages"][0]["body"] == "reports/M-2026-007/SCOPE.md 에 작성"
+
+
+def test_no_shipped_template_leaks_mid_after_resolve():
+    """★ 20종 전체 · 모든 stage · 모든 문자열 필드에 <MID> 가 남으면 안 된다.
+
+    치환 대상 필드를 하나 더 늘렸을 때 또 빠뜨리지 않도록 **필드를 열거하지 않고**
+    resolve 결과 전체를 훑는다.
+    """
+    def leaks(o, path=""):
+        if isinstance(o, dict):
+            return [p for k, v in o.items() for p in leaks(v, f"{path}.{k}" if path else k)]
+        if isinstance(o, list):
+            return [p for v in o for p in leaks(v, f"{path}[]")]
+        return [path] if isinstance(o, str) and "<MID>" in o else []
+
+    tpl_dir = os.path.join(it.REPO_ROOT, "templates")
+    names = sorted(f[:-5] for f in os.listdir(tpl_dir) if f.endswith(".yaml"))
+    assert len(names) >= 20, f"템플릿을 못 찾았다: {names}"
+    bad = {}
+    for name in names:
+        got = leaks(it.resolve(it.load_template(name), "M-2026-999"))
+        if got:
+            bad[name] = sorted(set(got))
+    assert not bad, f"<MID> 누출: {bad}"
+
+
 # ── 게이트 겹침 불변식 ────────────────────────────────────────────────────
 # academic-paper 변환에서 발견: sam_gate 와 검증자 downstream 이 한 stage 에 겹치면
 # 번역기가 block 을 하나만 걸고 sam_gate 가 우선해 검증 게이트가 조용히 사라진다

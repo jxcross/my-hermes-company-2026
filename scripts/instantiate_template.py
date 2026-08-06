@@ -225,6 +225,13 @@ def resolve(tpl: dict, mid: str) -> dict:
     stages = []
     for s in tpl.get("stages", []):
         s2 = dict(s)
+        # ⚠️ **`body` 를 빠뜨리고 있었다 (2026-08-06 발견 · 20/20 템플릿 · 47개 stage).**
+        #    카드 본문이 워커에게 `reports/<MID>/SCOPE.md` 를 **문자 그대로** 갔다.
+        #    강한 모델은 문맥에서 미션 id 를 해석해 버려서 codex 시절 내내 드러나지 않았다
+        #    (`trend-report` 는 이 상태로 두 번 완주했다 — proven 딱지가 결함을 덮었다).
+        #    `<MID>` 를 쓰는 필드는 셋뿐이다: gate.draft · approval_artifact · **body**.
+        if s.get("body"):
+            s2["body"] = sub(s["body"])
         g = s.get("gate")
         if g:
             g2 = dict(g)
