@@ -48,6 +48,12 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
   **→ Sam 결정(2026-08-06): 실미션은 `codex` 복귀(2026-08-09 14:07) 후에 한다.**
   그때 `python3 scripts/set_backend.py --backend codex`. 상세 `docs/11 §7 ⑩`.
 
+  ✅ **"템플릿이 문제였나?" 는 통제 실험으로 갈랐다 — 템플릿은 결백하다**(`docs/11 §7 ⑩-f`).
+  `academic-paper` stage 1 카드를 **본문 한 글자 안 바꾸고** 실미션과 동일한 워크스페이스
+  모양(`…/reports/<MID>/` + `pipeline.json`)에서 26b 로 재현했더니 **`SCOPE.md` 2013B 산출 성공**
+  (정책값까지 `pipeline.json` 에서 정확히 인용). **모델 하나만 다른 조건에서 갈렸다.**
+  → 로컬로 미션을 돌려야 한다면 **`gemma4-26b-256k` 로 되돌리면 된다**(blob 보존 · 표 4줄 복원).
+
   ⚠️ **프로브 100% 는 과제 이행을 보증하지 않는다** — `gemma4:12b-mlx` 는 7항목 100%·최속인데
   산출물이 0건이었다. **배치 채택 기준에 "실미션 stage 1 통과"를 넣어라.**
   ⚠️ **`must_finish` 80%**(devstral · reps 10). 5회에서는 100% 라 **표본을 키워야 보였다.**
