@@ -26,9 +26,20 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 - **⚠️ 추론 백엔드는 갈아끼운다 — 모델을 손으로 고치지 마라**(2026-08-05 신설 · `docs/14`). `model:` 블록은 **`scripts/set_backend.py` 가 생성**한다. 배치표는 그 스크립트 상단 `TIERS`·`BACKENDS` 한 곳에만 있다.
   | 티어 | 프로필 | `codex` | **`ollama`(현재)** |
   |---|---|---|---|
-  | 작성자 | default·scout·reader·curator·synthesizer·writer | `gpt-5.5` | **`gemma4-26b-256k`** |
-  | 검증자 | fact-checker·reviewer·tester | `gpt-5.5` | **`gemma4-26b-256k`** |
-  | 코더 | architect·developer | `gpt-5.5` | **`gemma4-26b-256k`** |
+  | 작성자 | default·scout·reader·curator·synthesizer·writer | `gpt-5.5` | **`gemma4-12b-mlx-256k`** |
+  | 검증자 | fact-checker·reviewer·tester | `gpt-5.5` | **`gemma4-12b-mlx-256k`** |
+  | 코더 | architect·developer | `gpt-5.5` | **`gemma4-12b-mlx-256k`** |
+
+  ⚠️⚠️ **MLX 배치는 호스트 Ollama 0.32.0+ 를 요구한다**(2026-08-06 전환 · 호스트 0.32.6).
+  0.30.8 에서는 `ollama pull gemma4:12b-mlx` 가 **HTTP 412** 로 거부된다. 채택 근거는 측정이다
+  (`docs/14 §2.1`): 프로토콜 7항목 **전부 100%** · 3회 벽시계 **26.5초**(26b 45초 · 12b GGUF 97초)
+  · 메모리 **7.6GB**(26b 17.9GB). **같은 12B 인데 런타임만 바꿔 3.7배 빨라졌다** —
+  표는 모델 계열이 아니라 **(모델, 런타임) 쌍**으로 읽어라.
+  ⚠️ **대가: MLX 러너는 `OLLAMA_NUM_PARALLEL` 을 안 따른다 — 스테이지 내 팬아웃이 직렬화된다.**
+  MLX 는 별도 `mlx runner` 서브프로세스라 llama.cpp 의 slot 이 없고, 이 버전에 MLX 병렬
+  손잡이가 **없다**. 그래도 3샤드 총 벽시계는 **12b-mlx 3.66초 < 26b 4.58초** 라 판단은
+  뒤집히지 않는다. **`probe_parallel.py` 가 '직렬'을 보고하는 것이 MLX 배치에서는 정상이다** —
+  사실이므로 끄지 않았다(끄면 GGUF 회귀를 놓친다).
 
   ```bash
   python3 scripts/set_backend.py --show               # 현재 백엔드(불일치면 exit 1)
