@@ -18,7 +18,7 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 - **작성자 ≠ 검증자**(코드 구현 profile ≠ 코드 검증 profile). 단계 내 병렬은 subagent.
 - **전문화 4계층**: SOUL(좁은 역할)·Skill·누적 Memory·공유 Knowledge(LLM Wiki). 오염 방지.
 - 미션 아키타입: **A** 동향 보고서 · **B** 논문 · **D** 웹개발(시뮬레이션 포함).
-- 문서: `docs/02`~`docs/09` (설계·파이프라인·1호미션 SPEC·Stage0 가이드·ADR·다이어그램·전문화·게시판).
+- 문서: `docs/02`~`docs/09` (설계·파이프라인·1호미션 SPEC·Stage0 가이드·ADR·다이어그램·전문화·게시판) · `docs/14`(백엔드 전환) · **`docs/15`(ChatGPT 계정 추가 런북 — PC 마다 필요)**.
 
 ## 실행 상태 (Stage 1 — full 11단계 운영)
 - 격리 컨테이너 **`hermes-solomon`** (`docker-compose.yml`, 공식 이미지 nousresearch/hermes-agent). 인증: OAuth(ChatGPT), provider `openai-codex`.
@@ -59,7 +59,7 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
   ✅ **codex 는 다시 돈다 — 계정을 하나 더 붙였다**(2026-08-06 · Sam 이 회사망에서 실행).
   ~~지금 codex 는 한도 소진 상태다 — 리셋 2026-08-09 14:07~~ → **해소.** 한도는 **계정
   전체**라 싼 모델로는 우회할 수 없지만(`gpt-5.4-mini` 로 확인 · `docs/11 §7 ⑪-e`),
-  **계정은 갈아끼우는 게 아니라 풀에 더한다:**
+  **계정은 갈아끼우는 게 아니라 풀에 더한다** (수동 절차는 `docs/15_codex_account_add_runbook.md`):
   ```bash
   docker exec -it hermes-solomon hermes auth add openai-codex --type oauth --label account2 --no-browser
   docker exec hermes-solomon hermes auth list      # openai-codex (2 credentials) · ← 가 활성
