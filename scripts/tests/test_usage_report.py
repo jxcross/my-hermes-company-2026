@@ -77,10 +77,17 @@ def test_latest_record_wins_across_files():
 
 
 def test_main_exit_codes(capsys=None):
-    """exit 1 = 소진 중(미션 착수 전 점검이 이 코드로 막는다) · 0 = 정상."""
+    """exit 1 = 소진 중(미션 착수 전 점검이 이 코드로 막는다) · 0 = 정상.
+
+    ⚠️ `AUTH_PATHS` 도 반드시 격리한다. 2026-08-06 에 풀 인식을 넣었더니 이 테스트가
+       **개발자 PC 의 실제 `hermes-home/auth.json` 을 읽어** 통과해 버렸다 — 로그 기반
+       판정을 재려던 테스트가 조용히 환경 의존이 된 것이다. 여기서는 풀을 '모른다'로
+       두어야(존재하지 않는 경로) 원래 재려던 폴백 경로가 측정된다."""
     d = _dir({"t_e.log": LOG_429})
     orig = ur.LOG_DIRS
+    orig_auth = ur.AUTH_PATHS
     ur.LOG_DIRS = [d]
+    ur.AUTH_PATHS = [os.path.join(d, "no-such-auth.json")]
     try:
         sys.argv = ["usage_report", "--quiet", "--backend", "codex",
                     "--now", str(RESETS - 3600)]
@@ -90,6 +97,7 @@ def test_main_exit_codes(capsys=None):
         assert ur.main() == 0, "리셋 후인데 소진으로 판정했다"
     finally:
         ur.LOG_DIRS = orig
+        ur.AUTH_PATHS = orig_auth
 
 
 # ── 백엔드 인식 (2026-08-05 · docs/14) ──────────────────────────────────────
@@ -394,6 +402,138 @@ def _args(now=None):
     a.ollama_url = ""
     a.repo_root = ur.REPO_ROOT
     return a
+
+
+# ── pooled 자격 인식 (2026-08-06) ───────────────────────────────────────────
+# ⚠️⚠️ 왜 생겼나 — 실측 2026-08-06.
+#   codex 계정을 하나 더 붙였다(`hermes auth add openai-codex`). 새 자격으로 실제
+#   추론이 **성공**했는데도 이 스크립트는 `exit 1`("미션을 새로 시작하지 마라")을 냈다.
+#   근거를 워커 로그의 429 기록**에서만** 읽었기 때문이다. 그 기록은 여전히 참이다 —
+#   "그 자격이 그때 소진됐다". 다만 **착수 가능 여부와는 무관해졌다.**
+#   → 착수 판정의 진실은 `auth.json` 의 `credential_pool` 이다. 로그는 과거의 기록이다.
+TOKEN_CANARY = "SECRET-ACCESS-TOKEN-DO-NOT-LEAK-abcdefghijklmnop"
+
+
+def _auth(pool: dict) -> str:
+    """auth.json 픽스처 경로. 토큰 값을 일부러 넣어 유출 여부를 잰다."""
+    import json as _j
+    d = _dir({})
+    p = os.path.join(d, "auth.json")
+    with open(p, "w", encoding="utf-8") as f:
+        _j.dump({"version": 1, "credential_pool": pool}, f)
+    return p
+
+
+def _cred(cid, label, status=None, reset_at=None):
+    c = {"id": cid, "label": label, "auth_type": "oauth",
+         "access_token": TOKEN_CANARY, "refresh_token": TOKEN_CANARY,
+         "last_status": status, "request_count": 0}
+    if reset_at is not None:
+        c["last_error_reset_at"] = float(reset_at)
+        c["last_error_code"] = 429
+        c["last_error_reason"] = "usage_limit_reached"
+    return c
+
+
+def test_pool_with_a_usable_credential_overrides_a_stale_log_429():
+    """★ 이 파일의 존재 이유. 소진된 자격 + 멀쩡한 자격이 함께 있으면 **착수 가능**이다.
+
+    이게 깨지면 계정을 추가해도 게이트가 계속 막는다 — 정확히 2026-08-06 의 증상."""
+    p = _auth({"openai-codex": [_cred("a934e2", "device_code", "exhausted", RESETS),
+                                _cred("e49333", "account2")]})
+    creds = ur.read_credential_pool("openai-codex", [p])
+    v = ur.pool_verdict(creds, now=RESETS - 3600)
+    assert v["known"], "풀을 읽었는데 known=False 다"
+    assert v["usable"] == 1, v
+    assert v["total"] == 2, v
+
+
+def test_pool_all_exhausted_still_blocks():
+    """반대 방향 — 전부 소진이면 막아야 한다. 이걸 안 재면 '항상 통과'가 된다."""
+    p = _auth({"openai-codex": [_cred("a1", "one", "exhausted", RESETS),
+                                _cred("b2", "two", "exhausted", RESETS + 999)]})
+    v = ur.pool_verdict(ur.read_credential_pool("openai-codex", [p]), now=RESETS - 3600)
+    assert v["known"] and v["usable"] == 0, v
+
+
+def test_pool_credential_past_its_reset_is_usable():
+    """리셋 시각이 지난 자격은 다시 쓸 수 있다 — 상태 문자열이 아니라 시계로 판정한다."""
+    p = _auth({"openai-codex": [_cred("a1", "one", "exhausted", RESETS)]})
+    creds = ur.read_credential_pool("openai-codex", [p])
+    assert ur.pool_verdict(creds, now=RESETS - 1)["usable"] == 0
+    assert ur.pool_verdict(creds, now=RESETS + 1)["usable"] == 1
+
+
+def test_missing_auth_file_falls_back_to_log_verdict():
+    """auth.json 이 없으면 **판정하지 않는다**(known=False) — 기존 로그 기반 판정으로 되돌아간다.
+
+    ⚠️ 여기서 usable=0 을 반환하면 풀을 안 쓰는 설치가 전부 막힌다(하위호환 파괴)."""
+    v = ur.pool_verdict(ur.read_credential_pool("openai-codex", ["/nonexistent/auth.json"]),
+                        now=RESETS)
+    assert v["known"] is False and v["usable"] == 0, v
+
+
+def test_provider_absent_from_pool_falls_back_to_log_verdict():
+    """풀은 있는데 그 provider 가 없으면 = 풀이 관리하지 않는 provider → 폴백."""
+    p = _auth({"copilot": [_cred("z9", "GITHUB_TOKEN")]})
+    v = ur.pool_verdict(ur.read_credential_pool("openai-codex", [p]), now=RESETS)
+    assert v["known"] is False, v
+
+
+def test_empty_pool_for_provider_blocks():
+    """반대 방향 — 키는 있는데 자격이 0개면 그건 '모른다'가 아니라 '없다'다."""
+    p = _auth({"openai-codex": []})
+    v = ur.pool_verdict(ur.read_credential_pool("openai-codex", [p]), now=RESETS)
+    assert v["known"] is True and v["usable"] == 0, v
+
+
+def test_pool_summary_never_exposes_token_values():
+    """★ 이 저장소는 PUBLIC 이고 --json 출력은 로그·문서에 붙여진다.
+
+    `SLACK_BOT_TOKEN` 이 세션 로그에 노출된 이력이 이미 있다(CLAUDE.md). 반복하지 않는다."""
+    import json as _j
+    p = _auth({"openai-codex": [_cred("a1", "one", "exhausted", RESETS),
+                                _cred("b2", "two")]})
+    creds = ur.read_credential_pool("openai-codex", [p])
+    blob = _j.dumps({"creds": creds, "verdict": ur.pool_verdict(creds, now=RESETS)},
+                    ensure_ascii=False)
+    assert TOKEN_CANARY not in blob, "토큰 값이 요약에 실려 나간다"
+    assert "access_token" not in blob and "refresh_token" not in blob, blob
+
+
+def test_backend_provider_mapping_comes_from_set_backend():
+    """배치표는 한 곳에만 있다 — provider 이름을 여기에 두 번째로 적지 않는다."""
+    assert ur.backend_provider("codex") == "openai-codex"
+    assert ur.backend_provider("ollama") == "ollama"
+
+
+def test_main_exits_0_when_pool_has_a_usable_credential():
+    """★ 통합 — 로그에 429 가 있어도 쓸 수 있는 자격이 있으면 착수를 막지 않는다."""
+    d = _dir({"t_e.log": LOG_429})
+    p = _auth({"openai-codex": [_cred("a1", "one", "exhausted", RESETS),
+                                _cred("b2", "two")]})
+    orig_logs, orig_auth = ur.LOG_DIRS, ur.AUTH_PATHS
+    ur.LOG_DIRS, ur.AUTH_PATHS = [d], [p]
+    try:
+        sys.argv = ["usage_report", "--quiet", "--backend", "codex",
+                    "--now", str(RESETS - 3600)]
+        assert ur.main() == 0, "쓸 수 있는 자격이 있는데 착수를 막았다"
+    finally:
+        ur.LOG_DIRS, ur.AUTH_PATHS = orig_logs, orig_auth
+
+
+def test_main_still_blocks_when_every_pooled_credential_is_exhausted():
+    """반대 방향 — 풀 인식이 '항상 통과'로 퇴화하지 않았음을 못박는다."""
+    d = _dir({"t_e.log": LOG_429})
+    p = _auth({"openai-codex": [_cred("a1", "one", "exhausted", RESETS)]})
+    orig_logs, orig_auth = ur.LOG_DIRS, ur.AUTH_PATHS
+    ur.LOG_DIRS, ur.AUTH_PATHS = [d], [p]
+    try:
+        sys.argv = ["usage_report", "--quiet", "--backend", "codex",
+                    "--now", str(RESETS - 3600)]
+        assert ur.main() == 1, "전부 소진인데 통과시켰다"
+    finally:
+        ur.LOG_DIRS, ur.AUTH_PATHS = orig_logs, orig_auth
 
 
 def test_main_fail_closed_when_no_logs():

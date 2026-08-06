@@ -12,9 +12,19 @@
    그리고 한도를 쓰는 줄 모르고 쓰다 소진됐다 — **보이지 않는 자원은 관리되지 않는다.**
 
 ⚠️ **이 스크립트는 LLM 을 호출하지 않는다.** 한도를 확인하려고 한도를 쓰면 안 된다.
-   근거는 두 가지 기록물뿐이다:
+   근거는 세 가지 기록물뿐이다:
      · `hermes insights` — 누적 세션·토큰(모델별)
      · `hermes-home/kanban/logs/*.log` — 워커 세션의 429 응답(`resets_at` 포함)
+     · `hermes-home/auth.json` 의 `credential_pool` — **착수 가능 여부의 진실**
+
+⚠️⚠️ **로그의 429 는 과거의 기록이지 현재의 판정이 아니다**(2026-08-06 추가).
+   codex 계정을 하나 더 붙이자(`hermes auth add openai-codex`) 새 자격으로 추론이
+   **성공하는데도** 이 스크립트가 `exit 1`("미션을 새로 시작하지 마라")을 냈다.
+   로그 기록은 여전히 참이었다 — "그 자격이 그때 소진됐다". 다만 **착수 가능 여부와는
+   무관해졌다.** 그래서 판정을 둘로 갈랐다:
+     · **막을지 말지** → `credential_pool` 에 쓸 수 있는 자격이 하나라도 있는가
+     · **왜 멈췄나**  → 로그의 429 기록(사후 진단용으로 계속 표시한다)
+   풀을 읽을 수 없으면(구 설치·파일 없음) 옛 로그 기반 판정으로 폴백한다.
 
 ⚠️ **백엔드에 따라 무엇을 점검할지가 달라진다**(2026-08-05 추가 · `docs/14`).
    `scripts/set_backend.py` 로 로컬 Ollama 백엔드로 전환하면 **API 한도라는 것이 없다.**
@@ -49,6 +59,9 @@ import set_backend as sb  # noqa: E402
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG_DIRS = [os.path.join(REPO_ROOT, "hermes-home", "kanban", "logs"),
             "/opt/data/kanban/logs"]
+# pooled 자격(`hermes auth add`). 호스트 경로 → 컨테이너 경로 순.
+AUTH_PATHS = [os.path.join(REPO_ROOT, "hermes-home", "auth.json"),
+              "/opt/data/auth.json"]
 
 # 로컬 백엔드 점검용. 호스트에서 도는 것을 전제로 한다(컨테이너에서는
 # host.docker.internal 을 쓴다 — set_backend.BACKENDS 의 base_url 참조).
@@ -130,6 +143,80 @@ def scan_limits(paths: list[str]) -> tuple[dict | None, list[str]]:
         elif AUTH_RE.search(text):
             env_failed.append(tid)
     return latest, sorted(set(env_failed))
+
+
+# ── pooled 자격 (2026-08-06) ───────────────────────────────────────────────
+# ⚠️⚠️ **로그의 429 는 과거의 기록이지 현재의 판정이 아니다.**
+#    2026-08-06 에 codex 계정을 하나 더 붙였더니(`hermes auth add openai-codex`)
+#    새 자격으로 추론이 **성공**하는데도 이 스크립트가 `exit 1` 을 냈다. 로그 기록은
+#    여전히 참이었다 — "그 자격이 그때 소진됐다". 다만 착수 가능 여부와는 무관해졌다.
+#    → 착수 판정의 진실은 `auth.json` 의 `credential_pool` 이다. 로그는 **왜 멈췄나**를
+#      설명하는 사후 근거로 계속 쓰되, **막을지 말지**는 풀이 정한다.
+def backend_provider(backend: str) -> str:
+    """백엔드 이름 → provider id. `set_backend.PROVIDER_TO_BACKEND` 를 뒤집는다.
+
+    ⚠️ provider 이름을 여기에 두 번째로 적지 마라 — 배치표는 한 곳에만 있다."""
+    for prov, be in sb.PROVIDER_TO_BACKEND.items():
+        if be == backend and prov != "custom":   # custom 은 alias 라 자격의 주인이 아니다
+            return prov
+    return ""
+
+
+def read_credential_pool(provider: str, paths: list[str] | None = None) -> list[dict] | None:
+    """`auth.json` 의 pooled 자격 요약. 판정할 근거가 없으면 **None**(≠ 빈 리스트).
+
+    반환값은 `{id,label,status,reset_at,reason}` 뿐이다 —
+    ⚠️ **토큰 값을 절대 담지 마라.** 이 저장소는 PUBLIC 이고 `--json` 출력은 로그·문서에
+       붙여진다. `SLACK_BOT_TOKEN` 이 세션 로그에 노출된 이력이 이미 있다(CLAUDE.md).
+
+    None 을 돌려주는 경우(= '모른다', 로그 기반 판정으로 폴백):
+      · auth.json 이 없거나 읽을 수 없다
+      · `credential_pool` 키 자체가 없다(풀을 안 쓰는 구 설치)
+      · 그 provider 를 풀이 관리하지 않는다
+    빈 리스트를 돌려주는 경우(= '자격이 없다', 착수 불가): 키는 있는데 항목이 0개.
+    """
+    if not provider:
+        return None
+    for p in (paths if paths is not None else AUTH_PATHS):
+        try:
+            with open(p, encoding="utf-8") as f:
+                d = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+        pool = d.get("credential_pool")
+        if not isinstance(pool, dict) or provider not in pool:
+            return None
+        entries = pool.get(provider) or []
+        out = []
+        for e in entries:
+            if not isinstance(e, dict):
+                continue
+            reset = e.get("last_error_reset_at")
+            out.append({
+                "id": e.get("id") or "?",
+                "label": e.get("label") or "?",
+                "status": e.get("last_status"),
+                "reset_at": int(reset) if isinstance(reset, (int, float)) else None,
+                "reason": e.get("last_error_reason") or "",
+            })
+        return out
+    return None
+
+
+def pool_verdict(creds: list[dict] | None, now: int) -> dict:
+    """풀 기준 착수 가능 판정. `known=False` 면 판정하지 않았다는 뜻이다(폴백하라).
+
+    자격 하나가 '쓸 수 있다'는 것은 **상태 문자열이 아니라 시계**로 정한다 —
+    `exhausted` 로 표시돼 있어도 `reset_at` 이 지났으면 다시 쓸 수 있다."""
+    if creds is None:
+        return {"known": False, "usable": 0, "total": 0, "creds": []}
+    usable = 0
+    for c in creds:
+        exhausted = (c.get("status") == "exhausted"
+                     and (c.get("reset_at") or 0) > now)
+        c["usable"] = not exhausted
+        usable += 0 if exhausted else 1
+    return {"known": True, "usable": usable, "total": len(creds), "creds": creds}
 
 
 def ollama_tags(url: str = "") -> tuple[list[str] | None, str]:
@@ -335,12 +422,17 @@ def main() -> int:
     latest, env_failed = scan_limits(paths)
     ins = insights()
 
-    exhausted = bool(latest and latest["resets_at"] > now)
+    # 로그는 '왜 멈췄나'를 설명하고, 풀은 '지금 돌릴 수 있나'를 정한다. 둘은 다른 질문이다.
+    log_exhausted = bool(latest and latest["resets_at"] > now)
+    pv = pool_verdict(read_credential_pool(backend_provider(backend)), now)
+    exhausted = (pv["usable"] == 0) if pv["known"] else log_exhausted
     report = {
         "backend": backend,
         "exhausted": exhausted,
         "limit_record": latest,
-        "seconds_to_reset": (latest["resets_at"] - now) if exhausted else 0,
+        "log_exhausted": log_exhausted,
+        "credential_pool": pv,
+        "seconds_to_reset": (latest["resets_at"] - now) if log_exhausted else 0,
         "env_failed_tasks": env_failed,
         "insights": ins,
         "log_files": len(paths),
@@ -361,13 +453,36 @@ def main() -> int:
                 print(f"    {m['model']:<18} 세션 {m['sessions']:>3}  토큰 {m['tokens']:>12,}")
         else:
             print("  (hermes insights 를 읽지 못했다 — 누적 사용량 없음)")
+        if pv["known"]:
+            print(f"── 자격 풀 ──  {backend_provider(backend)} · "
+                  f"{pv['usable']}/{pv['total']} 사용 가능")
+            for c in pv["creds"]:
+                mark = "✓" if c["usable"] else "✗"
+                note = ""
+                if not c["usable"] and c["reset_at"]:
+                    w = dt.datetime.fromtimestamp(c["reset_at"]).strftime("%m-%d %H:%M")
+                    note = f"  {c['reason'] or 'exhausted'} · 리셋 {w}"
+                print(f"    {mark} #{c['id']} {c['label']}{note}")
         print("── 한도 ──")
         if exhausted:
-            h = report["seconds_to_reset"] / 3600
-            when = dt.datetime.fromtimestamp(latest["resets_at"]).strftime("%Y-%m-%d %H:%M")
-            print(f"  ⚠️ **소진 중** ({latest['type']} · plan={latest['plan'] or '?'})")
-            print(f"     리셋 {when} — 약 {h:.1f}시간 남음 · 근거 task {latest['task']}")
+            print("  ⚠️ **착수 불가**", end="")
+            if pv["known"]:
+                print(f" — 자격 {pv['total']}개가 모두 소진됐다")
+            else:
+                print()
+            if latest:
+                h = (latest["resets_at"] - now) / 3600
+                when = dt.datetime.fromtimestamp(latest["resets_at"]).strftime("%Y-%m-%d %H:%M")
+                print(f"     {latest['type']} · plan={latest['plan'] or '?'} · "
+                      f"리셋 {when} — 약 {h:.1f}시간 남음 · 근거 task {latest['task']}")
             print("     → 미션을 새로 시작하지 마라. 진행 중 미션은 그 자리에 세워 둔다.")
+        elif pv["known"] and log_exhausted:
+            # ⚠️ 가장 헷갈리는 경우 — 로그에는 429 가 있는데 착수는 가능하다.
+            #    "소진 기록이 있다"와 "지금 못 돈다"를 사람이 구분할 수 있게 **말로** 적는다.
+            when = dt.datetime.fromtimestamp(latest["resets_at"]).strftime("%Y-%m-%d %H:%M")
+            print(f"  ✓ 착수 가능 — 사용 가능한 자격 {pv['usable']}개")
+            print(f"     (로그의 소진 기록은 다른 자격의 것이다: {latest['task']} · "
+                  f"리셋 {when} — 착수 판정과 무관)")
         elif latest:
             when = dt.datetime.fromtimestamp(latest["resets_at"]).strftime("%Y-%m-%d %H:%M")
             print(f"  ✓ 정상 (마지막 소진 기록은 {when} 에 이미 리셋됨)")

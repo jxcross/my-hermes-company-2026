@@ -56,10 +56,30 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
   로드되지 않는다(컨텍스트 티어 1.8KB). 저장소 루트에서 재면 57KB 로 보이는데 **그건
   cli·slack 세션 얘기**다(전체 토큰의 4.4%). 문서를 줄여 한도를 아끼려 하지 마라.
 
-  ⛔ **지금 codex 는 한도 소진 상태다 — 리셋 2026-08-09 14:07**(`usage_report.py` exit 1).
-  `gpt-5.6-terra` 배치는 **리셋 이후에 실제로 검증된다.** 한도는 **계정 전체**라
-  싼 모델로 우회할 수 없다(`gpt-5.4-mini` 로 확인 · `docs/11 §7 ⑪-e`).
-  세 보드(`m-2026-006`·`007`·`008`) 모두 park 이라 지금 디스패치될 카드는 없다.
+  ✅ **codex 는 다시 돈다 — 계정을 하나 더 붙였다**(2026-08-06 · Sam 이 회사망에서 실행).
+  ~~지금 codex 는 한도 소진 상태다 — 리셋 2026-08-09 14:07~~ → **해소.** 한도는 **계정
+  전체**라 싼 모델로는 우회할 수 없지만(`gpt-5.4-mini` 로 확인 · `docs/11 §7 ⑪-e`),
+  **계정은 갈아끼우는 게 아니라 풀에 더한다:**
+  ```bash
+  docker exec -it hermes-solomon hermes auth add openai-codex --type oauth --label account2 --no-browser
+  docker exec hermes-solomon hermes auth list      # openai-codex (2 credentials) · ← 가 활성
+  ```
+  ⚠️ **브라우저를 새 계정으로 먼저 로그인해 두라**(또는 시크릿 창) — 기존 계정으로 로그인된
+  상태면 device code 승인이 **같은 소진된 계정에 묶여** 쓸모없는 항목이 하나 더 생긴다.
+  풀은 소진된 자격을 건너뛰고, 리셋되면 `priority` 순으로 되돌아온다(교체보다 낫다).
+  실측: 계정 #1 `team`(소진 · 리셋 08-09 14:07) · #2 `account2` `plus`(정상).
+  ⚠️ **새 계정은 `plus` 라 `team` 보다 한도가 작다** — 소진 속도를 지켜봐라.
+  ⚠️ `auth.json` 은 **로컬 전용**이다(gitignore). PC 마다 다시 붙여야 한다.
+
+  ⚠️⚠️ **로그의 429 는 과거의 기록이지 현재의 판정이 아니다**(2026-08-06 · 이 세션이 고쳤다).
+  계정을 추가해 추론이 **성공하는데도** `usage_report.py` 가 `exit 1`("미션을 새로 시작하지
+  마라")을 냈다 — 워커 로그의 429 **에서만** 근거를 읽었기 때문이다. 그 기록은 여전히 참이다
+  ("그 자격이 그때 소진됐다"). 다만 **착수 가능 여부와는 무관해졌다.** 판정을 둘로 갈랐다:
+  **막을지 말지는 `auth.json` 의 `credential_pool`** 이 정하고, **왜 멈췄나는 로그**가 설명한다.
+  풀을 못 읽으면 옛 판정으로 폴백한다(하위호환). 회귀 10종 추가 → `test_usage_report` **37/37**.
+  ⚠️ 그때 기존 테스트 하나가 **개발자 PC 의 실제 `auth.json` 을 읽고 있었다** — 로그 판정을
+  재려던 테스트가 조용히 환경 의존이 돼 있었다. **테스트가 격리한다고 믿는 것과 실제로
+  격리한 것은 다르다**(`AUTH_PATHS` 도 함께 격리하도록 고쳤다).
 
   **로컬(`ollama`) 창은 262144 다**(2026-08-06 (4) 에 98304 에서 되돌렸다 — 커밋 `25ed214`).
   98304 은 **devstral 이 감당하는 창**이었지 우리 창이 아니었다. KV 비용은 모델마다 다르다:
@@ -190,7 +210,7 @@ docker compose up -d --force-recreate hermes-solomon hermes-gatekeeper
 # 그 다음: M-2026-008 을 stage 3 부터 재개(아래 ②)
 ```
 
-- 현재 배치 `ollama` / **`gemma4-26b-256k`** · 창 262144 (`--show` exit 0 · 34/34 · 27/27).
+- 현재 배치 **`codex` / `gpt-5.6-terra`** (`--show` exit 0 · 39/39 · 37/37). ⚠️ 2026-08-06 에 codex 로 복귀했다 — 이 줄이 `ollama` 라고 적혀 있던 기간이 있었다(문서 드리프트).
 - ⚠️ **codex 한도는 계정 전체다** — `gpt-5.4-mini` 로 직접 호출해 **429** 를 확인했다.
   싼 codex 모델로 우회하는 길은 **없다**(`docs/11 §7 ⑪-e`).
 - OAuth 프로바이더는 5종(`openai-codex`·`qwen-oauth`·`minimax-oauth`·`xai-oauth`·`nous`).
@@ -402,7 +422,7 @@ park 하라(`block` 2회는 `promoted` 로 되돌아온다 · `docs/14 §6.5 ①
 | 객관 게이트 | **62종** `scripts/gates/` — **analysis_substance**(신규 · 산출물 실체성)·recency_check·source_balance·doc_consistency·test_run·prisma_counts·prisma_checklist·seen_dedup·digest_shape·claim_consistency·patent_format·evidence_grade·stakeholder_coverage·format_consistency·clause_completeness·law_citation·legal_safety·symbol_truth·api_coverage·doc_links·objective_coverage·bloom_distribution·course_consistency·content_accessibility·atomic_commit·test_pass_rate·behavior_diff·owasp_coverage·cve_remediation·finding_completeness·secret_redaction·eval_set_quality·stat_significance·repro_determinism·run_completeness·pii_presence·license_compat·schema_conformance·datasheet_completeness·result_tolerance·env_consistency·install_evidence·reproduce_doc·bit_exact·solver_pin·doe_completeness·analysis_integrity·proposal_format·budget_integrity·call_alignment·proposal_traceability·comment_fidelity·comment_coverage·change_consistency·response_quality·claim_provenance·channel_format·outreach_tone·release_readiness·**slide_budget·deck_format·diagram_integrity** |
 | 산출 도구 | 4종 `scripts/tools/` — bib_export·monitor_state·relevance_score·budget_build |
 | 운영 도구 | **`scripts/preflight_gates.py`**(빈 입력 반려 확인) · **`scripts/lint_gate_drafts.py`**(하네스↔템플릿 draft 정합) · `scripts/match_template.py`(미션→템플릿 3-way 매처 · `--rebuild` 로 manifest 생성) · `scripts/usage_report.py`(착수 전 점검 · **LLM 미호출** · 백엔드별 판정 + **서버 실효 설정·창 대조**) · **`scripts/set_backend.py`**(백엔드 전환 + **`--host-setup`** 호스트 서버 설정 · `docs/14`) · **`scripts/probe_protocol.py`**(도구 프로토콜 준수도 — 모델 선정 근거) · **`scripts/probe_parallel.py`**(동시 요청이 실제로 병렬인지 — 2026-08-06 신규) |
-| 검증 | `python3 scripts/lint_template.py --all`(20/20) · 테스트 **350종**(214 게이트 + 37 템플릿·보드 + 34 게이트키퍼 + 30 백엔드 + 27 사용량·서버설정 + 8 매처 · **세어서 적어라**) · **E2E 하네스 `scripts/tests/fixtures/run_all.py`(14종 510케이스)** |
+| 검증 | `python3 scripts/lint_template.py --all`(20/20) · 테스트 **360종**(214 게이트 + 37 템플릿·보드 + 34 게이트키퍼 + 30 백엔드 + 37 사용량·서버설정 + 8 매처 · **세어서 적어라**) · **E2E 하네스 `scripts/tests/fixtures/run_all.py`(14종 510케이스)** |
 
 **Sam 지시:** 실미션은 **전체 변환을 마친 뒤 하나씩** 돌린다(변환 중에는 dry-run만).
 
