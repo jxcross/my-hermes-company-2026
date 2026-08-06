@@ -71,6 +71,24 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
   ⚠️ **새 계정은 `plus` 라 `team` 보다 한도가 작다** — 소진 속도를 지켜봐라.
   ⚠️ `auth.json` 은 **로컬 전용**이다(gitignore). PC 마다 다시 붙여야 한다.
 
+  ✅ **잔량은 업스트림에 물어야 보인다 — Hermes 는 기록하지 않는다**(2026-08-06 실측).
+  codex 응답의 rate-limit 헤더를 읽는 코드가 Hermes 에 **없고**(`usage_limit` 문자열
+  매칭은 429 처리에만 있다) `hermes insights` 는 계정별로 못 가른다(`--days`·`--source` 뿐).
+  업스트림은 준다 — `POST /codex/responses` 응답의 `x-codex-*`:
+  `plan-type`·`active-limit`·`primary-used-percent`·`primary-window-minutes`·`primary-reset-at`.
+  ⚠️⚠️ **400 응답에는 그 헤더가 안 온다** — 추론이 실제로 시작돼야 붙는다. 즉 **잔량 조회는
+  공짜가 아니다**(최소 요청 1회). 그래서 `usage_report.py` 는 캐시를 두고 **`--live` 일 때만**
+  묻는다. 상시 표시(훅)는 캐시만 읽는다 — 테스트가 `urlopen` 미호출을 강제한다.
+  ⚠️ 캐시된 잔량은 **그 자격의 것**이다. 활성 자격이 바뀌면 붙이지 않는다(id 대조) —
+  남의 숫자를 자기 것으로 읽는 것이 가장 위험한 오표시다.
+
+  ⚠️ **자격 선택은 `priority` 가 아니라 리스트 순서다**(`auth.py:4280` `_pool_codex_access_token`).
+  "리스트 순서대로 훑어 쿨다운이 아닌 첫 항목"을 쓴다. `priority` 필드는 auth.json 에 있지만
+  **codex 경로는 읽지 않는다**(정렬에 쓰는 곳은 Nous 경로 `auth.py:6408` 뿐).
+  `hermes auth` 에 `use`/`select`/`switch` 는 **없다** — 계정을 고르려면 리스트 순서를 바꾸거나
+  `remove` 해야 한다. ⚠️ `hermes auth reset <provider>` 는 **전체 자격의 소진 표시를 지운다** —
+  리스트 앞의 소진된 자격이 즉시 다시 선택돼 한 요청을 버린다.
+
   ⚠️⚠️ **로그의 429 는 과거의 기록이지 현재의 판정이 아니다**(2026-08-06 · 이 세션이 고쳤다).
   계정을 추가해 추론이 **성공하는데도** `usage_report.py` 가 `exit 1`("미션을 새로 시작하지
   마라")을 냈다 — 워커 로그의 429 **에서만** 근거를 읽었기 때문이다. 그 기록은 여전히 참이다
@@ -210,7 +228,7 @@ docker compose up -d --force-recreate hermes-solomon hermes-gatekeeper
 # 그 다음: M-2026-008 을 stage 3 부터 재개(아래 ②)
 ```
 
-- 현재 배치 **`codex` / `gpt-5.6-terra`** (`--show` exit 0 · 39/39 · 37/37). ⚠️ 2026-08-06 에 codex 로 복귀했다 — 이 줄이 `ollama` 라고 적혀 있던 기간이 있었다(문서 드리프트).
+- 현재 배치 **`codex` / `gpt-5.6-terra`** (`--show` exit 0 · 39/39 · 49/49). ⚠️ 2026-08-06 에 codex 로 복귀했다 — 이 줄이 `ollama` 라고 적혀 있던 기간이 있었다(문서 드리프트).
 - ⚠️ **codex 한도는 계정 전체다** — `gpt-5.4-mini` 로 직접 호출해 **429** 를 확인했다.
   싼 codex 모델로 우회하는 길은 **없다**(`docs/11 §7 ⑪-e`).
 - OAuth 프로바이더는 5종(`openai-codex`·`qwen-oauth`·`minimax-oauth`·`xai-oauth`·`nous`).
@@ -422,7 +440,7 @@ park 하라(`block` 2회는 `promoted` 로 되돌아온다 · `docs/14 §6.5 ①
 | 객관 게이트 | **62종** `scripts/gates/` — **analysis_substance**(신규 · 산출물 실체성)·recency_check·source_balance·doc_consistency·test_run·prisma_counts·prisma_checklist·seen_dedup·digest_shape·claim_consistency·patent_format·evidence_grade·stakeholder_coverage·format_consistency·clause_completeness·law_citation·legal_safety·symbol_truth·api_coverage·doc_links·objective_coverage·bloom_distribution·course_consistency·content_accessibility·atomic_commit·test_pass_rate·behavior_diff·owasp_coverage·cve_remediation·finding_completeness·secret_redaction·eval_set_quality·stat_significance·repro_determinism·run_completeness·pii_presence·license_compat·schema_conformance·datasheet_completeness·result_tolerance·env_consistency·install_evidence·reproduce_doc·bit_exact·solver_pin·doe_completeness·analysis_integrity·proposal_format·budget_integrity·call_alignment·proposal_traceability·comment_fidelity·comment_coverage·change_consistency·response_quality·claim_provenance·channel_format·outreach_tone·release_readiness·**slide_budget·deck_format·diagram_integrity** |
 | 산출 도구 | 4종 `scripts/tools/` — bib_export·monitor_state·relevance_score·budget_build |
 | 운영 도구 | **`scripts/preflight_gates.py`**(빈 입력 반려 확인) · **`scripts/lint_gate_drafts.py`**(하네스↔템플릿 draft 정합) · `scripts/match_template.py`(미션→템플릿 3-way 매처 · `--rebuild` 로 manifest 생성) · `scripts/usage_report.py`(착수 전 점검 · **LLM 미호출** · 백엔드별 판정 + **서버 실효 설정·창 대조**) · **`scripts/set_backend.py`**(백엔드 전환 + **`--host-setup`** 호스트 서버 설정 · `docs/14`) · **`scripts/probe_protocol.py`**(도구 프로토콜 준수도 — 모델 선정 근거) · **`scripts/probe_parallel.py`**(동시 요청이 실제로 병렬인지 — 2026-08-06 신규) |
-| 검증 | `python3 scripts/lint_template.py --all`(20/20) · 테스트 **360종**(214 게이트 + 37 템플릿·보드 + 34 게이트키퍼 + 30 백엔드 + 37 사용량·서버설정 + 8 매처 · **세어서 적어라**) · **E2E 하네스 `scripts/tests/fixtures/run_all.py`(14종 510케이스)** |
+| 검증 | `python3 scripts/lint_template.py --all`(20/20) · 테스트 **372종**(214 게이트 + 37 템플릿·보드 + 34 게이트키퍼 + 30 백엔드 + 49 사용량·서버설정 + 8 매처 · **세어서 적어라**) · **E2E 하네스 `scripts/tests/fixtures/run_all.py`(14종 510케이스)** |
 
 **Sam 지시:** 실미션은 **전체 변환을 마친 뒤 하나씩** 돌린다(변환 중에는 dry-run만).
 

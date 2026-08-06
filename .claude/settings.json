@@ -5,8 +5,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/scripts/usage_report.py\" --brief --json 2>/dev/null || true",
-            "timeout": 10
+            "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/scripts/usage_report.py\" --brief --live --json 2>/dev/null || python3 \"${CLAUDE_PROJECT_DIR:-.}/scripts/usage_report.py\" --brief --json 2>/dev/null || true",
+            "timeout": 20
           }
         ]
       }

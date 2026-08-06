@@ -589,6 +589,80 @@ def test_brief_never_blocks_and_never_calls_a_subprocess(monkeypatch=None):
         ur.AUTH_PATHS = orig_auth
 
 
+# ── 업스트림 잔량 (2026-08-06) ──────────────────────────────────────────────
+# 실측 헤더 그대로(2026-08-06 · account2). ⚠️ `secondary-reset-at` 은 **빈 문자열**로 온다.
+LIVE_HEADERS = {
+    "x-codex-plan-type": "plus", "x-codex-active-limit": "premium",
+    "x-codex-primary-used-percent": "0", "x-codex-primary-window-minutes": "10080",
+    "x-codex-primary-reset-at": "1786627540",
+    "x-codex-secondary-used-percent": "0", "x-codex-secondary-window-minutes": "0",
+    "x-codex-secondary-reset-at": "", "x-codex-credits-balance": "0",
+    "cf-ray": "a26e7ffad8810dbb-ICN", "server": "cloudflare",
+}
+
+
+def test_parse_quota_headers_reads_real_response():
+    q = ur.parse_quota_headers(LIVE_HEADERS, cred_id="e49333", now=RESETS)
+    assert q["found"] and q["plan"] == "plus"
+    assert q["primary_used_pct"] == 0 and q["primary_window_min"] == 10080
+    assert q["primary_reset_at"] == 1786627540
+    assert q["secondary_reset_at"] is None, "빈 문자열을 숫자로 읽었다"
+
+
+def test_parse_quota_headers_is_case_insensitive():
+    """서버가 헤더 대소문자를 바꿔 보내도 깨지지 않아야 한다."""
+    up = {k.upper(): v for k, v in LIVE_HEADERS.items()}
+    assert ur.parse_quota_headers(up, now=RESETS)["primary_window_min"] == 10080
+
+
+def test_parse_quota_headers_reports_not_found_on_400_shaped_response():
+    """★ 실측: 400 응답에는 x-codex-* 가 **없다**. 그때 0% 로 보이면 안 된다."""
+    q = ur.parse_quota_headers({"content-type": "application/json"}, now=RESETS)
+    assert q["found"] is False
+    assert ur.format_quota(q, RESETS) == ""
+
+
+def test_format_quota_maps_windows_and_skips_inactive_ones():
+    s = ur.format_quota(ur.parse_quota_headers(LIVE_HEADERS, now=RESETS), RESETS)
+    assert "주간 0%" in s, s
+    assert "2차" not in s, f"창 0(비활성)인 2차 한도를 표시했다: {s}"
+
+
+def test_format_quota_shows_age_so_stale_numbers_are_visible():
+    """잔량은 캐시라 **언제 잰 것인지**가 함께 보여야 한다 — 옛 숫자를 현재로 읽으면 안 된다."""
+    q = ur.parse_quota_headers(LIVE_HEADERS, now=RESETS - 3600)
+    assert "60분 전" in ur.format_quota(q, RESETS)
+
+
+def test_brief_does_not_attach_quota_from_a_different_credential():
+    """★ 가장 위험한 오표시 — 활성 자격이 바뀌었는데 옛 자격의 잔량을 붙이는 것.
+       남의 숫자를 자기 것으로 읽게 된다."""
+    p = _auth({"openai-codex": [_cred("a1", "old", "exhausted", RESETS),
+                                _cred("b2", "account2")]})
+    q = ur.parse_quota_headers(LIVE_HEADERS, cred_id="a1", now=RESETS - 3600)  # ← 소진된 쪽
+    s = ur.brief_line("codex", now=RESETS - 3600, paths=[p], quota=q)
+    assert "주간" not in s, f"다른 자격의 잔량을 붙였다: {s}"
+    q2 = dict(q, credential="b2")           # 활성 자격의 것이면 붙어야 한다(반대 방향)
+    assert "주간 0%" in ur.brief_line("codex", now=RESETS - 3600, paths=[p], quota=q2)
+
+
+def test_brief_makes_no_network_call():
+    """★ 상시 표시는 캐시만 읽는다. 잔량 조회는 **한도를 소비**하므로 훅에서 돌면 안 된다."""
+    calls = []
+    orig = ur.urllib.request.urlopen
+    ur.urllib.request.urlopen = lambda *a, **k: calls.append(a)
+    orig_auth, orig_cache = ur.AUTH_PATHS, ur.QUOTA_CACHE
+    ur.AUTH_PATHS = [_auth({"openai-codex": [_cred("b2", "account2")]})]
+    ur.QUOTA_CACHE = "/nonexistent/quota.json"
+    try:
+        sys.argv = ["usage_report", "--brief", "--backend", "codex", "--now", str(RESETS)]
+        assert ur.main() == 0
+        assert not calls, f"상시 표시가 업스트림을 호출했다: {calls}"
+    finally:
+        ur.urllib.request.urlopen = orig
+        ur.AUTH_PATHS, ur.QUOTA_CACHE = orig_auth, orig_cache
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

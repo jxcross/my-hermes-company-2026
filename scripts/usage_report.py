@@ -390,7 +390,139 @@ def main_local(args, backend: str) -> int:
     return 0 if ok else 1
 
 
-def brief_line(backend: str, now: int, paths: list[str] | None = None) -> str:
+# ── 업스트림 잔량 (2026-08-06) ──────────────────────────────────────────────
+# ⚠️ Hermes 는 잔량을 **기록하지 않는다** — codex 응답의 rate-limit 헤더를 읽는 코드가
+#    없고(`usage_limit` 문자열 매칭은 429 처리에만 있다) `hermes insights` 는 계정별로
+#    가르지 못한다(`--days`·`--source` 뿐). 그래서 업스트림에 직접 묻는다.
+# ⚠️⚠️ **400 응답에는 헤더가 안 온다**(실측). 추론이 실제로 시작돼야 `x-codex-*` 가 붙는다
+#    → 잔량 조회는 **공짜가 아니다.** 그래서 캐시를 두고 상시 표시는 캐시만 읽는다.
+QUOTA_CACHE = os.path.join(REPO_ROOT, "hermes-home", "codex_quota.json")
+QUOTA_HEADERS = (
+    "x-codex-plan-type", "x-codex-active-limit",
+    "x-codex-primary-used-percent", "x-codex-primary-window-minutes",
+    "x-codex-primary-reset-at", "x-codex-secondary-used-percent",
+    "x-codex-secondary-window-minutes", "x-codex-secondary-reset-at",
+    "x-codex-credits-balance", "x-codex-credits-unlimited",
+)
+
+
+def parse_quota_headers(headers: dict, cred_id: str = "", now: int = 0) -> dict:
+    """`x-codex-*` 응답 헤더 → 잔량 요약. 순수 함수(네트워크 없음 = 테스트 가능).
+
+    ⚠️ 헤더 이름은 대소문자를 가리지 않는다 — 서버가 바꿔 보내도 깨지지 않게 정규화한다.
+    ⚠️ 값이 빈 문자열인 헤더가 실제로 온다(`x-codex-secondary-reset-at:`) — int() 가 터진다."""
+    low = {str(k).lower(): str(v) for k, v in (headers or {}).items()}
+
+    def num(key):
+        v = low.get(key, "").strip()
+        try:
+            return int(float(v))
+        except (TypeError, ValueError):
+            return None
+
+    return {
+        "credential": cred_id,
+        "checked_at": now,
+        "plan": low.get("x-codex-plan-type", "") or "",
+        "active_limit": low.get("x-codex-active-limit", "") or "",
+        "primary_used_pct": num("x-codex-primary-used-percent"),
+        "primary_window_min": num("x-codex-primary-window-minutes"),
+        "primary_reset_at": num("x-codex-primary-reset-at"),
+        "secondary_used_pct": num("x-codex-secondary-used-percent"),
+        "secondary_window_min": num("x-codex-secondary-window-minutes"),
+        "secondary_reset_at": num("x-codex-secondary-reset-at"),
+        "credits_balance": num("x-codex-credits-balance"),
+        "found": any(k.startswith("x-codex-") for k in low),
+    }
+
+
+def format_quota(q: dict | None, now: int) -> str:
+    """잔량 한 조각. 창 길이를 사람 단위로 옮긴다(10080분 = 주간)."""
+    if not q or not q.get("found"):
+        return ""
+    parts = []
+    for tag, pct, win, reset in (
+            ("", q.get("primary_used_pct"), q.get("primary_window_min"), q.get("primary_reset_at")),
+            ("2차 ", q.get("secondary_used_pct"), q.get("secondary_window_min"),
+             q.get("secondary_reset_at"))):
+        if pct is None or not win:      # 창 0 = 그 한도는 비활성
+            continue
+        label = {10080: "주간", 1440: "일간", 300: "5시간", 60: "시간"}.get(win, f"{win}분")
+        seg = f"{tag}{label} {pct}%"
+        if reset:
+            seg += f"(리셋 {dt.datetime.fromtimestamp(reset).strftime('%m-%d %H:%M')})"
+        parts.append(seg)
+    age = ""
+    if q.get("checked_at"):
+        mins = max(0, (now - q["checked_at"]) // 60)
+        age = f" · {mins}분 전" if mins else " · 방금"
+    return (" · ".join(parts) + age) if parts else ""
+
+
+def load_quota_cache(path: str | None = None) -> dict | None:
+    try:
+        with open(path or QUOTA_CACHE, encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else None
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def probe_codex_quota(now: int, auth_paths: list[str] | None = None,
+                      cache_path: str | None = None) -> dict | None:
+    """업스트림에 최소 요청 1회를 보내 잔량 헤더를 읽고 캐시에 쓴다.
+
+    ⚠️ **한도를 소비한다**(작지만 0 이 아니다). 상시 표시 경로에서 부르지 마라 —
+       `--live` 로만 부른다. 실패는 None(호출자가 캐시로 폴백)."""
+    for p in (auth_paths if auth_paths is not None else AUTH_PATHS):
+        try:
+            with open(p, encoding="utf-8") as f:
+                store = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+        entries = (store.get("credential_pool") or {}).get("openai-codex") or []
+        # 런타임과 **같은 규칙**으로 고른다: 리스트 순서대로, 쿨다운이 아닌 첫 항목
+        # (auth.py:4280 `_pool_codex_access_token`). priority 는 codex 경로에서 안 쓴다.
+        pick = next((e for e in entries if isinstance(e, dict) and e.get("access_token")
+                     and not (isinstance(e.get("last_error_reset_at"), (int, float))
+                              and e["last_error_reset_at"] > now)), None)
+        if not pick:
+            return None
+        body = json.dumps({
+            "model": os.environ.get("USAGE_PROBE_MODEL", "gpt-5.6-terra"),
+            "instructions": "",
+            "input": [{"type": "message", "role": "user",
+                       "content": [{"type": "input_text", "text": "hi"}]}],
+            "stream": True, "store": False,
+        }).encode()
+        req = urllib.request.Request(
+            f"{pick.get('base_url') or 'https://chatgpt.com/backend-api/codex'}/responses",
+            data=body, method="POST",
+            headers={"Authorization": f"Bearer {pick['access_token']}",
+                     "Content-Type": "application/json", "Accept": "text/event-stream",
+                     "User-Agent": "codex-cli/1.0", "originator": "codex_cli_rs"})
+        try:
+            with urllib.request.urlopen(req, timeout=40) as r:
+                hdrs = dict(r.headers.items())
+                r.read(1)          # 스트림을 끝까지 읽지 않는다 — 헤더만 필요하다
+        except urllib.error.HTTPError as e:
+            hdrs = dict(e.headers.items())
+        except Exception:          # noqa: BLE001 — 잔량 조회 실패가 점검을 막지 않는다
+            return None
+        q = parse_quota_headers(hdrs, cred_id=pick.get("id") or "", now=now)
+        if not q["found"]:
+            return None
+        try:
+            with open(cache_path or QUOTA_CACHE, "w", encoding="utf-8") as f:
+                json.dump(q, f, ensure_ascii=False)
+        except OSError:
+            pass
+        return q
+    return None
+
+
+def brief_line(backend: str, now: int, paths: list[str] | None = None,
+               quota: dict | None = None) -> str:
     """한 줄 요약. **파일 하나만 읽는다** — subprocess·네트워크 없음.
 
     ⚠️ 상시 표시(statusline·hook)에 쓰려고 만들었다. `main()` 은 `hermes insights` 를
@@ -413,7 +545,11 @@ def brief_line(backend: str, now: int, paths: list[str] | None = None) -> str:
     if spent:
         w = dt.datetime.fromtimestamp(min(c["reset_at"] for c in spent)).strftime("%m-%d %H:%M")
         tail = f" · 소진 {len(spent)} 리셋 {w}"
-    return f"codex ✓ {pv['usable']}/{pv['total']} [{ok[0]['label']}]{tail}"
+    # ⚠️ 캐시된 잔량은 **그 자격의 것**이다. 활성 자격이 바뀌었는데 옛 잔량을 붙이면
+    #    남의 숫자를 자기 것으로 읽는다 — id 가 일치할 때만 붙인다.
+    #    `ok[0]` 은 런타임의 선택과 같다(리스트 순서 · auth.py:4280).
+    q = format_quota(quota, now) if quota and quota.get("credential") == ok[0]["id"] else ""
+    return f"codex ✓ {pv['usable']}/{pv['total']} [{ok[0]['label']}]{tail}" + (f" · {q}" if q else "")
 
 
 def main() -> int:
@@ -421,6 +557,8 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--brief", action="store_true",
                     help="한 줄 요약만(파일 1개만 읽는다 — statusline·hook 용)")
+    ap.add_argument("--live", action="store_true",
+                    help="업스트림에 물어 잔량을 갱신한다 ⚠️ 한도를 소비한다(최소 요청 1회)")
     ap.add_argument("--json", action="store_true", help="기계 판독 출력")
     ap.add_argument("--quiet", action="store_true", help="exit code 만")
     ap.add_argument("--now", type=int, default=None,
@@ -439,7 +577,9 @@ def main() -> int:
         # ⚠️ 상시 표시는 **판정을 막지 않는다** — exit 0 고정. 표시가 착수를 막으면
         #    사람이 그것을 끄게 되고, 그러면 진짜 판정도 같이 사라진다.
         now = args.now if args.now is not None else int(dt.datetime.now().timestamp())
-        line = brief_line(backend, now)
+        # ⚠️ 기본은 **캐시만** 읽는다 — 상시 표시가 매번 한도를 쓰면 안 된다.
+        quota = (probe_codex_quota(now) if args.live else None) or load_quota_cache()
+        line = brief_line(backend, now, quota=quota)
         # `--brief --json` = Claude Code 훅 형식. 셸에서 따옴표를 겹쳐 JSON 을 짓는 것보다
         # 여기서 만드는 편이 안전하다(줄바꿈·따옴표·이모지가 그대로 통과한다).
         print(json.dumps({"systemMessage": line}, ensure_ascii=False) if args.json else line)
@@ -463,12 +603,15 @@ def main() -> int:
     log_exhausted = bool(latest and latest["resets_at"] > now)
     pv = pool_verdict(read_credential_pool(backend_provider(backend)), now)
     exhausted = (pv["usable"] == 0) if pv["known"] else log_exhausted
+    # ⚠️ `--live` 없이는 업스트림에 묻지 않는다 — 점검이 한도를 쓰면 안 된다(캐시만 읽는다).
+    quota = (probe_codex_quota(now) if args.live else None) or load_quota_cache()
     report = {
         "backend": backend,
         "exhausted": exhausted,
         "limit_record": latest,
         "log_exhausted": log_exhausted,
         "credential_pool": pv,
+        "quota": quota,
         "seconds_to_reset": (latest["resets_at"] - now) if log_exhausted else 0,
         "env_failed_tasks": env_failed,
         "insights": ins,
@@ -493,12 +636,23 @@ def main() -> int:
         if pv["known"]:
             print(f"── 자격 풀 ──  {backend_provider(backend)} · "
                   f"{pv['usable']}/{pv['total']} 사용 가능")
+            # 런타임은 **리스트 순서**대로 훑어 쿨다운이 아닌 첫 항목을 쓴다(auth.py:4280).
+            # priority 는 codex 경로에서 읽지 않는다 — 순서가 곧 선택이다.
+            active = next((c["id"] for c in pv["creds"] if c["usable"]), None)
             for c in pv["creds"]:
                 mark = "✓" if c["usable"] else "✗"
                 note = ""
                 if not c["usable"] and c["reset_at"]:
                     w = dt.datetime.fromtimestamp(c["reset_at"]).strftime("%m-%d %H:%M")
                     note = f"  {c['reason'] or 'exhausted'} · 리셋 {w}"
+                if c["id"] == active:
+                    note += "  ← 지금 쓰이는 자격"
+                    q = format_quota(quota, now) if quota and \
+                        quota.get("credential") == c["id"] else ""
+                    if q:
+                        note += f"\n        잔량 {q}"
+                    elif quota is None:
+                        note += "\n        잔량 미조회 — `--live` 로 확인(요청 1회 소비)"
                 print(f"    {mark} #{c['id']} {c['label']}{note}")
         print("── 한도 ──")
         if exhausted:
