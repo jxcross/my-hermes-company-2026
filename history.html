@@ -25,6 +25,29 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
+    <h2>#56 — <b>지시로 능력을 살 수 없다</b> · 금지를 못박은 직후 그 금지를 그대로 어긴 모델 · <b>판정은 카드가 아니라 파일 mtime 으로</b></h2>
+    <div class="meta">2026-08-06 · 요청자: Sam(Founder)</div>
+    <div class="req"><span class="label">요청:</span> "일단 codex 복원되기 전까지는 <code>gemma4-26b-256k</code> 로 하자. 이 모델로 전부 바꾸고, <code>trend-report.yaml</code> 예제로 실제 미션 테스트하라. <b>llm-wiki 관련 내용</b>으로 하자. 승인은 네가 판단하여 자체적으로 하라." → (실패 후) "아무래도 모델을 바꿔야겠다. codex/gpt-5.5 가 복원될 때까지 기다리자. <b>oauth 방식으로 지원하는 저렴한 모델은 없나?</b>" → "<code>gpt-oss:20b</code> 로 한번만 더 테스트해보자. 이것도 안되면 codex 복원까지 기다린다."</div>
+    <div class="label">진행:</div>
+    <ol class="steps">
+      <li><b>배치 되돌리기는 4곳을 함께 고쳐야 했다</b> — <code>OLLAMA_NUM_CTX</code> 98304→262144 · <code>BASE_MODELS</code> 한 줄 · <code>BACKENDS</code> 3줄 · <code>probe_parallel</code> 폴백. <b>반쪽 되돌리기는 테스트가 FAIL 시킨다</b>(<code>test_deployed_models_pin_the_same_window_as_the_config</code> — 파생본 이름 <code>-256k</code> 가 창을 담기 때문). 98304 는 <b>devstral 이 감당하는 창</b>이었지 우리 창이 아니었다. 검증: <code>ollama ps</code> CONTEXT <b>262144 · 17GB · 100% GPU</b> · <code>probe_parallel</code> <b>병렬</b>(분산 0.01 · 이득 ×1.18 — GGUF 복귀로 <code>NUM_PARALLEL</code> 이 다시 실효).</li>
+      <li><b>M-2026-008 착수</b>(<code>trend-report</code> · 유일한 <code>proven</code> 템플릿 · 보드 <code>m-2026-008</code>). 사전 점검 전건 통과(게이트 4/4 이 빈 입력 반려). <b>stage 1·2 통과</b> — <code>SCOPE.md</code> 2.4K(정책값 6종을 <code>pipeline.json</code> 에서 정확 인용) · <code>search_strategy.md</code> 2.5K(검색식 12개). <b>같은 카드에서 devstral·12b-mlx 는 0건이었던 자리다.</b></li>
+      <li><b>stage 3 이 파이프라인의 진짜 결함을 잡았다 — 날조가 아니라 위임 수단 오인.</b> 워커가 delegation subagent 대신 <b>Kanban 자식 카드 3장</b>을 만들고(존재하지 않는 profile <code>researcher-a/b/c</code>) 자기는 <code>done</code>. 카드는 아무도 실행하지 않았고 <b>stage 4 가 빈 입력으로 돌기 시작</b>했다(즉시 park — 쓰레기 산출물 0건). 원인은 문구의 빈틈이다: 팬아웃 본문은 "위임하라"고만 했지 <b>"카드를 만들지 마라"를 말하지 않았다</b>. stage 1 본문에는 있던 금지다. → <code>fanout_body()</code> 에 세 줄을 못박았다(<code>142a36c</code> · 테스트 3종 · 42/42).</li>
+      <li><b>Sam 질문에 답하려 codex 우회 가능성을 직접 쟀다</b> — <code>gpt-5.4-mini</code> 로 호출 → <b>HTTP 429</b>. <b>한도는 모델별이 아니라 계정 전체다.</b> OAuth 프로바이더는 5종(<code>openai-codex</code>·<code>qwen-oauth</code>·<code>minimax-oauth</code>·<code>xai-oauth</code>·<code>nous</code>)이고 codex 외 전부 logged out · <b>로그인이 대화형이라 사람이 해야 한다.</b></li>
+      <li><b><code>gpt-oss:20b</code> 시험</b> — 천장 131072(<code>gptoss.context_length</code>) · 13GB MXFP4 · MoE 32/4 · tools·thinking · <code>reasoning_effort</code> none/medium/high <b>전부 200</b>(devstral 을 죽였던 400 이 안 난다). 창을 131072 로 내린 것은 메모리가 아니라 <b>모델 천장</b> 때문. <code>reasoning_effort</code> 는 <code>none</code> 유지 — <b>한 번에 한 변수만 바꾼다.</b></li>
+      <li><b>그리고 교정된 본문이 다음 모델을 구하지 못했다.</b> <code>gpt-oss</code> 는 "⛔ Kanban task 를 새로 만들지 마라 · 위임 ≠ 완료"를 읽고 <b>정확히 그것을 했다</b> — 118초 만에 자식 카드 3장을 만들고 <code>done</code>. 같은 본문으로 26b 는 5샤드를 다 만들었다.</li>
+      <li><b>판정은 카드가 아니라 파일 mtime 으로 갈랐다.</b> 두 모델이 <b>같은 카드</b>를 이어 돌았고(park 은 실행 중 워커를 죽이지 않는다) 카드는 둘 다 <code>done</code> 이다. run #9(26b · 485초) → 샤드 5 + 병합본(mtime 06:48~07:02) · run #14(gpt-oss · 118초) → <b>그 구간에 쓰인 파일 0개</b>.</li>
+    </ol>
+    <div class="result"><span class="label">결과:</span>
+      커밋 <code>25ed214</code>(배치 복귀)·<code>1d5e6a9</code>(stage 1)·<code>85a18b9</code>(배치표 문서)·<code>142a36c</code>(팬아웃 프로토콜 수정)·<code>aae640a</code>(gpt-oss 시도)·<code>5b82437</code>(gpt-oss 기각·26b 복귀).
+      검증: <code>test_set_backend</code> <b>34/34</b> · <code>test_usage_report</code> <b>27/27</b> · <code>test_instantiate_template</code> <b>42/42</b> · <code>--show</code> exit 0.
+      <b>26b 의 stage 3 결과도 완벽하지 않았다</b> — ✅ 팬아웃 정상·샤드 5+병합본 · ❌ <code>sources.academic.yaml</code> 5건 <b>날조</b>(<code>arxiv.org/abs/2604.xxxxx</code> — URL 자리표시자) · ❌ 병합에서 5샤드 중 2개 <b>누락</b>. <code>source_balance</code> 가 병합 누락을 <b>잡았고</b>(academic=0&lt;2·vendor=0&lt;2 → FAIL) <b>날조는 못 잡았다</b>.
+      <b>Sam 결정: codex 복원(2026-08-09 14:07)까지 기다린다.</b> 배치는 26b/262144 로 복귀 · M-2026-008 은 stage 3 부터 재개.
+      <b>교훈 다섯:</b> ① <b>문구로 능력을 살 수 없다</b> — 지시를 세게 쓰는 것은 <i>지킬 수 있는</i> 모델에만 듣는다. "문구를 고치면 된다"는 내 진단은 절반만 맞았다. ② <b>같은 카드를 여러 모델이 이어 돌면 카드는 증거가 아니다 — mtime 을 봐라.</b> ③ <b>게이트가 재는 축을 알아라</b> — <code>source_balance</code> 는 분포를 재지 <b>실재를 안 잰다</b>. 자리표시자 URL 은 게이트 2종을 <b>다 통과한다</b>. ④ <b>결함은 서로를 가린다</b> — 병합 누락이 날조를 병합본 밖으로 밀어내 안 보이게 했다. ⑤ <b>park 은 실행 중인 워커를 죽이지 않는다</b> — 카드 상태와 프로세스는 별개다.
+    </div>
+  </div>
+
+  <div class="entry">
     <h2>#55 — 로컬 모델 3종을 stage 1 하나로 갈랐다 · <b>프로브 100%&nbsp;≠&nbsp;일을 한다</b> · 하네스의 nudge 가 <b>protocol violation 을 거짓 done 으로</b> 바꿨다</h2>
     <div class="meta">2026-08-06 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "로컬 모델을 gemma4:12b-mlx 로 전부 변경하라. 그런 다음 templates/ 디렉토리의 첫번째 yaml 에 대해 잘 동작하는지 테스트해보자" → (확인) 테스트 깊이=<b>실미션 완주</b> · <code>gemma4-26b-256k</code>=<b>완전 제거</b> · 주제=온디바이스 SLM 효율적 추론 → "테스트니까 승인은 슬랙을 통하지 않고, 네가 직접 수행하라."</div>

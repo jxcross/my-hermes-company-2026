@@ -116,97 +116,84 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 
 ---
 
-## ▶ 이어서 할 일 (2026-08-06 (3) 세션 핸드오프)
-
-### ★ 다음 세션 지시 (Sam · 2026-08-06 세션 끝)
-
-> "일단 codex 복원되기 전까지는 **`gemma4-26b-256k`** 로 하자. 이 모델로 전부 바꾸고,
-> **`trend-report.yaml` 예제로 실제 미션 테스트**하라. **승인은 네가 판단하여 자체적으로** 하라."
-
-**왜 26b 인가**: 통제 실험(`docs/11 §7 ⑩-f`)에서 **로컬 모델 중 유일하게 실미션 stage 를
-이행한** 모델이다. 12b-mlx·devstral 은 같은 카드에서 산출물 0건이었다.
-**왜 `trend-report` 인가**: 유일한 **`proven`** 템플릿이다(M-2026-003·004 가 11/11 완주).
-템플릿 변수를 제거하고 **모델만** 시험하는 배치다.
-
-#### ① 배치 되돌리기 — 4곳을 함께 고쳐야 한다 (`scripts/set_backend.py`)
-
-⚠️ **창도 같이 올려야 한다.** devstral 때문에 `OLLAMA_NUM_CTX` 를 98304 로 낮춰 뒀는데,
-`gemma4-26b-256k` 는 이름이 창(262144)을 담고 있어 **테스트가 불일치를 FAIL 시킨다**
-(`test_deployed_models_pin_the_same_window_as_the_config`). 26b 는 262144 에서 17.9GB·100% GPU 로
-확인됐다(devstral 은 같은 창에서 83GB 라 못 썼던 것이다).
-
-```python
-OLLAMA_NUM_CTX = 262144                    # ← 98304 에서 되돌린다
-
-BASE_MODELS = {
-    "gemma4-26b-256k": {"base": "gemma4:26b", "num_ctx": 262144, "ceiling": 262144},  # ← 복원
-    "devstral-24b-96k": {...},             # 폴백으로 남긴다(측정 기록 보존)
-    ...
-}
-
-BACKENDS["ollama"]["models"] = {"writer"/"verifier"/"coder": "gemma4-26b-256k"}       # ← 3줄
-```
-`scripts/probe_parallel.py:_default_model()` 의 **폴백 문자열**도 함께(표는 자동으로 따라온다).
-
-```bash
-python3 scripts/set_backend.py --build-models      # blob 이 남아 있어 "이미 있음" 이 뜬다
-python3 scripts/set_backend.py --backend ollama && python3 scripts/set_backend.py --show   # exit 0
-python3 scripts/tests/test_set_backend.py && python3 scripts/tests/test_usage_report.py    # 34 · 27
-docker compose up -d --force-recreate hermes-solomon hermes-gatekeeper
-ollama ps                                          # ★ 창 262144 · ~17.9GB · 100% GPU 확인
-```
-
-#### ② 실미션 M-2026-008 (`trend-report`)
-
-```bash
-MID=M-2026-008; TPL=trend-report; BOARD=m-2026-008
-python3 scripts/usage_report.py                                        # exit 0 + 서버 설정 5종 일치
-docker exec hermes-solomon sh -c "cd /work/company && python3 scripts/preflight_gates.py $TPL"
-docker exec hermes-solomon sh -c "cd /work/company && python3 scripts/lint_template.py $TPL"
-docker exec hermes-solomon sh -c "cd /work/company && python3 scripts/instantiate_template.py $TPL $MID --topic '…' --dry-run --render mermaid"
-docker exec hermes-solomon sh -c "cd /work/company && python3 scripts/instantiate_template.py $TPL $MID --topic '…' --board $BOARD"
-```
-
-- **승인은 Claude 가 자체 판단**(Sam 위임 재확인 2026-08-06). Slack 대기 없이
-  `hermes kanban --board $BOARD unblock <tid> --reason "…"`. ⚠️ 사유는 **다음 워커가 읽는다** —
-  운영 메모는 `[운영 메모 · 산출물 지시 아님]` 접두. 판단은 **카드가 아니라 산출물을 열어** 하라.
-- ⚠️ **단계마다 실사 + 커밋**(워커의 완료 보고는 증거가 아니다 · `docs/11 §7 ⑧-d·⑩-b`):
-  ```bash
-  ls -la reports/$MID/ && grep -rniE "simulat|placeholder|TBD|가상의|Synthesized from" reports/$MID/
-  git add reports/$MID && git commit
-  ```
-- ⚠️ **`protocol violation` 이 뜨면 카드 문구로 진단하지 마라** — `hermes kanban --board $BOARD log <tid>`
-  를 봐라. 지난 세션에 그 문구의 진짜 원인이 HTTP 400 이었다(`⑩-c`).
-- ⚠️ **모델 오버라이드가 다른 카드를 동시에 돌리지 마라** — `MAX_LOADED_MODELS=1` 이라
-  서로를 밀어내며 로딩만 반복한다(`⑩-f ①`). 필요하면 `schedule` 로 직렬화.
-
-#### ③ 기존 미션 2건은 그대로 둔다
-`M-2026-006`·`M-2026-007` 은 park 상태 유지(`spawned: []` 확인됨). 재개는 Sam 이 정한다.
-`M-2026-007` 의 stage 1 은 `done` 이지만 **산출물이 없다**(날조) — 재개 시 stage 1 부터다.
-
----
+## ▶ 이어서 할 일 (2026-08-06 (5) 세션 핸드오프)
 
 ### ⛔ 지금 상태 — 먼저 읽어라
 
-**실미션 2건(M-2026-006 · M-2026-007)이 모두 세워져 있고, 재개하지 않는다.**
-로컬 모델 3종을 같은 카드로 갈랐는데 **`gemma4-26b-256k` 만 실제로 일을 했다**
-(`gemma4:12b-mlx` 3회·`devstral` 1회 모두 산출물 0건 · 상세 `docs/11 §7 ⑩`).
-
-**Sam 결정: `codex` 한도 리셋(2026-08-09 14:07) 이후에 실미션을 재개한다.**
+**로컬 모델로는 여기까지다. `codex` 복원(2026-08-09 14:07)까지 기다린다**(Sam 결정 2026-08-06).
 
 ```bash
 # 8/09 14:07 이후 — 이 한 줄이 재개의 시작이다
 python3 scripts/set_backend.py --backend codex && python3 scripts/set_backend.py --show
 python3 scripts/usage_report.py            # 한도가 실제로 풀렸는지 확인(exit 0)
 docker compose up -d --force-recreate hermes-solomon hermes-gatekeeper
-# 그 다음 Sam 이 재개 대상을 정한다: M-2026-007(B) 재시작 · M-2026-006(I) 이어서 · 새 미션
+# 그 다음: M-2026-008 을 stage 3 부터 재개(아래 ②)
 ```
 
-- 현재 배치는 `ollama` / **`devstral-24b-96k`** (Sam 지시로 전환) — **이 배치로 미션을 돌리지 마라.**
-  백엔드 자체는 정상 동작한다(`--show` exit 0 · 회귀 전건 통과). 문제는 **모델의 과제 이행**이다.
-- `M-2026-007` 보드 `m-2026-007`: stage 1 이 `done` 이지만 **산출물이 없다**(날조). 재개하려면
-  stage 1 부터 다시다. 나머지 카드는 전부 `scheduled` 로 park(`dispatch --dry-run` → `spawned: []` 확인).
-- `M-2026-006` 보드 `m-2026-006`: stage 5 `blocked` · 3장 `scheduled` (이전 세션에서 park).
+- 현재 배치 `ollama` / **`gemma4-26b-256k`** · 창 262144 (`--show` exit 0 · 34/34 · 27/27).
+- ⚠️ **codex 한도는 계정 전체다** — `gpt-5.4-mini` 로 직접 호출해 **429** 를 확인했다.
+  싼 codex 모델로 우회하는 길은 **없다**(`docs/11 §7 ⑪-e`).
+- OAuth 프로바이더는 5종(`openai-codex`·`qwen-oauth`·`minimax-oauth`·`xai-oauth`·`nous`).
+  codex 외 전부 logged out 이고 **로그인이 대화형이라 Sam 이 직접 해야 한다.**
+  Sam 이 대안 백엔드를 원하면 그때 고른다 — 이번엔 시도하지 않기로 했다.
+
+### ① 로컬 모델 성적표 — 같은 카드로 갈랐다 (`docs/11 §7 ⑩·⑪`)
+
+| 모델 | 실미션 결과 |
+|---|---|
+| `gemma4:12b-mlx` | 3회 **0건** (오독 2 · 날조 1) — 프로브 7항목 100%·최속인데도 |
+| `devstral-24b-96k` | 1회 **0건** (쓰기 도구 미호출 → nudge → 날조) · 656초 |
+| **`gemma4-26b-256k`** | stage 1·2 **통과** · stage 3 샤드 5+병합본 산출(485초) — **유일하게 일을 한다** |
+| `gpt-oss-20b-128k` | stage 3 **118초 · 파일 0개** · Kanban 자식 카드 3장 생성 |
+
+⚠️⚠️ **문구로 능력을 살 수 없다**(이번 세션 최대 교훈 · `⑪-b`). 팬아웃 본문에
+"⛔ Kanban task 를 새로 만들지 마라 · 위임 ≠ 완료"를 못박은 **직후** `gpt-oss` 가
+정확히 그것을 했다. 같은 본문으로 26b 는 5샤드를 다 만들었다. **지시를 세게 쓰는 것은
+*지킬 수 있는* 모델에만 듣는다.**
+⚠️ **같은 카드를 여러 모델이 이어 돌면 카드는 증거가 아니다 — 파일 mtime 을 봐라**(`⑪-c`).
+둘 다 `done` 이었고, 누가 일했는지는 디스크만 알았다. **`park` 은 실행 중인 워커를 죽이지 않는다.**
+
+### ② M-2026-008 (`trend-report` · 보드 `m-2026-008`) — stage 3 부터 재개
+
+주제: **LLM 에이전트를 위한 지식베이스·위키 구축 동향**(Sam 지정 "llm-wiki 관련").
+
+| stage | 상태 |
+|---|---|
+| 1 Scoping | ✅ `done` · `SCOPE.md` 2.4K (커밋됨) |
+| 2 Search Strategy | ✅ `done` · `search_strategy.md` 2.5K (커밋됨) |
+| 3 Collection | ⚠️ `t_dd937c62` 원본은 `done`(산출물 0) · **`t_cbb3cffa` 3R 이 `done` 인데 결함 2건** |
+| 4~11 | `scheduled` 로 park |
+
+**stage 3 을 다시 돌려라 — 산출물에 결함이 둘 있다**(`⑪-d`):
+- ❌ `raw/sources.academic.yaml` 5건이 **날조** — URL 이 `https://arxiv.org/abs/2604.xxxxx`
+- ❌ 병합에서 5샤드 중 **2개(academic·vendor) 누락** → 병합본 11건
+- ✅ `source_balance` 가 병합 누락을 **잡는다**(academic=0<2 · vendor=0<2 → FAIL)
+
+```bash
+MID=M-2026-008; BOARD=m-2026-008
+docker exec hermes-solomon hermes kanban --board $BOARD list
+# 3R 카드를 새로 세우거나(본문은 fanout_body 로 생성) 4번부터 unblock
+```
+
+⚠️⚠️ **게이트는 URL 실재를 안 본다** — 자리표시자 URL 은 `source_balance`·`recency_check`
+**둘 다 통과한다**(`source_type`·`published_year` 가 정상이므로). 기존 날조 grep
+(`simulat|placeholder|TBD|가상의`)도 `xxxxx` 를 못 잡는다. 이번엔 **병합 누락이 우연히
+그 5건을 병합본 밖으로 밀어내** 노출되지 않았다 — **결함이 결함을 가렸다.**
+→ **남은 과제: 출처 위생 게이트**(URL 형식·자리표시자·중복·도메인 대 `source_type`).
+
+- **승인은 Claude 가 자체 판단**(Sam 위임 · Slack 도달 불가). 사유는 **다음 워커가 읽는다** —
+  운영 메모는 `[운영 메모 · 산출물 지시 아님]` 접두. 판단은 **카드가 아니라 산출물을 열어** 하라.
+- ⚠️ **단계마다 실사 + 커밋**:
+  ```bash
+  ls -la reports/$MID/ && grep -rniE "simulat|placeholder|TBD|가상의|Synthesized from|xxxxx" reports/$MID/
+  git add reports/$MID && git commit
+  ```
+- ⚠️ **`protocol violation` 이 뜨면 카드 문구로 진단하지 마라** — `kanban log <tid>` 를 봐라(`⑩-c`).
+- ⚠️ **모델 오버라이드 카드를 동시에 돌리지 마라** — `MAX_LOADED_MODELS=1`(`⑩-f ①`).
+
+### ③ 기존 미션 2건은 그대로 둔다
+`M-2026-006`·`M-2026-007` 은 park 유지(`spawned: []` 확인). 재개는 Sam 이 정한다.
+`M-2026-007` 의 stage 1 은 `done` 이지만 **산출물이 없다**(날조) — 재개 시 stage 1 부터다.
 
 ### ↩︎ 보류: M-2026-006 (아키타입 I `code-docs`) — 로컬 백엔드 첫 실미션
 
@@ -365,10 +352,28 @@ park 하라(`block` 2회는 `promoted` 로 되돌아온다 · `docs/14 §6.5 ①
 
 **⚠️ 보안 미결(변함없음)**: 진단 중 `SLACK_BOT_TOKEN` 값이 세션 로그에 노출됨 → **재발급(rotate) 권장**(Slack 앱 Regenerate → `.env` 갱신 → `docker compose up -d --force-recreate hermes-solomon hermes-gatekeeper`).
 
-**세션 상태(2026-08-06 (3) · 로컬 모델 3종 비교 · 실미션 중단):**
-커밋 `ab60a81`(12b-mlx 전환)·`bd6bde4`(devstral 전환)·`b0d1f85`(reasoning_effort 400 수정)+.
-**컨테이너 기동 · 백엔드 `ollama`/`devstral-24b-96k` 11종 · 호스트 Ollama `0.32.6` ·
-실미션 2건 모두 park · 재개는 codex 복귀(2026-08-09 14:07) 이후.**
+**세션 상태(2026-08-06 (5) · M-2026-008 착수 · gpt-oss 기각 · codex 대기):**
+커밋 `25ed214`(26b 복귀)·`1d5e6a9`(stage 1)·`142a36c`(팬아웃 프로토콜 수정)·
+`aae640a`(gpt-oss 시도)·`5b82437`(gpt-oss 기각·26b 복귀)+.
+**컨테이너 기동 · 백엔드 `ollama`/`gemma4-26b-256k` 11종 · 창 262144 · 호스트 Ollama `0.32.6` ·
+M-2026-008 은 stage 1·2 통과 후 stage 3 부터 재개 대기 · M-2026-006·007 은 park ·
+재개는 codex 복귀(2026-08-09 14:07) 이후.**
+
+2026-08-06 (4)·(5) 가 만든 것:
+| 신규 | 무엇 |
+|---|---|
+| `instantiate_template.fanout_body()` **금지 3줄** | `kanban create`·`decompose` 금지 · **위임 ≠ 완료** · **완료 조건 = `merge_to` 파일 실재**. 테스트 3종(`test_instantiate_template` **42/42**) |
+| `docs/11 §7 ⑪` | M-2026-008 전말 + **문구로 능력을 살 수 없다**(⑪-b) · **mtime 으로 모델을 가른다**(⑪-c) |
+| `test_usage_report` 픽스처 수정 | "틀린 창" 상수가 새 배치 창과 충돌해 FAIL — `OLLAMA_NUM_CTX//2` 로 파생시켰다(**상수는 언젠가 진짜 값이 된다**) |
+
+2026-08-06 (4)·(5) 가 측정으로 확인한 것:
+- ⛔ **codex 한도는 계정 전체다** — `gpt-5.4-mini` 로 호출해 **429**. 싼 모델 우회는 없다.
+- ⛔ **`gpt-oss-20b-128k` 기각** — stage 3 에서 **118초·파일 0개**·자식 카드 3장.
+  금지를 못박은 **직후**였다. 속성은 나쁘지 않다(tools·thinking · `reasoning_effort`
+  none/medium/high 전부 200 · 13GB · 천장 131072) — 다시 볼 거면 **`medium` 으로 재시험**하라.
+- ✅ **26b 는 GGUF 라 `NUM_PARALLEL` 이 실효** — 분산 0.01 · 이득 ×1.18(병렬).
+- ⚠️ **게이트는 URL 실재를 안 본다** — 자리표시자 URL(`arxiv.org/abs/2604.xxxxx`)이
+  `source_balance`·`recency_check` 를 **둘 다 통과**한다. **출처 위생 게이트가 필요하다.**
 
 2026-08-06 (3) 이 만든 것:
 | 신규 | 무엇 |
@@ -437,23 +442,26 @@ park 하라(`block` 2회는 `promoted` 로 되돌아온다 · `docs/14 §6.5 ①
 로그인 세션 단위라 **재부팅하면 사라진다.** `usage_report.py` 가 잡아 준다.
 
 ```bash
-git log --oneline -8                     # HEAD: reasoning_effort 400 수정 + 로컬 모델 3종 비교
-python3 scripts/set_backend.py --show    # ★ ollama · devstral-24b-96k · 11종 (exit 1 이면 불일치)
+git log --oneline -8                     # HEAD: gpt-oss 기각 · 26b 복귀
+python3 scripts/set_backend.py --show    # ★ ollama · gemma4-26b-256k · 11종 (exit 1 이면 불일치)
 python3 scripts/usage_report.py          # ★ exit 0 + '서버 실효 설정 5종 일치'
 docker compose ps                        # hermes-solomon · hermes-gatekeeper Up
-# ★ 두 보드 모두 활성 카드가 없어야 한다(spawned 가 비어야 한다 — 상태 표시와 별개다)
-for b in m-2026-006 m-2026-007; do docker exec hermes-solomon hermes kanban --board $b dispatch --dry-run --json; done
+# ★ 세 보드 모두 활성 카드가 없어야 한다(spawned 가 비어야 한다 — 상태 표시와 별개다)
+for b in m-2026-006 m-2026-007 m-2026-008; do docker exec hermes-solomon hermes kanban --board $b dispatch --dry-run --json; done
 docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/lint_template.py --all'        # 20/20
 docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/preflight_gates.py --all'      # 누출 0
 docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/lint_gate_drafts.py'           # 미해결 FAIL 8
 docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/fixtures/run_all.py'     # 14/14
+docker exec hermes-solomon sh -c 'cd /work/company && python3 scripts/tests/test_instantiate_template.py'  # 42/42
 python3 scripts/tests/test_set_backend.py && python3 scripts/tests/test_usage_report.py              # 34 · 27
 curl -s -o /dev/null -w '%{http_code}\n' --max-time 8 https://slack.com/api/auth.test               # 200 이면 정상
 ```
 
-**→ 다음 할 일은 '★ 다음 세션 지시' 다** — `gemma4-26b-256k` 로 되돌리고(창도 262144 로 함께)
-`trend-report` 로 **M-2026-008** 실미션. 승인은 Claude 자체 판단.
+**→ 다음 할 일: `codex` 복원(2026-08-09 14:07)을 기다린다.** 그때 `--backend codex` 로
+되돌리고 **M-2026-008 을 stage 3 부터** 재개한다(위 '② M-2026-008' 참조).
 기존 미션 2건(M-2026-006·007)은 park 유지 — 재개는 Sam 이 정한다.
+**LLM 없이 할 수 있는 백로그**: 출처 위생 게이트(`⑪-d`) · 성장 지표 대시보드 ·
+하네스 draft 드리프트 FAIL 8.
 ⚠️ **Slack 은 2026-08-06 기준 다시 도달 불가**(`curl 000`). 승인 게이트 자동 게시가 안 되므로
 **게이트 승인은 Claude 가 직접 한다**(Sam 위임 2026-08-05).
 
