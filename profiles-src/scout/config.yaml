@@ -7,6 +7,19 @@ model:
   base_url: "https://chatgpt.com/backend-api/codex"
 agent:
   max_turns: 150
-  reasoning_effort: low
+  reasoning_effort: medium
 
 
+
+platform_toolsets:
+  cli:
+    - browser
+    - clarify
+    - code_execution
+    - delegation
+    - file
+    - memory
+    - skills
+    - terminal
+    - todo
+    - web

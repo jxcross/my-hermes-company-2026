@@ -479,6 +479,63 @@ def test_active_backend_helper_on_real_repo_shape():
     assert sb.active_backend(d) == "ollama"
 
 
+# ── 툴셋 (한도 절감) ────────────────────────────────────────────────────────
+def test_toolsets_are_written_for_named_profiles():
+    """★ 도구 스키마는 **매 턴** 실려 나간다 — 프로필별로 좁혀야 한도가 준다.
+
+    실측 2026-08-06 (6): 전체 31종 92,157 B/턴 → 정리 후 61,348 B/턴(**−33.4%**).
+    `cache_read` 가 codex 소비의 85% 이고 접두에 선형이라 총 소비 ~27% 절감.
+    """
+    d = _repo()
+    path = os.path.join(d, "profiles-src", "reader", "config.yaml")
+    sb.apply_to_file(path, "codex", "gpt-5.6-terra", with_header=True, profile="reader")
+    text = _read(path)
+    assert "platform_toolsets:" in text and "  cli:" in text, text
+    for keep in ("terminal", "file", "delegation", "web"):
+        assert f"    - {keep}" in text, (keep, text)
+    for drop in ("computer_use", "image_gen", "tts", "vision", "session_search"):
+        assert f"    - {drop}" not in text, (drop, text)
+
+
+def test_only_scout_keeps_browser():
+    """★ 수집 단계만 브라우저가 필요하다 — 6.4KB 를 아끼려 미션 능력을 깎지 않는다."""
+    d = _repo()
+    for profile, want in (("scout", True), ("reader", False)):
+        path = os.path.join(d, "profiles-src", profile, "config.yaml")
+        sb.apply_to_file(path, "codex", "gpt-5.6-terra", with_header=True, profile=profile)
+        assert (("    - browser" in _read(path)) is want), (profile, _read(path))
+
+
+def test_default_profile_toolsets_are_left_alone():
+    """★ `default` 는 루트 config 라 `platform_toolsets` 를 cli·slack 과 **공유**한다.
+
+    setup 마법사가 관리하는 영역이므로 덮어쓰면 미션 밖 동작까지 바꾼다.
+    """
+    assert sb.profile_toolsets("default") is None
+    assert sb.render_toolsets_block("default") is None
+
+
+def test_toolsets_untouched_when_profile_not_given():
+    """★ profile 인자가 없으면 이 블록을 만들지 않는다 — 기존 호출부를 바꾸지 않는다."""
+    d = _repo()
+    path = os.path.join(d, "profiles-src", "reader", "config.yaml")
+    sb.apply_to_file(path, "codex", "gpt-5.6-terra", with_header=True)
+    assert "platform_toolsets" not in _read(path)
+
+
+def test_toolsets_declaration_has_no_duplicates_and_keeps_delegation():
+    """★ `delegation` 이 빠지면 스테이지 내 팬아웃이 통째로 죽는다 — 불변식으로 못박는다."""
+    assert "delegation" in sb.TOOLSETS_COMMON
+    assert len(sb.TOOLSETS_COMMON) == len(set(sb.TOOLSETS_COMMON))
+    for profile, extra in sb.TOOLSETS_EXTRA.items():
+        assert not (set(extra) & set(sb.TOOLSETS_COMMON)), f"{profile} 이 공통과 겹친다"
+        assert profile in profile_of_tier_names(), f"{profile} 은 등록된 프로필이 아니다"
+
+
+def profile_of_tier_names():
+    return set(sb.profile_of_tier())
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

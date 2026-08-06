@@ -30,9 +30,31 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
   | 검증자 | fact-checker·reviewer·tester | **`gpt-5.6-terra`** | `gemma4-26b-256k` |
   | 코더 | architect·developer | **`gpt-5.6-terra`** | `gemma4-26b-256k` |
 
-  **추론강도: codex → `low` · ollama → `none`**(`BACKENDS[*]["patch_keys"]`).
+  **추론강도: codex → `medium` · ollama → `none`**(`BACKENDS[*]["patch_keys"]`).
   ⚠️ **배치와 추론강도는 함께 선언된 한 쌍이다** — 모델만 바꾸고 강도를 잊으면 조용히 약해진다.
-  `low` 는 Sam 지시(2026-08-06 (6) · 이전 `medium`). 한도 소진을 겪은 뒤의 선택이다.
+
+  ⚠️⚠️ **한도 걱정으로 추론강도를 낮추지 마라 — 손잡이가 아니다(2026-08-06 (6) 실측).**
+  `hermes insights` 를 모델별로 갈라 보면 `gpt-5.6-terra` 26세션이:
+  input 1.40M · **cache_read 8.24M(85%)** · **output 89,576(0.92%)**.
+  `insights.py:421` 이 `total = input+output+cache_read+cache_write` 로 집계하고
+  **추론 토큰은 output 에 들어간다** — 즉 `low` 로 내려도 소비의 **1% 미만**을 건드린다.
+  Sam 지시로 `low` 를 걸었다가 이 측정을 보고 `medium` 으로 되돌렸다.
+
+  ✅ **진짜 손잡이는 `TOOLSETS_COMMON`(`set_backend.py`)** — 도구 스키마는 **매 턴** 실려 나간다.
+  `hermes prompt-size` 를 **워커 시점(cwd=미션 디렉터리)** 에서 잰 값:
+  | 프로필 | 전 | 후 | 절감 |
+  |---|---|---|---|
+  | `scout`(browser 유지) | 92,157 B | **67,808 B** | −26.4% |
+  | 그 외 named 9종 | 92,157 B | **59,656 B** | −35.3% |
+
+  뺀 것: `computer_use`(9.7KB)·`session_search`·`image_gen`·`tts`·`vision`·`bfl`·`cronjob`.
+  **근거는 사용 이력**(툴콜 551건 중 상위 15개가 543건 · 뺀 것들은 사실상 0).
+  `cache_read` 가 접두에 선형이므로 **총 한도 소비 ~26% 절감** 기대.
+  ⚠️ `default`(Solomon)은 **일부러 제외** — 루트 config 라 `platform_toolsets` 를
+  cli·slack 과 공유하고 setup 마법사가 관리한다.
+  ⚠️ **`CLAUDE.md` 는 워커 프롬프트에 안 들어간다** — cwd 전용이라 미션 워크스페이스에서는
+  로드되지 않는다(컨텍스트 티어 1.8KB). 저장소 루트에서 재면 57KB 로 보이는데 **그건
+  cli·slack 세션 얘기**다(전체 토큰의 4.4%). 문서를 줄여 한도를 아끼려 하지 마라.
 
   ⛔ **지금 codex 는 한도 소진 상태다 — 리셋 2026-08-09 14:07**(`usage_report.py` exit 1).
   `gpt-5.6-terra` 배치는 **리셋 이후에 실제로 검증된다.** 한도는 **계정 전체**라

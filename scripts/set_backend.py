@@ -141,6 +141,49 @@ HOST_ENV_OMITTED: dict[str, str] = {
 #    그리고 <512K 창에서는 0.75 로 하한이 강제되므로 0.75 이하 값은 의미가 없다.
 COMPRESSION_THRESHOLD = 0.85
 
+# ── 프로필 툴셋 (한도 절감) ─────────────────────────────────────────────────
+# ⚠️⚠️ **도구 스키마는 매 턴 다시 실려 나간다 — 한도의 진짜 주범이다(2026-08-06 (6) 실측).**
+#    `hermes insights` 를 모델별로 갈라 보면 codex 소비의 정체가 드러난다:
+#        `gpt-5.6-terra` 26세션 · input 1.40M · **cache_read 8.24M(85%)** · output 89,576(**0.92%**)
+#    `insights.py:421` 이 `total = input + output + cache_read + cache_write` 로 집계한다.
+#    **추론 토큰은 output 에 들어가는데 1% 미만**이다 — 즉 `reasoning_effort` 는 한도
+#    손잡이가 **아니다**. 재전송되는 고정 접두(`cache_read`)가 85% 다.
+#
+# `hermes prompt-size` 로 워커 시점(cwd=미션 디렉터리)에서 잰 값:
+#        전체 31종  → 시스템 30,973 B + 도구 61,184 B = **92,157 B/턴**
+#        정리 후    → 시스템 25,542 B + 도구 42,253 B = 67,795 B (**−26.4%**, browser 유지)
+#        browser 도 빼면 → 35,806 B(16종) = **61,348 B (−33.4%)**
+#    `cache_read` 가 접두에 선형이므로 총 한도 소비 **~27% 절감**이 기대된다.
+#
+# ⚠️ **뺀 근거는 사용 이력이다** — 5일간 툴콜 551건 중 상위 15개가 543건이고,
+#    `computer_use`·`image_gen`·`tts`·`vision`·`session_search`(4건)는 사실상 안 쓴다.
+# ⚠️ **`browser` 는 `scout` 에만 남긴다** — 수집 단계가 웹을 실제로 다룬다. 6.4KB 를
+#    아끼려고 미션 능력을 깎지 않는다(추론강도에서 배운 것과 같은 판단).
+# ⚠️ **`default`(Solomon)에는 쓰지 않는다** — 그 config 는 루트 `hermes-home/config.yaml`
+#    이고 `platform_toolsets` 를 cli·slack 세션과 **공유**한다. setup 마법사가 관리하는
+#    영역이라 우리가 덮어쓰면 미션 밖 동작까지 바꾼다. 대신 named 프로필 10종에만 건다.
+TOOLSETS_COMMON = [
+    "web",            # 검색·스크레이프 — 수집·검증의 기본
+    "terminal",       # 최다 사용(147콜·26.7%)
+    "file",           # read/write/search (143+88콜)
+    "code_execution", # 게이트·집계 스크립트
+    "skills",         # llm-wiki 등 스킬
+    "todo",
+    "memory",         # 누적 Memory = 전문화 4계층 중 하나
+    "clarify",
+    "delegation",     # 스테이지 내 팬아웃의 전제
+]
+TOOLSETS_EXTRA: dict[str, list[str]] = {
+    "scout": ["browser"],   # 수집 담당만 브라우저 자동화 유지
+}
+
+
+def profile_toolsets(profile: str) -> list[str] | None:
+    """프로필이 쓸 툴셋. `None` 이면 건드리지 않는다(= Hermes 기본값)."""
+    if profile == "default":
+        return None
+    return sorted(TOOLSETS_COMMON + TOOLSETS_EXTRA.get(profile, []))
+
 # 파생 모델 → {원본, Modelfile 에 못박을 창, 모델 천장}. `--build-models` 가 없는 것만 만든다.
 #
 # ⚠️ **`ceiling` 은 추측이 아니라 실측이다** — `curl /api/show` 의 `<family>.context_length`.
@@ -222,12 +265,16 @@ BACKENDS: dict[str, dict] = {
             "base_url": "https://chatgpt.com/backend-api/codex",
         },
         # codex 로 돌아가면 추론 강도를 되살린다 — ollama 가 "none" 으로 낮춰 두기 때문이다.
-        # ⚠️ **`low` 는 Sam 지시다(2026-08-06 (6))** — 이전 값은 `medium` 이었다.
-        #    한도 소진을 겪은 뒤의 선택이므로 **토큰 절약이 의도**라고 읽는다.
+        # ⚠️ **`low` 로 내렸다가 `medium` 으로 되돌렸다(2026-08-06 (6)).** Sam 이 한도를
+        #    걱정해 `low` 를 지시했는데, **측정해 보니 추론은 한도 손잡이가 아니었다** —
+        #    `gpt-5.6-terra` 26세션에서 output(추론 포함)이 소비의 **0.92%** 다.
+        #    아끼는 몫이 1% 미만인데 오늘 무너진 지점(위임 프로토콜 이해·샤드 병합·
+        #    원문 대조)은 전부 **이해력**이 필요한 작업이라 손실이 절감보다 크다.
+        #    → 한도는 `TOOLSETS_COMMON`(매 턴 접두 −33%)으로 잡고, 추론은 품질로 고른다.
         #    ⚠️ 되돌릴 때 `models` 3줄만 바꾸고 이 줄을 잊지 마라 — 배치와 추론강도는
         #    **함께 선언된 한 쌍**이다(모델만 올리고 강도를 낮게 두면 조용히 약해진다).
         "patch_keys": {
-            "agent": {"reasoning_effort": "low"},
+            "agent": {"reasoning_effort": "medium"},
         },
         "header": [
             "# named 프로필은 루트(default) config 를 상속하지 않으므로 provider/model 을 명시한다.",
@@ -461,6 +508,19 @@ def render_extra_block(backend: str, name: str) -> list[str]:
                            for k, v in BACKENDS[backend].get("extra_blocks", {})[name].items()]
 
 
+def render_toolsets_block(profile: str) -> list[str] | None:
+    """`platform_toolsets:` — 매 턴 실려 나가는 도구 스키마를 프로필별로 좁힌다.
+
+    ⚠️ 플랫폼 키는 **`cli` 다.** kanban 워커는 별도 플랫폼처럼 보이지만(`hermes insights`
+       의 Platforms 표) `hermes tools --platform kanban` 은 **거부된다** — 툴셋 해석은
+       `cli` 로 떨어진다. 실측으로 확인했다(이 키로 넣었더니 31→26종으로 줄었다).
+    """
+    sets = profile_toolsets(profile)
+    if sets is None:
+        return None
+    return ["platform_toolsets:", "  cli:"] + [f"    - {s}" for s in sets]
+
+
 def patch_block_keys(lines: list[str], backend: str) -> list[str]:
     """`patch_keys` 선언대로 **블록 안의 그 키 한 줄만** 바꾼다.
 
@@ -493,8 +553,13 @@ def patch_block_keys(lines: list[str], backend: str) -> list[str]:
     return out
 
 
-def apply_to_file(path: str, backend: str, model: str, with_header: bool) -> tuple[bool, str]:
-    """(변경됨?, 메시지). 파일이 없으면 (False, 사유)."""
+def apply_to_file(path: str, backend: str, model: str, with_header: bool,
+                  profile: str | None = None) -> tuple[bool, str]:
+    """(변경됨?, 메시지). 파일이 없으면 (False, 사유).
+
+    `profile` 을 주면 `platform_toolsets:` 도 함께 쓴다(한도 절감 · 위 TOOLSETS_COMMON).
+    안 주면 그 블록은 **손대지 않는다** — 기존 호출부·테스트의 동작을 바꾸지 않기 위해서다.
+    """
     if not os.path.isfile(path):
         return False, "파일 없음"
     with open(path, encoding="utf-8") as fh:
@@ -519,6 +584,11 @@ def apply_to_file(path: str, backend: str, model: str, with_header: bool) -> tup
             span = find_block(lines, name)
             if span:
                 lines = lines[:span[0]] + lines[span[1]:]
+
+    if profile is not None:
+        block = render_toolsets_block(profile)
+        if block is not None:
+            lines = splice(lines, "platform_toolsets", block)
 
     new_lines = lines
     new_text = "\n".join(new_lines) + "\n"
@@ -686,7 +756,8 @@ def cmd_apply(repo_root: str, backend: str, dry_run: bool) -> int:
                 missing += 1
             print(f"  {profile:<14}{model:<20}{status:<10}{rel}")
             continue
-        did, msg = apply_to_file(path, backend, model, with_header=(kind == "src"))
+        did, msg = apply_to_file(path, backend, model, with_header=(kind == "src"),
+                                 profile=profile)
         if msg == "파일 없음":
             missing += 1
         elif did:
