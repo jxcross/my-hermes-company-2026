@@ -52,6 +52,10 @@
       커밋 <code>ab60a81</code>·<code>dcd75a2</code>·<code>bd6bde4</code>·<code>e9a8484</code>·<code>b0d1f85</code>·<code>fad4acb</code>. 검증: <code>test_set_backend</code> <b>34/34</b> · <code>test_usage_report</code> <b>27/27</b> · <code>lint_template</code> <b>20/20</b> · <code>preflight_gates</code> exit 0 · E2E <b>14/14</b>.
       <b>같은 카드로 통제 비교한 성적표</b> — <code>gemma4:12b-mlx</code> 3회 <b>0건</b>(오독 2·날조 1) · <code>devstral-24b-96k</code> 1회 <b>0건</b>(쓰기 미호출→nudge→날조) · <code>gemma4-26b-256k</code> 1회 <b>성공</b>(정책값까지 정확).
       <b>Sam 결정: 실미션은 codex 복귀(2026-08-09 14:07) 후에 한다.</b> 미션 2건 모두 park(<code>spawned: []</code> 확인).
+      <b>추가 — Sam 질문 "모델 문제인가 templates 문제인가"를 통제 실험으로 갈랐다:</b>
+      <code>academic-paper</code> stage 1 카드를 <b>본문 한 글자 안 바꾸고</b> 실미션과 동일한 워크스페이스 모양(<code>…/reports/M-2026-007/</code> + <code>pipeline.json</code>)에서 <code>gemma4-26b-256k</code> 로 재현 → <b>SCOPE.md 2013B 산출 성공</b>(정책값까지 <code>pipeline.json</code> 에서 정확히 인용 · 날조 0건). <b>실미션 카드와 모델 하나만 다른 조건이다 → 템플릿은 결백하고 변수는 모델이다.</b>
+      부수로 진짜 결함 하나를 찾아 고쳤다 — <code>resolve()</code> 가 <code>body</code> 의 <code>&lt;MID&gt;</code> 를 치환하지 않아 <b>20/20 템플릿 · 47 stage</b> 가 워커에게 <code>reports/&lt;MID&gt;/SCOPE.md</code> 를 문자 그대로 보내고 있었다(<code>ee5ea6a</code> · 회귀 2종 · 검출기 검증 131→0건). <b>codex 가 문맥으로 흡수해 줘서 내내 안 보였고, <code>trend-report</code> 는 이 상태로 <code>proven</code> 딱지를 받았다.</b>
+      ⚠️ <b>이 결론에 이르기까지 실험을 두 번 망쳤고 그 사이 결론을 한 번 뒤집었다</b> — ① <code>MAX_LOADED_MODELS=1</code> 인데 다른 모델 카드 2장을 동시에 띄워 로딩 스래싱 ② 워크스페이스를 빈 디렉터리로 만들어, 워커의 <b>정확한 보고</b>("pipeline.json 이 없다")를 "26b 도 실패"로 오독. <b>통제 실험은 조건을 실제와 같게 만드는 것이 절반이다 — 내 장치부터 의심하라.</b>
       <b>교훈 다섯:</b> ① <b>프로브 100% 는 과제 이행을 보증하지 않는다</b> — 배치 채택 기준에 "실미션 stage 1 통과"를 넣어라. ② <b>관측 가능한 실패를 관측 불가능하게 만드는 개선은 개선이 아니다</b> — nudge 가 <code>protocol violation</code> 을 거짓 <code>done</code> 으로 바꿨다(⑧-d 의 발생 경로를 특정). ③ <b>실패 문구는 증상이다 — 로그를 봐라.</b> ④ <b>픽스처가 현실과 다르면 테스트는 없는 세계를 지킨다.</b> ⑤ <b>자원 비용·런타임 특성은 모델마다 다시 재라.</b>
     </div>
   </div>

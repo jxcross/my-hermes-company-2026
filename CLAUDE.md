@@ -111,7 +111,75 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 
 ---
 
-## ▶ 이어서 할 일 (2026-08-06 (3) 갱신 · **실미션은 codex 복귀까지 중단**)
+## ▶ 이어서 할 일 (2026-08-06 (3) 세션 핸드오프)
+
+### ★ 다음 세션 지시 (Sam · 2026-08-06 세션 끝)
+
+> "일단 codex 복원되기 전까지는 **`gemma4-26b-256k`** 로 하자. 이 모델로 전부 바꾸고,
+> **`trend-report.yaml` 예제로 실제 미션 테스트**하라. **승인은 네가 판단하여 자체적으로** 하라."
+
+**왜 26b 인가**: 통제 실험(`docs/11 §7 ⑩-f`)에서 **로컬 모델 중 유일하게 실미션 stage 를
+이행한** 모델이다. 12b-mlx·devstral 은 같은 카드에서 산출물 0건이었다.
+**왜 `trend-report` 인가**: 유일한 **`proven`** 템플릿이다(M-2026-003·004 가 11/11 완주).
+템플릿 변수를 제거하고 **모델만** 시험하는 배치다.
+
+#### ① 배치 되돌리기 — 4곳을 함께 고쳐야 한다 (`scripts/set_backend.py`)
+
+⚠️ **창도 같이 올려야 한다.** devstral 때문에 `OLLAMA_NUM_CTX` 를 98304 로 낮춰 뒀는데,
+`gemma4-26b-256k` 는 이름이 창(262144)을 담고 있어 **테스트가 불일치를 FAIL 시킨다**
+(`test_deployed_models_pin_the_same_window_as_the_config`). 26b 는 262144 에서 17.9GB·100% GPU 로
+확인됐다(devstral 은 같은 창에서 83GB 라 못 썼던 것이다).
+
+```python
+OLLAMA_NUM_CTX = 262144                    # ← 98304 에서 되돌린다
+
+BASE_MODELS = {
+    "gemma4-26b-256k": {"base": "gemma4:26b", "num_ctx": 262144, "ceiling": 262144},  # ← 복원
+    "devstral-24b-96k": {...},             # 폴백으로 남긴다(측정 기록 보존)
+    ...
+}
+
+BACKENDS["ollama"]["models"] = {"writer"/"verifier"/"coder": "gemma4-26b-256k"}       # ← 3줄
+```
+`scripts/probe_parallel.py:_default_model()` 의 **폴백 문자열**도 함께(표는 자동으로 따라온다).
+
+```bash
+python3 scripts/set_backend.py --build-models      # blob 이 남아 있어 "이미 있음" 이 뜬다
+python3 scripts/set_backend.py --backend ollama && python3 scripts/set_backend.py --show   # exit 0
+python3 scripts/tests/test_set_backend.py && python3 scripts/tests/test_usage_report.py    # 34 · 27
+docker compose up -d --force-recreate hermes-solomon hermes-gatekeeper
+ollama ps                                          # ★ 창 262144 · ~17.9GB · 100% GPU 확인
+```
+
+#### ② 실미션 M-2026-008 (`trend-report`)
+
+```bash
+MID=M-2026-008; TPL=trend-report; BOARD=m-2026-008
+python3 scripts/usage_report.py                                        # exit 0 + 서버 설정 5종 일치
+docker exec hermes-solomon sh -c "cd /work/company && python3 scripts/preflight_gates.py $TPL"
+docker exec hermes-solomon sh -c "cd /work/company && python3 scripts/lint_template.py $TPL"
+docker exec hermes-solomon sh -c "cd /work/company && python3 scripts/instantiate_template.py $TPL $MID --topic '…' --dry-run --render mermaid"
+docker exec hermes-solomon sh -c "cd /work/company && python3 scripts/instantiate_template.py $TPL $MID --topic '…' --board $BOARD"
+```
+
+- **승인은 Claude 가 자체 판단**(Sam 위임 재확인 2026-08-06). Slack 대기 없이
+  `hermes kanban --board $BOARD unblock <tid> --reason "…"`. ⚠️ 사유는 **다음 워커가 읽는다** —
+  운영 메모는 `[운영 메모 · 산출물 지시 아님]` 접두. 판단은 **카드가 아니라 산출물을 열어** 하라.
+- ⚠️ **단계마다 실사 + 커밋**(워커의 완료 보고는 증거가 아니다 · `docs/11 §7 ⑧-d·⑩-b`):
+  ```bash
+  ls -la reports/$MID/ && grep -rniE "simulat|placeholder|TBD|가상의|Synthesized from" reports/$MID/
+  git add reports/$MID && git commit
+  ```
+- ⚠️ **`protocol violation` 이 뜨면 카드 문구로 진단하지 마라** — `hermes kanban --board $BOARD log <tid>`
+  를 봐라. 지난 세션에 그 문구의 진짜 원인이 HTTP 400 이었다(`⑩-c`).
+- ⚠️ **모델 오버라이드가 다른 카드를 동시에 돌리지 마라** — `MAX_LOADED_MODELS=1` 이라
+  서로를 밀어내며 로딩만 반복한다(`⑩-f ①`). 필요하면 `schedule` 로 직렬화.
+
+#### ③ 기존 미션 2건은 그대로 둔다
+`M-2026-006`·`M-2026-007` 은 park 상태 유지(`spawned: []` 확인됨). 재개는 Sam 이 정한다.
+`M-2026-007` 의 stage 1 은 `done` 이지만 **산출물이 없다**(날조) — 재개 시 stage 1 부터다.
+
+---
 
 ### ⛔ 지금 상태 — 먼저 읽어라
 
@@ -378,7 +446,9 @@ python3 scripts/tests/test_set_backend.py && python3 scripts/tests/test_usage_re
 curl -s -o /dev/null -w '%{http_code}\n' --max-time 8 https://slack.com/api/auth.test               # 200 이면 정상
 ```
 
-**→ 실미션은 중단 상태다.** codex 복귀(2026-08-09 14:07) 전까지 재개하지 않는다(위 '⛔ 지금 상태' 참조).
+**→ 다음 할 일은 '★ 다음 세션 지시' 다** — `gemma4-26b-256k` 로 되돌리고(창도 262144 로 함께)
+`trend-report` 로 **M-2026-008** 실미션. 승인은 Claude 자체 판단.
+기존 미션 2건(M-2026-006·007)은 park 유지 — 재개는 Sam 이 정한다.
 ⚠️ **Slack 은 2026-08-06 기준 다시 도달 불가**(`curl 000`). 승인 게이트 자동 게시가 안 되므로
 **게이트 승인은 Claude 가 직접 한다**(Sam 위임 2026-08-05).
 
