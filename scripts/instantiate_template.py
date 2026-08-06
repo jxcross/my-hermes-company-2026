@@ -215,13 +215,56 @@ def check_invariants(tpl: dict) -> list[str]:
         if s.get("sam_gate") and is_gated_downstream(s, stages):
             errs.append(f"게이트 겹침: stage {s['id']}({s['name']})에 sam_gate 와 검증 게이트가 동시 — "
                         f"승인 지점을 인접 stage 로 분리하라")
+    # 게시 대상 하드코딩 금지 — **플랫폼 도달성은 환경이 정한다**(2026-08-07 Discord 병렬 도입).
+    # ⚠️ 이 불변식이 없으면 새 템플릿이 다시 `slack:#mission-log` 를 박아도 아무도 못 잡는다.
+    #    린터는 본문 텍스트를 보지 않으므로 여기(단일 진실)에 둔다 — `docs/13 §5`.
+    for s in stages:
+        b = s.get("body") or ""
+        if "hermes send --to slack:" in b or "hermes send --to discord:" in b:
+            errs.append(f"게시 대상 하드코딩: stage {s['id']}({s['name']}) — "
+                        f"`<NOTIFY_CMDS>` 를 쓰라(인스턴스화 시 환경에 맞게 전개된다)")
     return errs
 
 
-def resolve(tpl: dict, mid: str) -> dict:
-    """<MID> 치환 등 미션별 해석."""
+def default_notify_targets() -> list[str]:
+    """게시 대상(`hermes send --to`). **환경이 진실이다.**
+
+    ⚠️ Discord 를 먼저 둔다 — 회사망에서 slack.com 이 차단돼 실제로 읽히는 쪽이 Discord 다.
+    ⚠️ Slack 기본값을 남겨 두면 Discord 미설정 환경에서 카드 본문이 **오늘과 동일**하다
+       (골든 테스트가 이를 강제한다)."""
+    out = []
+    d = os.environ.get("TEMPLATE_NOTIFY_DISCORD", os.environ.get("GATE_KEEPER_DISCORD", ""))
+    if d:
+        out.append(d)
+    s = os.environ.get("TEMPLATE_NOTIFY_SLACK", "slack:#mission-log")
+    if s:
+        out.append(s)
+    return out
+
+
+def notify_cmds_text(targets: list[str]) -> str:
+    """`<NOTIFY_CMDS>` 전개. 대상이 1개면 **오늘의 문장과 글자 그대로 같다.**
+
+    ⚠️ 대상이 2개일 때 "명령을 두 번 쳐라"를 모델이 스스로 유도하게 두면 한 번만 치는
+       사고가 난다. 팬아웃 프로토콜에서 이미 같은 교훈이 나왔다 — **추측에 맡기지 않는다.**"""
+    lines = [f'`hermes send --to {t} "<요약+커밋링크>"`' for t in targets]
+    if not lines:
+        return "(게시 대상이 설정되지 않았다 — 게시를 건너뛰고 그 사실을 보고하라)"
+    if len(lines) == 1:
+        return lines[0]
+    return ("아래를 **모두** 실행하라(하나가 실패해도 나머지를 실행하라 — "
+            "채널마다 도달성이 다르다):\n" + "\n".join(f"· {ln}" for ln in lines))
+
+
+def resolve(tpl: dict, mid: str, targets: list[str] | None = None) -> dict:
+    """<MID>·<NOTIFY_CMDS> 치환 등 미션별 해석.
+
+    ⚠️ `targets` 는 기본값을 둔다 — 기존 2인자 호출(테스트 3곳)이 그대로 동작해야 한다."""
+    cmds = notify_cmds_text(default_notify_targets() if targets is None else targets)
+
     def sub(x):
-        return x.replace("<MID>", mid) if isinstance(x, str) else x
+        return x.replace("<MID>", mid).replace("<NOTIFY_CMDS>", cmds) \
+            if isinstance(x, str) else x
     stages = []
     for s in tpl.get("stages", []):
         s2 = dict(s)

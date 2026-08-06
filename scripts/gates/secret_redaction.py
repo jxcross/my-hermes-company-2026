@@ -63,6 +63,13 @@ SECRET_PATTERNS: dict[str, tuple[str, str]] = {
     "AWS 액세스키": (r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b", "AWS 키 ID"),
     "GitHub 토큰": (r"\bgh[pousr]_[A-Za-z0-9]{20,}\b", "GitHub PAT"),
     "Slack 토큰": (r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b", "Slack 토큰"),
+    # Discord 봇 토큰: <base64(snowflake)>.<base64(timestamp)>.<hmac>
+    # 현행 토큰은 'MT'로 시작한다(스노플레이크가 1로 시작 → base64 선두가 MT).
+    # ⚠️ 접두 앵커가 없으면 JWT 에서 eyJ 를 뗀 것과 같아져 **점 있는 해시·식별자를
+    #    오탐**한다(a.b.c 모양은 흔하다). 앵커는 경험적이므로 정상 픽스처로 PASS 를
+    #    반드시 확인하라 — 어떤 입력에도 FAIL 하는 게이트는 파이프라인을 막는다.
+    "Discord 봇 토큰": (r"\bM[TN][A-Za-z0-9_-]{21,26}\."
+                       r"[A-Za-z0-9_-]{6,7}\.[A-Za-z0-9_-]{27,}\b", "Discord 봇 토큰"),
     "OpenAI 키": (r"\bsk-[A-Za-z0-9]{20,}\b", "API 키"),
     "JWT": (r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b", "서명된 토큰"),
     "자격증명 대입": (r"(?i)\b(?:password|passwd|secret|api[_-]?key|token)\s*[:=]\s*"

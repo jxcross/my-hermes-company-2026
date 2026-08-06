@@ -133,4 +133,4 @@ stages:
     sam_gate: true
     approval_artifact: "reports/<MID>/docs/api-ref.md"
     upstream: [9]
-    body: "① 번들 조립 `reports/<MID>/docs-bundle/`: docs/*.md 전부 · graph.md · symbols.md · coverage-report.md(커버리지·미문서화 심볼 목록) · README.md(묶음 안내와 읽는 순서). ② 커밋 + git push(컨테이너 GITHUB_TOKEN 자격) + Slack 요약. ⚠️ Slack 요약에 **커버리지 수치 · 미문서화 심볼 수 · 문서 종류별 분량**을 포함하라. ⚠️ Slack 게시는 반드시 `hermes send --to slack:#mission-log \"<요약+커밋링크>\"`(Web API)로 하라 — 에이전트 slack 도구는 인바운드 Socket Mode 어댑터에 의존해 실패할 수 있다(현재 flapping)."
+    body: "① 번들 조립 `reports/<MID>/docs-bundle/`: docs/*.md 전부 · graph.md · symbols.md · coverage-report.md(커버리지·미문서화 심볼 목록) · README.md(묶음 안내와 읽는 순서). ② 커밋 + git push(컨테이너 GITHUB_TOKEN 자격) + 미션 로그 요약. ⚠️ 미션 로그 요약에 **커버리지 수치 · 미문서화 심볼 수 · 문서 종류별 분량**을 포함하라. ⚠️ 게시는 반드시 아래 CLI 로 하라 — 에이전트의 slack/discord 도구는 인바운드 어댑터에 의존해 실패할 수 있다. <NOTIFY_CMDS>"

@@ -195,4 +195,4 @@ stages:
     sam_gate: true
     approval_artifact: "reports/<MID>/docs/contract.md"
     upstream: [10]
-    body: "① 번들 조립 `reports/<MID>/legal-bundle/`: docs/*.md 전부 · clause-coverage.md(조항 충족 표) · risk.md · law-citations.md(인용 법령·판례 목록과 출처) · **usage-disclaimer.md(필수)** · fill-in-guide.md(**플레이스홀더 목록과 채워 넣을 값 안내** — 실제 개인정보는 여기에도 적지 않는다). ② 커밋 + git push(컨테이너 GITHUB_TOKEN 자격) + Slack 요약. ⚠️ **push 전에 개인정보 평문이 없는지 다시 확인하라** — 저장소는 PUBLIC 이고 push 는 되돌릴 수 없다. ⚠️ Slack 요약에 '변호사 검토 필수'를 명시하라. ⚠️ Slack 게시는 반드시 `hermes send --to slack:#mission-log \"<요약+커밋링크>\"`(Web API)로 하라 — 에이전트 slack 도구는 인바운드 Socket Mode 어댑터에 의존해 실패할 수 있다(현재 flapping)."
+    body: "① 번들 조립 `reports/<MID>/legal-bundle/`: docs/*.md 전부 · clause-coverage.md(조항 충족 표) · risk.md · law-citations.md(인용 법령·판례 목록과 출처) · **usage-disclaimer.md(필수)** · fill-in-guide.md(**플레이스홀더 목록과 채워 넣을 값 안내** — 실제 개인정보는 여기에도 적지 않는다). ② 커밋 + git push(컨테이너 GITHUB_TOKEN 자격) + 미션 로그 요약. ⚠️ **push 전에 개인정보 평문이 없는지 다시 확인하라** — 저장소는 PUBLIC 이고 push 는 되돌릴 수 없다. ⚠️ 미션 로그 요약에 '변호사 검토 필수'를 명시하라. ⚠️ 게시는 반드시 아래 CLI 로 하라 — 에이전트의 slack/discord 도구는 인바운드 어댑터에 의존해 실패할 수 있다. <NOTIFY_CMDS>"

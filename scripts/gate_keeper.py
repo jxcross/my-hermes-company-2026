@@ -37,6 +37,7 @@ import re
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -69,9 +70,92 @@ DENY_WORDS = ("반려", "거부", "보류", "reject", "hold")   # 승인 오탐 
 TASK_ID_RE = re.compile(r"\b(t_[0-9a-f]{6,})\b")          # 명시 task id 토큰
 HISTORY_LIMIT = int(os.environ.get("GATE_KEEPER_APPROVALS_LIMIT", "25"))
 
+# ── Sam 승인 게이트(Discord REST v10) 설정 ─────────────────────────────────
+# Slack 과 **나란히** 돈다(둘 다 항상 게시 · Sam 지시 2026-08-06). 회사망에서 slack.com
+# 이 도달 불가라(실측: discord.com 200/0.06s · slack.com timeout) Discord 가 실제 경로이고
+# Slack 은 복구되면 자동으로 다시 산다. **어느 쪽도 다른 쪽의 실패에 영향받지 않는다** —
+# 그것이 이 구조의 유일한 요구사항이다.
+DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "")
+# ⚠️ 기본값을 두지 않는다. 빈 값 = Discord 승인 경로 **비활성**(fail-closed).
+#    Slack 채널 id 를 재사용할 수 없고, 틀린 채널에 올리면 승인이 조용히 사라진다.
+DISCORD_APPROVALS_CHANNEL = os.environ.get("GATE_KEEPER_DISCORD_APPROVALS_CHANNEL", "")
+# 승인 권한자. 미지정 시 DISCORD_ALLOWED_USERS(어댑터와 공유)로 폴백하되,
+# **대화 허용 ≠ 승인 권한**이므로 분리할 수 있게 둔다.
+DISCORD_ALLOWED_USERS = {u.strip() for u in os.environ.get(
+    "GATE_KEEPER_DISCORD_ALLOWED_USERS",
+    os.environ.get("DISCORD_ALLOWED_USERS", "")).split(",") if u.strip()}
+DISCORD_TARGET = os.environ.get("GATE_KEEPER_DISCORD", "")   # 예: discord:140123...
+DISCORD_API = "https://discord.com/api/v10"
+# ⚠️ Discord 의 2000 은 **UTF-16 코드유닛**이다(Python len() 이 아니다). BMP 밖 이모지는
+#    1자가 2유닛이다. 헤더·(n/N) 표식 여유까지 보고 1900 으로 잡는다.
+DISCORD_MAX_CHARS = int(os.environ.get("GATE_KEEPER_DISCORD_MAX_CHARS", "1900"))
+DISCORD_POST_MAX_ATTEMPTS = 3    # 청킹 게시 실패가 이 횟수면 짧은 폴백으로 넘어간다
+_POST_ATTEMPTS: dict = {}        # "<platform>:<task_id>" -> 시도 횟수
+HTTP_TIMEOUT = int(os.environ.get("GATE_KEEPER_HTTP_TIMEOUT", "15"))
+USER_AGENT = ("DiscordBot (https://github.com/jxcross/my-hermes-company-2026, 1.0)")
+
 
 def log(msg: str) -> None:
     print(f"[gate-keeper] {msg}", flush=True)
+
+
+# ── WARN 스로틀 · 서킷 브레이커 (2026-08-06 · Discord 병렬 도입) ──────────────
+# ⚠️ 한 플랫폼이 죽어 있으면 틱마다 WARN 이 최소 2회 나온다(10초 간격 → 하루 17,000줄).
+#    Discord 가 실제 경로가 된 뒤에는 그 소음이 **진짜 Discord 실패를 덮는다.**
+#    다만 **조용해지는 것과 나아지는 것은 다르다** — 억제한 건수를 반드시 합산해 드러낸다.
+_WARN_STATE: dict = {}     # key -> {"n": 억제 건수, "next": 다음 허용 시각, "gap": 초}
+_BREAKER: dict = {}        # platform -> {"fails": n, "until": 해제 시각}
+WARN_GAP_MIN, WARN_GAP_MAX = 60.0, 900.0
+BREAKER_FAILS, BREAKER_MAX = 3, 300.0
+
+
+def warn_throttled(key: str, msg: str, now: float | None = None) -> bool:
+    """같은 key 의 반복 WARN 을 지수 백오프로 억제. 실제로 찍었으면 True."""
+    t = time.time() if now is None else now
+    st = _WARN_STATE.setdefault(key, {"n": 0, "next": 0.0, "gap": WARN_GAP_MIN})
+    if t < st["next"]:
+        st["n"] += 1
+        return False
+    suffix = f"  (같은 경고 {st['n']}회 억제)" if st["n"] else ""
+    log(f"WARN {msg}{suffix}")
+    st["n"] = 0
+    st["next"] = t + st["gap"]
+    st["gap"] = min(st["gap"] * 2, WARN_GAP_MAX)
+    return True
+
+
+def warn_reset(key: str) -> None:
+    """성공 시 호출. 억제 streak 이 있었으면 **복구를 한 줄 남긴다** —
+    복구를 안 적으면 로그만 보고 언제 살아났는지 알 수 없다."""
+    st = _WARN_STATE.pop(key, None)
+    if st and (st["n"] or st["gap"] > WARN_GAP_MIN):
+        log(f"복구: {key} 정상")
+
+
+def breaker_open(platform: str, now: float | None = None) -> bool:
+    """연속 실패가 쌓인 플랫폼을 백오프 동안 통째로 건너뛴다.
+
+    ⚠️ 이게 없으면 죽은 플랫폼의 타임아웃(urlopen 15s ×2 + notify 60s)이 10초 틱을
+       밀어내 **살아있는 플랫폼의 승인 반응까지 분 단위로 늦어진다.**"""
+    t = time.time() if now is None else now
+    st = _BREAKER.get(platform)
+    return bool(st and st["until"] > t)
+
+
+def breaker_fail(platform: str, now: float | None = None) -> None:
+    t = time.time() if now is None else now
+    st = _BREAKER.setdefault(platform, {"fails": 0, "until": 0.0})
+    st["fails"] += 1
+    if st["fails"] >= BREAKER_FAILS:
+        back = min(10.0 * (2 ** (st["fails"] - BREAKER_FAILS)), BREAKER_MAX)
+        if st["until"] <= t:      # 진입을 **한 줄 남긴다**(조용한 비활성화 금지)
+            log(f"{platform} 연속 실패 {st['fails']}회 — {back:.0f}초 건너뜀")
+        st["until"] = t + back
+
+
+def breaker_ok(platform: str) -> None:
+    if _BREAKER.pop(platform, None):
+        log(f"복구: {platform} 회로 닫힘")
 
 
 # ── 보드 스코프 ─────────────────────────────────────────────────────────
@@ -162,19 +246,36 @@ def board_of(mission: str) -> str:
     return (pl or {}).get("board") or "default"
 
 
-def notify(text: str, dry: bool) -> None:
-    """Slack #mission-log 통지(best-effort). GATE_KEEPER_NOTIFY=0 이면 비활성(테스트용)."""
+def notify_targets() -> list[str]:
+    """통지 목적지(`hermes send --to`).
+
+    ⚠️ **Discord 를 먼저** 둔다 — Slack 이 NOTIFY_TIMEOUT(60초) 매달리면 그 뒤가 밀리고,
+       프로세스가 그 사이 죽으면 **실제로 읽히는 쪽이 못 나간다.**
+    `GATE_KEEPER_DISCORD` 미설정이면 목록은 `[SLACK_TARGET]` 하나 = 오늘과 동일."""
+    return [t for t in (DISCORD_TARGET, SLACK_TARGET) if t]
+
+
+def notify(text: str, dry: bool) -> None:      # ★ 시그니처 불변 — 호출부 무손상
+    """#mission-log 통지(best-effort · Slack·Discord 양쪽).
+    GATE_KEEPER_NOTIFY=0 이면 비활성(테스트용)."""
     if dry:
         log(f"[dry] notify: {text}")
         return
     if os.environ.get("GATE_KEEPER_NOTIFY", "1") == "0":
         log(f"notify(off): {text}")
         return
-    try:
-        subprocess.run(["hermes", "send", "--to", SLACK_TARGET, text],
-                       capture_output=True, text=True, timeout=NOTIFY_TIMEOUT)
-    except Exception as e:  # noqa: BLE001 — 통지는 게이트 로직을 막지 않는다
-        log(f"WARN notify failed: {e}")
+    for tgt in notify_targets():
+        plat = tgt.split(":", 1)[0]
+        if breaker_open(plat):
+            continue                # 죽은 플랫폼에 60초를 버리지 않는다
+        try:
+            subprocess.run(["hermes", "send", "--to", tgt, text],
+                           capture_output=True, text=True, timeout=NOTIFY_TIMEOUT)
+            breaker_ok(plat)
+            warn_reset(f"notify:{tgt}")
+        except Exception as e:  # noqa: BLE001 — 한 목적지 실패가 다른 목적지를 막지 않는다
+            breaker_fail(plat)
+            warn_throttled(f"notify:{tgt}", f"notify failed [{tgt}]: {e}")
 
 
 # ── 상태 영속화 ────────────────────────────────────────────────────────────
@@ -182,24 +283,44 @@ def notify(text: str, dry: bool) -> None:
 #   processed        : 검증자 게이트 처리 키(vid:completed_at)
 #   approval_posted  : #approvals 에 승인요청을 이미 게시한 Sam-게이트 task id
 #   approval_seen    : 이미 처리한 승인 메시지 ts(중복 unblock 방지)
+def _ns(entries, default: str = "slack") -> set:
+    """접두사 없는 구 항목을 `<platform>:` 으로 승격(마이그레이션).
+
+    ⚠️⚠️ **이게 없으면 과거 승인이 소급 적용된다.** 구 상태 파일의 `approval_seen` 은
+       접두사 없는 Slack ts 다. 네임스페이싱만 하고 마이그레이션을 빼면 그것들이 전부
+       '미확인'이 되고, `seed_approval_baseline` 은 집합이 **비어있지 않아** 재시딩을
+       건너뛰고, 다음 틱에 history 25건이 통째로 새 메시지로 처리된다 →
+       **Sam 의 과거 `승인` 이 현재 대기 게이트를 연다.**
+    ⚠️ 판별자는 `":"` 유무다 — Slack ts(`1754400000.000100`)에도 task_id(`t_ab12`)에도
+       Discord snowflake(`1401234567890123456`)에도 콜론은 없다."""
+    return {e if ":" in e else f"{default}:{e}" for e in entries}
+
+
 def load_state() -> dict:
     try:
         with open(STATE_PATH, encoding="utf-8") as f:
             d = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         d = {}
+    seen = d.get("approval_seen", [])
     return {
         "processed": set(d.get("processed", [])),
-        "approval_posted": set(d.get("approval_posted", [])),
-        "approval_seen": set(d.get("approval_seen", [])),
+        "approval_posted": _ns(d.get("approval_posted", [])),
+        "approval_seen": _ns(seen),
+        # ⚠️ 시딩 여부를 **별도 키**로 둔다. 항목 유무로 추론하면 양방향으로 틀린다 —
+        #    빈 Discord 채널은 영원히 '미시딩'이 되고, 마이그레이션된 Slack 항목은
+        #    Discord 시딩을 막는다.
+        "approval_seeded": set(d.get("approval_seeded", ["slack"] if seen else [])),
     }
+
+
+STATE_KEYS = ("processed", "approval_posted", "approval_seen", "approval_seeded")
 
 
 def save_state(state: dict) -> None:
     try:
         with open(STATE_PATH, "w", encoding="utf-8") as f:
-            json.dump({k: sorted(state.get(k, set())) for k in
-                       ("processed", "approval_posted", "approval_seen")}, f)
+            json.dump({k: sorted(state.get(k, set())) for k in STATE_KEYS}, f)
     except OSError as e:
         log(f"WARN state save failed: {e}")
 
@@ -612,8 +733,135 @@ def slack_api(method: str, params: dict, post: bool = False) -> dict | None:
         with urllib.request.urlopen(req, timeout=15) as r:
             return json.load(r)
     except Exception as e:  # noqa: BLE001 — 승인 폴링은 게이트 로직을 막지 않는다
-        log(f"WARN slack_api {method} 실패: {e}")
+        warn_throttled(f"slack:{method}", f"slack_api {method} 실패: {e}")
         return None
+
+
+def discord_api(path: str, params: dict | None = None,
+                body: dict | None = None, attempt: int = 0) -> object | None:
+    """Discord REST v10 호출. 실패 시 None(루프는 죽지 않음) — slack_api 와 같은 계약.
+
+    ⚠️ Slack 과 다른 점 넷. 하나라도 놓치면 **조용히** 실패한다:
+      1. 인증 헤더가 `Bot <token>` 이다(`Bearer` 아님).
+      2. POST 본문이 **JSON** 이다(Slack 은 form-urlencoded).
+      3. 응답에 `{"ok": true}` 래퍼가 없다 — GET messages 는 **배열**이 그냥 온다.
+      4. **User-Agent 를 명시**해야 한다. urllib 기본값은 Cloudflare 가 거절할 수 있고,
+         그때 403 이라 권한 문제로 오진하기 쉽다.
+    ⚠️⚠️ urllib 은 4xx/5xx 에서 **HTTPError 를 raise 한다.** blanket except 보다 **먼저**
+       잡지 않으면 429 가 네트워크 오류와 구분되지 않아 **재시도가 영영 안 돈다.**
+    """
+    if not DISCORD_BOT_TOKEN:
+        return None
+    key = f"discord:{path}"
+    try:
+        headers = {"Authorization": f"Bot {DISCORD_BOT_TOKEN}",
+                   "User-Agent": USER_AGENT, "Accept": "application/json"}
+        if body is not None:
+            headers["Content-Type"] = "application/json"
+            req = urllib.request.Request(f"{DISCORD_API}{path}",
+                                         data=json.dumps(body).encode(),
+                                         headers=headers, method="POST")
+        else:
+            url = f"{DISCORD_API}{path}"
+            if params:
+                url += "?" + urllib.parse.urlencode(params)
+            req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as r:
+            out = json.load(r)
+        warn_reset(key)
+        return out
+    except urllib.error.HTTPError as e:
+        if e.code == 429 and attempt < 2:
+            try:
+                retry = float(json.load(e).get("retry_after", 1.0))
+            except Exception:  # noqa: BLE001
+                retry = float(e.headers.get("Retry-After") or 1.0)
+            time.sleep(min(retry, 10.0))      # 상한 — 틱을 통째로 잡아먹지 않게
+            return discord_api(path, params, body, attempt + 1)
+        warn_throttled(key, f"discord_api {path} HTTP {e.code}")
+        return None
+    except Exception as e:  # noqa: BLE001 — 승인 폴링은 게이트 로직을 막지 않는다
+        warn_throttled(key, f"discord_api {path} 실패: {e}")
+        return None
+
+
+# ── 정규화 · 렌더 (순수 함수 — 네트워크 없음 = 테스트 가능) ────────────────────
+def normalize_slack_history(payload) -> list[dict]:
+    """conversations.history 응답 → [{id,author,text,bot}] **오래된→최신**."""
+    if not isinstance(payload, dict) or not payload.get("ok"):
+        return []
+    return [{"id": m["ts"], "author": m.get("user") or "",
+             "text": m.get("text") or "", "bot": bool(m.get("bot_id"))}
+            for m in reversed(payload.get("messages") or []) if m.get("ts")]
+
+
+def normalize_discord_history(payload) -> list[dict]:
+    """GET /channels/{id}/messages 응답 → 같은 모양.
+
+    ⚠️ 응답은 **배열**이고 최신순이다. Slack 처럼 `{"ok":...}` 를 기대하면 아무것도
+       안 나오고 **에러도 안 난다** — 승인이 조용히 영영 감지되지 않는다."""
+    if not isinstance(payload, list):
+        return []
+    out = []
+    for m in reversed(payload):
+        if not isinstance(m, dict):
+            continue
+        mid, au = m.get("id"), (m.get("author") or {})
+        if not mid or not isinstance(au, dict) or not au.get("id"):
+            continue
+        out.append({"id": str(mid), "author": str(au["id"]),
+                    "text": m.get("content") or "", "bot": bool(au.get("bot"))})
+    return out
+
+
+def u16len(s: str) -> int:
+    """UTF-16 코드유닛 길이. Discord 의 2000 은 이 단위다(len() 이 아니다)."""
+    return len(s.encode("utf-16-le")) // 2
+
+
+def chunk_message(text: str, limit: int) -> list[str]:
+    """2000자 제한 대응. 줄 경계 우선, 넘치는 줄만 하드 분할.
+
+    계약: ① 모든 조각의 UTF-16 길이 ≤ limit ② 한 글자도 버리지 않는다
+          ③ 빈 입력 → `[""]`(0개가 아니다 — 0개면 '게시할 것이 없다'와 구분이 안 된다)"""
+    if limit <= 0:
+        return [text]
+    if not text:
+        return [""]
+    out: list[str] = []
+    cur = ""
+    for line in text.split("\n"):
+        while u16len(line) > limit:            # 한 줄이 통째로 넘치면 하드 분할
+            if cur:
+                out.append(cur); cur = ""
+            cut = limit
+            while cut > 1 and u16len(line[:cut]) > limit:
+                cut -= 1
+            out.append(line[:cut]); line = line[cut:]
+        cand = f"{cur}\n{line}" if cur else line
+        if u16len(cand) > limit:
+            out.append(cur); cur = line
+        else:
+            cur = cand
+    out.append(cur)
+    return out
+
+
+def render_approval_request(g: dict, summary: str, platform: str) -> str:
+    """플랫폼별 승인요청문.
+
+    ⚠️ Slack 출력은 오늘의 문자열과 **바이트 동일**해야 한다(골든 테스트가 강제).
+    Discord 차이는 둘뿐이다 — `:large_yellow_circle:` 숏코드는 Discord 에서 **문자 그대로**
+    보이고, `*굵게*`(별 1개)는 Discord 에서 **기울임**이다."""
+    board_note = f" · board `{g.get('board') or 'default'}`"
+    if platform == "slack":
+        head = f":large_yellow_circle: *[승인 요청]* {g['mission']} · {g['name']}  "
+    else:
+        head = f"🟡 **[승인 요청]** {g['mission']} · {g['name']}  "
+    return (f"{head}(`{g['task_id']}`{board_note})\n"
+            f"{summary}\n"
+            f"— 승인: `승인` (또는 `승인 {g['task_id']}`) · 반려/보완은 여기서 논의"
+            f"(게이트 대기 유지). 권한: Sam.")
 
 
 def parse_approval(text: str) -> tuple[bool, str | None]:
@@ -862,66 +1110,86 @@ def resolve_approval_target(explicit_id: str | None, gates: list[dict]) -> tuple
     return None, f"대기 게이트 {len(gates)}개 — 모호(‘승인 <task_id>’ 로 특정 필요)"
 
 
+def enabled_platforms() -> list[str]:
+    """승인 폴링이 활성인 플랫폼. 각각 자기 토큰·채널이 다 있어야 켜진다(fail-closed)."""
+    out = []
+    if APPROVAL_ENABLED and SLACK_BOT_TOKEN:
+        out.append("slack")
+    if APPROVAL_ENABLED and DISCORD_BOT_TOKEN and DISCORD_APPROVALS_CHANNEL:
+        out.append("discord")
+    return out
+
+
+def platform_allowed_users(platform: str) -> set:
+    return DISCORD_ALLOWED_USERS if platform == "discord" else SLACK_ALLOWED_USERS
+
+
+def fetch_history(platform: str, limit: int) -> list[dict] | None:
+    """정규화된 승인 채널 이력(오래된→최신). 조회 실패는 **None**(빈 리스트가 아니다) —
+    '아무 메시지도 없다'와 '못 읽었다'를 구분해야 시딩을 fail-closed 로 유지할 수 있다."""
+    if platform == "slack":
+        r = slack_api("conversations.history",
+                      {"channel": APPROVALS_CHANNEL, "limit": limit})
+        return normalize_slack_history(r) if (r and r.get("ok")) else None
+    r = discord_api(f"/channels/{DISCORD_APPROVALS_CHANNEL}/messages", {"limit": limit})
+    return normalize_discord_history(r) if isinstance(r, list) else None
+
+
+def post_approval_request(platform: str, g: dict, text: str) -> bool:
+    """전량 게시 성공 시 True. Slack 은 청킹하지 않는다(오늘과 동일)."""
+    if platform == "slack":
+        r = slack_api("chat.postMessage",
+                      {"channel": APPROVALS_CHANNEL, "text": text}, post=True)
+        return bool(r and r.get("ok"))
+    parts = chunk_message(text, DISCORD_MAX_CHARS - 24)   # (i/N) 표식 여유
+    n = len(parts)
+    for i, p in enumerate(parts, 1):
+        body = p if n == 1 else f"{p}\n`— {g['task_id']} ({i}/{n})`"
+        if discord_api(f"/channels/{DISCORD_APPROVALS_CHANNEL}/messages",
+                       body={"content": body}) is None:
+            # ⚠️ 부분 게시를 성공으로 치면 **반토막 승인요청이 영영 고정된다.**
+            log(f"WARN 승인요청 게시 실패 [discord] {g['task_id']} 조각 {i}/{n}")
+            return False
+    return True
+
+
 def seed_approval_baseline(state: dict) -> None:
-    """최초 기동 시(approval_seen 비어있음) 현재 #approvals 이력 ts 를 모두 seen 처리.
-    → '지금부터' 도착하는 승인만 반영(과거 승인 메시지를 새 게이트에 소급 적용 방지)."""
-    if not (APPROVAL_ENABLED and SLACK_BOT_TOKEN) or state["approval_seen"]:
-        return
-    hist = slack_api("conversations.history", {"channel": APPROVALS_CHANNEL, "limit": 100})
-    if hist and hist.get("ok"):
-        for msg in hist.get("messages", []):
-            if msg.get("ts"):
-                state["approval_seen"].add(msg["ts"])
-        log(f"승인 baseline 설정: 기존 {len(state['approval_seen'])}개 메시지 seen 처리(지금부터 감시)")
+    """최초 기동 시 현재 #approvals 이력을 모두 seen 처리(플랫폼별).
+    → '지금부터' 도착하는 승인만 반영(과거 승인 메시지의 소급 적용 방지).
 
-
-def approval_poll(state: dict, dry: bool) -> None:
-    """Sam 승인 게이트 자동화. #4 활성 게이트 요청 게시 + #3 승인 감지→unblock."""
-    if not (APPROVAL_ENABLED and SLACK_BOT_TOKEN):
-        return
-    pipelines = load_all_pipelines()
-    gates = [g for g in pending_sam_gates(pipelines)
-             if all_upstream_done(g["upstream"], g.get("board"))]
-
-    # ── #4: 활성(상위 done) 대기 Sam-게이트를 #approvals 에 1회 게시(내용 포함) ──
-    posted = state["approval_posted"]
-    pl_by_mission = {pl.get("mission"): pl for pl in pipelines}
-    for g in gates:
-        if g["task_id"] in posted:
+    ⚠️ 시딩에 실패한 플랫폼은 `approval_seeded` 에 표기하지 않는다 → 다음 틱에 재시도하고,
+       그 틱의 승인 폴링은 건너뛴다. **시딩 없이 폴링하면 그게 바로 소급 승인이다.**"""
+    for p in enabled_platforms():
+        if p in state["approval_seeded"]:
             continue
-        summary = gate_summary(g, pl_by_mission.get(g["mission"]) or {})
-        board_note = f" · board `{g.get('board') or 'default'}`"
-        text = (f":large_yellow_circle: *[승인 요청]* {g['mission']} · {g['name']}  "
-                f"(`{g['task_id']}`{board_note})\n"
-                f"{summary}\n"
-                f"— 승인: `승인` (또는 `승인 {g['task_id']}`) · 반려/보완은 여기서 논의(게이트 대기 유지). 권한: Sam.")
-        if dry:
-            log(f"[dry] 승인요청 게시: {g['task_id']} {g['mission']}·{g['name']}")
-            posted.add(g["task_id"])
+        msgs = fetch_history(p, 100)
+        if msgs is None:
+            log(f"WARN {p} baseline 조회 실패 — 시딩 보류(이 플랫폼의 승인 폴링은 건너뛴다)")
             continue
-        r = slack_api("chat.postMessage", {"channel": APPROVALS_CHANNEL, "text": text}, post=True)
-        if r and r.get("ok"):
-            posted.add(g["task_id"])
-            log(f"승인요청 게시: {g['task_id']} {g['mission']}·{g['name']} → #approvals")
-        else:
-            log(f"WARN 승인요청 게시 실패: {g['task_id']} ({(r or {}).get('error')})")
+        state["approval_seen"] |= {f"{p}:{m['id']}" for m in msgs}
+        state["approval_seeded"].add(p)
+        log(f"승인 baseline({p}) 설정: 기존 {len(msgs)}개 메시지 seen 처리(지금부터 감시)")
 
-    # ── #3: #approvals 최근 메시지에서 Sam 승인 감지 → 해당 게이트 unblock ──
-    hist = slack_api("conversations.history", {"channel": APPROVALS_CHANNEL, "limit": HISTORY_LIMIT})
-    if not hist or not hist.get("ok"):
-        return
+
+def consume_approvals(platform: str, msgs: list[dict], allowed: set,
+                      state: dict, dry: bool) -> None:
+    """정규화된 메시지(오래된→최신)를 소비. **이 함수 안에 HTTP 가 없다 = 테스트 가능.**
+
+    판단 로직은 플랫폼 무관이며 기존 Slack 경로와 동일하다 — 달라진 것은 dedup 키에
+    `<platform>:` 접두가 붙는 것뿐이다."""
     seen = state["approval_seen"]
-    # 오래된→최신 순으로 처리(여러 승인 누적 대비)
-    for msg in reversed(hist.get("messages", [])):
-        ts = msg.get("ts")
-        if not ts or ts in seen:
+    for m in msgs:
+        key = f"{platform}:{m['id']}"
+        if key in seen or m.get("bot"):
             continue
-        if msg.get("user") not in SLACK_ALLOWED_USERS:   # 보안: Sam 만
+        if m["author"] not in allowed:      # 보안 앵커: Sam 만
             continue
-        ok, explicit = parse_approval(msg.get("text", ""))
+        ok, explicit = parse_approval(m.get("text", ""))
         if not ok:
             continue
         # 현재 대기 게이트를 재조회(같은 폴에서 앞선 승인이 이미 unblock 했을 수 있음).
+        # ⚠️ 이 재조회가 **이중 unblock 을 막는 기제**다 — 첫 승인 후 그 게이트는
+        #    blocked 가 아니게 되어 목록에서 사라지고, 두 번째 승인은 소비만 된다.
         cur = [g for g in pending_sam_gates(load_all_pipelines())
                if all_upstream_done(g["upstream"], g.get("board"))]
         target, why = resolve_approval_target(explicit, cur)
@@ -929,21 +1197,88 @@ def approval_poll(state: dict, dry: bool) -> None:
             # 모호(2+개)만 재시도 여지 남김(Sam 이 곧 id 특정) — seen 미기록.
             # 그 외(대상 없음·명시 id 불일치)는 재시도 무의미 → 소비.
             if "모호" not in why and not dry:
-                seen.add(ts)
-            log(f"승인 메시지(ts={ts}) 보류: {why}")
+                seen.add(key)
+            log(f"승인 메시지({key}) 보류: {why}")
             continue
         if dry:
-            log(f"[dry] Sam 승인(ts={ts}) → unblock {target} ({why})")
-            seen.add(ts)
+            log(f"[dry] Sam 승인({key}) → unblock {target} ({why})")
+            seen.add(key)
             continue
         # ⚠️ unblock 은 **그 게이트가 사는 보드**에서 해야 한다. 기본 보드에서 부르면
         #    "그런 task 없다" 로 조용히 실패하고, Sam 은 승인했는데 아무 일도 안 일어난다.
         tgt_board = next((g.get("board") for g in cur if g["task_id"] == target), None)
         with board_scope(tgt_board):
-            run(["unblock", target, "--reason", f"Sam Slack 승인(ts={ts}, {why})"])
-        log(f"Sam 승인 감지(ts={ts}) → unblock {target} [board={tgt_board or 'default'}] ({why})")
-        notify(f"✅ Sam 승인 반영 — {target} unblock ({why}).", dry)
-        seen.add(ts)
+            run(["unblock", target, "--reason",
+                 f"Sam {platform} 승인({m['id']}, {why})"])
+        log(f"Sam 승인 감지({key}) → unblock {target} "
+            f"[board={tgt_board or 'default'}] ({why})")
+        notify(f"✅ Sam 승인 반영 — {target} unblock ({why} · via {platform}).", dry)
+        seen.add(key)
+
+
+def _approval_poll_one(platform: str, gates: list[dict], pl_by_mission: dict,
+                       state: dict, dry: bool) -> None:
+    """한 플랫폼의 승인 사이클. 조회 실패는 **이 플랫폼만** 종료한다."""
+    # ── #4: 활성(상위 done) 대기 Sam-게이트를 #approvals 에 1회 게시(내용 포함) ──
+    posted = state["approval_posted"]
+    for g in gates:
+        key = f"{platform}:{g['task_id']}"
+        if key in posted:
+            continue
+        summary = gate_summary(g, pl_by_mission.get(g["mission"]) or {})
+        text = render_approval_request(g, summary, platform)
+        if dry:
+            log(f"[dry] 승인요청 게시[{platform}]: {g['task_id']} {g['mission']}·{g['name']}")
+            posted.add(key)
+            continue
+        if post_approval_request(platform, g, text):
+            posted.add(key)
+            _POST_ATTEMPTS.pop(key, None)
+            log(f"승인요청 게시[{platform}]: {g['task_id']} {g['mission']}·{g['name']} → #approvals")
+            continue
+        # ⚠️ 실패가 반복되면 10초마다 중복이 쏟아진다. 상한에서 **짧은 폴백 1건**을
+        #    올리고 소비한다 — 중복 폭주도, Sam 이 아무것도 못 받는 것도 둘 다 막는다.
+        _POST_ATTEMPTS[key] = _POST_ATTEMPTS.get(key, 0) + 1
+        if _POST_ATTEMPTS[key] >= DISCORD_POST_MAX_ATTEMPTS:
+            short = (f"🟡 **[승인 요청]** {g['mission']} · {g['name']} (`{g['task_id']}`)\n"
+                     f"요약이 길어 게시에 실패했다 — `reports/{g['mission']}/` 를 직접 확인하고 "
+                     f"`승인 {g['task_id']}` 로 답하라.")
+            if post_approval_request(platform, g, short):
+                posted.add(key)
+                log(f"승인요청 게시[{platform}] 폴백(요약 생략): {g['task_id']}")
+
+    # ── #3: 최근 메시지에서 Sam 승인 감지 → 해당 게이트 unblock ──
+    if platform not in state["approval_seeded"]:
+        return          # 시딩 전에는 폴링하지 않는다(소급 승인 방지 · fail-closed)
+    msgs = fetch_history(platform, HISTORY_LIMIT)
+    if msgs is None:
+        return          # ⚠️ 이 플랫폼만 종료 — 상위 루프는 계속된다
+    consume_approvals(platform, msgs, platform_allowed_users(platform), state, dry)
+
+
+def approval_poll(state: dict, dry: bool) -> None:     # ★ 시그니처 불변
+    """Sam 승인 게이트 자동화(Slack·Discord 병렬). #4 요청 게시 + #3 승인 감지→unblock."""
+    plats = enabled_platforms()
+    if not plats:
+        return
+    pipelines = load_all_pipelines()
+    gates = [g for g in pending_sam_gates(pipelines)
+             if all_upstream_done(g["upstream"], g.get("board"))]
+    pl_by_mission = {pl.get("mission"): pl for pl in pipelines}
+
+    for p in plats:
+        if breaker_open(p):
+            continue
+        try:
+            _approval_poll_one(p, gates, pl_by_mission, state, dry)
+            breaker_ok(p)
+        except Exception as e:  # noqa: BLE001
+            # ⚠️⚠️ **한 플랫폼의 어떤 실패도 다른 플랫폼을 막지 못한다.** 이것이 이 구조의
+            #    전부다 — 옛 코드의 `return`(Slack history 실패 시 함수 탈출)이 정확히 이
+            #    규칙을 어겼고, 그러면 Slack 이 죽었을 때 Discord 승인이 영영 안 처리된다.
+            #    그런데 Slack 이 죽은 것이 이 경로를 만든 이유다. 회귀 테스트가 강제한다.
+            breaker_fail(p)
+            warn_throttled(f"approval_poll:{p}", f"approval_poll[{p}] 실패: {e}")
 
 
 def main() -> int:
@@ -953,8 +1288,21 @@ def main() -> int:
     ap.add_argument("--interval", type=float, default=10.0, help="폴 간격(초, 기본 10)")
     args = ap.parse_args()
 
-    log(f"start (once={args.once} dry_run={args.dry_run} interval={args.interval}s state={STATE_PATH} "
-        f"approvals={'on' if (APPROVAL_ENABLED and SLACK_BOT_TOKEN) else 'off'})")
+    plats = enabled_platforms()
+    # ⚠️ 꺼진 이유를 함께 적는다 — "off" 만 찍으면 왜 꺼졌는지 알 수 없다.
+    why = []
+    if not APPROVAL_ENABLED:
+        why.append("GATE_KEEPER_APPROVALS=0")
+    if "slack" not in plats and APPROVAL_ENABLED:
+        why.append("slack: SLACK_BOT_TOKEN 없음")
+    if "discord" not in plats and APPROVAL_ENABLED:
+        why.append("discord: " + ("DISCORD_BOT_TOKEN 없음" if not DISCORD_BOT_TOKEN
+                                  else "GATE_KEEPER_DISCORD_APPROVALS_CHANNEL 없음"))
+    approvals = "+".join(plats) if plats else "off"
+    log(f"start (once={args.once} dry_run={args.dry_run} interval={args.interval}s "
+        f"state={STATE_PATH} approvals={approvals}"
+        + (f" [{' · '.join(why)}]" if why else "") + ")")
+    log(f"통지 대상: {', '.join(notify_targets()) or '(없음)'}")
     state = load_state()
     if not args.dry_run:
         seed_approval_baseline(state)   # 과거 승인 소급 방지(지금부터 감시)

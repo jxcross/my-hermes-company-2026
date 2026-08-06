@@ -426,6 +426,92 @@ def test_pipeline_json_board_defaults_to_default():
     assert pj["board"] == "default"
 
 
+# ── 게시 대상 주입 (2026-08-07 · Discord 병렬 · docs/16) ──────────────────
+def test_notify_cmds_single_target_is_byte_identical_to_the_old_sentence():
+    """★ 골든 — Discord 미설정 환경에서 카드 본문이 **오늘과 같아야** 한다.
+    이게 깨지면 Discord 를 안 쓰는 PC 의 미션까지 문구가 바뀐다."""
+    assert it.notify_cmds_text(["slack:#mission-log"]) == \
+        '`hermes send --to slack:#mission-log "<요약+커밋링크>"`'
+
+
+def test_notify_cmds_two_targets_emits_both_commands_discord_first():
+    """⚠️ '두 번 쳐라'를 모델 추측에 맡기지 않는다 — 명령을 줄로 전개한다."""
+    s = it.notify_cmds_text(["discord:140199", "slack:#mission-log"])
+    assert s.count("hermes send --to") == 2, s
+    assert s.index("discord:140199") < s.index("slack:#mission-log"), "Discord 가 뒤에 왔다"
+    assert "모두" in s and "실패해도 나머지를" in s, s
+
+
+def test_notify_cmds_with_no_target_says_so_instead_of_emitting_nothing():
+    """조용히 빈 문자열을 내면 워커가 게시 단계를 통째로 건너뛴 것을 아무도 모른다."""
+    assert "설정되지 않았다" in it.notify_cmds_text([])
+
+
+def test_resolve_keeps_the_two_argument_signature():
+    """기존 2인자 호출(테스트 3곳)이 그대로 동작해야 한다."""
+    tpl = {"stages": [{"id": 1, "name": "S", "body": "x <NOTIFY_CMDS>"}]}
+    assert "hermes send --to" in it.resolve(tpl, "M-1")["stages"][0]["body"]
+
+
+def test_resolve_substitutes_notify_cmds_in_body():
+    tpl = {"stages": [{"id": 1, "name": "S", "body": "게시: <NOTIFY_CMDS>"}]}
+    out = it.resolve(tpl, "M-1", ["discord:1", "slack:#m"])
+    assert "<NOTIFY_CMDS>" not in out["stages"][0]["body"]
+    assert out["stages"][0]["body"].count("hermes send") == 2
+
+
+def _shipped():
+    d = os.path.join(it.REPO_ROOT, "templates")
+    return sorted(f[:-5] for f in os.listdir(d) if f.endswith(".yaml"))
+
+
+def test_all_shipped_templates_have_notify_cmds_exactly_once():
+    """20/20 · 각 1회. 세어서 어설션한다."""
+    bad = {}
+    for name in _shipped():
+        n = sum((s.get("body") or "").count("<NOTIFY_CMDS>")
+                for s in it.load_template(name).get("stages", []))
+        if n != 1:
+            bad[name] = n
+    assert not bad, f"<NOTIFY_CMDS> 가 1회가 아닌 템플릿: {bad}"
+    assert len(_shipped()) >= 20, _shipped()
+
+
+def test_no_shipped_template_hardcodes_a_send_target():
+    """★ 하드코딩이 돌아오면 여기서 잡는다."""
+    bad = [n for n in _shipped()
+           if any("hermes send --to slack:" in (s.get("body") or "")
+                  or "hermes send --to discord:" in (s.get("body") or "")
+                  for s in it.load_template(n).get("stages", []))]
+    assert not bad, f"게시 대상 하드코딩: {bad}"
+
+
+def test_no_shipped_template_leaks_the_notify_placeholder_after_resolve():
+    """`<MID>` 누출 검사와 쌍둥이 — 필드를 열거하지 않고 결과 전체를 훑는다."""
+    def leaks(o, path=""):
+        if isinstance(o, dict):
+            return [p for k, v in o.items() for p in leaks(v, f"{path}.{k}" if path else k)]
+        if isinstance(o, list):
+            return [p for v in o for p in leaks(v, f"{path}[]")]
+        return [path] if isinstance(o, str) and "<NOTIFY_CMDS>" in o else []
+    bad = {n: sorted(set(leaks(it.resolve(it.load_template(n), "M-2026-999"))))
+           for n in _shipped()
+           if leaks(it.resolve(it.load_template(n), "M-2026-999"))}
+    assert not bad, f"<NOTIFY_CMDS> 누출: {bad}"
+
+
+def test_hardcoded_send_target_is_an_invariant_violation():
+    """★ 깨뜨린 픽스처 — 불변식이 실제로 잡는지 확인한다.
+    (PASS 만 보면 아무것도 측정하지 않는 검사를 발견할 수 없다 · docs/13 §5)"""
+    tpl = {"stages": [{"id": 1, "name": "Deliver",
+                       "body": '게시: `hermes send --to slack:#mission-log "x"`'}]}
+    errs = it.check_invariants(tpl)
+    assert any("하드코딩" in e for e in errs), errs
+    # 반대 방향: 플레이스홀더를 쓰면 통과한다
+    ok = {"stages": [{"id": 1, "name": "Deliver", "body": "게시: <NOTIFY_CMDS>"}]}
+    assert not any("하드코딩" in e for e in it.check_invariants(ok))
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

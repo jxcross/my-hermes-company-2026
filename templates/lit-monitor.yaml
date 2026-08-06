@@ -144,4 +144,4 @@ stages:
     sam_gate: true
     approval_artifact: "reports/<MID>/digest.md"
     upstream: [9]
-    body: "① **지속 상태 봉인**: `python3 /work/company/scripts/tools/monitor_state.py --monitor <monitor_id> add <후보 전체 id...> --date <회차일자>` — 이번 회차 후보 **전부**를 seen 에 추가한다(다이제스트에 올린 것만이 아니다. 그래야 다음 회차에 다시 안 뜬다). ② **히스토리 회전**: digest.md 를 `monitors/<monitor_id>/history/<YYYY-WW>.md` 로 복사. ③ 커밋 + git push(컨테이너 GITHUB_TOKEN 자격) + Slack 요약. ⚠️ Slack 게시는 반드시 `hermes send --to slack:#mission-log \"<요약+커밋링크>\"`(Web API)로 하라 — 에이전트 slack 도구는 인바운드 Socket Mode 어댑터에 의존해 실패할 수 있다(현재 flapping)."
+    body: "① **지속 상태 봉인**: `python3 /work/company/scripts/tools/monitor_state.py --monitor <monitor_id> add <후보 전체 id...> --date <회차일자>` — 이번 회차 후보 **전부**를 seen 에 추가한다(다이제스트에 올린 것만이 아니다. 그래야 다음 회차에 다시 안 뜬다). ② **히스토리 회전**: digest.md 를 `monitors/<monitor_id>/history/<YYYY-WW>.md` 로 복사. ③ 커밋 + git push(컨테이너 GITHUB_TOKEN 자격) + 미션 로그 요약. ⚠️ 게시는 반드시 아래 CLI 로 하라 — 에이전트의 slack/discord 도구는 인바운드 어댑터에 의존해 실패할 수 있다. <NOTIFY_CMDS>"
