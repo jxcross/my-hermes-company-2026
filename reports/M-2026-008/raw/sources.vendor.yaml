@@ -1,0 +1,29 @@
+sources:
+- collected_at: '2026-08-06T06:48:35.561331'
+  id: vend-001
+  published_year: 2024
+  source_type: vendor
+  status: selected
+  title: What is GraphRAG? (Neo4j)
+  url: https://neo4j.com/blog/genai/what-is-graphrag
+- collected_at: '2026-08-06T06:48:35.561332'
+  id: vend-002
+  published_year: 2024
+  source_type: vendor
+  status: selected
+  title: Improving Retrieval Augmented Generation accuracy with GraphRAG (AWS)
+  url: https://aws.amazon.com/blogs/machine-learning/improving-retrieval-augmented-generation-accuracy-with-graphrag
+- collected_at: '2026-08-06T06:48:35.561333'
+  id: vend-003
+  published_year: 2024
+  source_type: vendor
+  status: selected
+  title: What is GraphRAG? (IBM)
+  url: https://www.ibm.com/think/topics/graphrag
+- collected_at: '2026-08-06T06:48:35.561334'
+  id: vend-004
+  published_year: 2024
+  source_type: vendor
+  status: selected
+  title: Microsoft GraphRAG Project Documentation
+  url: https://microsoft.github.io/graphrag

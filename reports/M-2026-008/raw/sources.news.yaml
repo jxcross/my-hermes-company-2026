@@ -1,0 +1,36 @@
+- id: news_001
+  title: 'Agentic GraphRAG: Navigating Unstructured Financial Data with Collaborative
+    AI'
+  url: https://arxiv.org/html/2605.18770v1
+  published_year: 2026
+  source_type: news
+  collected_at: '2026-08-06T06:56:36.801212'
+  status: selected
+- id: news_002
+  title: How GraphRAG Cuts AI Development Costs and Complexity
+  url: https://graphwise.ai/blog/building-smarter-faster-how-graphrag-cuts-ai-development-costs-and-complexity
+  published_year: 2026
+  source_type: news
+  collected_at: '2026-08-06T06:56:36.801218'
+  status: selected
+- id: news_003
+  title: 'AI Memory vs RAG vs Knowledge Graph: Enterprise Guide 2026'
+  url: https://atlan.com/know/ai-memory-vs-rag-vs-knowledge-graph
+  published_year: 2026
+  source_type: news
+  collected_at: '2026-08-06T06:56:36.801219'
+  status: selected
+- id: news_004
+  title: GraphRAG (Memgraph Documentation)
+  url: https://memgraph.com/docs/ai-ecosystem/graph-rag
+  published_year: 2026
+  source_type: news
+  collected_at: '2026-08-06T06:56:36.801220'
+  status: selected
+- id: news_005
+  title: Comparing RAG, Agentic RAG, and Graph-R1 for AI Tasks
+  url: https://www.linkedin.com/posts/rakeshgohel01_graph-r1-rag-framework-that-uses-ai-agents-activity-7375153301111291904-wrxn
+  published_year: 2026
+  source_type: news
+  collected_at: '2026-08-06T06:56:36.801221'
+  status: selected

@@ -1,0 +1,21 @@
+- id: nist-ai-rmf
+  title: NIST AI Risk Management Framework (RMF)
+  url: https://www.nist.gov/itl/ai-risk-management-framework
+  published_year: 2023
+  source_type: standards
+  collected_at: '2026-08-06T06:53:21.533332'
+  status: selected
+- id: iso-42001-aims
+  title: 'ISO/IEC 42001: AI Management System (AIMS)'
+  url: https://www.iso.org/standard/81902.html
+  published_year: 2023
+  source_type: standards
+  collected_at: '2026-08-06T06:53:21.533332'
+  status: selected
+- id: ieee-ai-ethics
+  title: IEEE Standards Association - AI/ML Series
+  url: https://standards.ieee.org/
+  published_year: 2024
+  source_type: standards
+  collected_at: '2026-08-06T06:53:21.533332'
+  status: selected

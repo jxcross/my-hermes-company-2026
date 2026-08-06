@@ -1,0 +1,36 @@
+sources:
+- collected_at: '2026-08-06T06:48:35.561323'
+  id: acad-001
+  published_year: 2026
+  source_type: academic
+  status: selected
+  title: Navigating Unstructured Financial Data with Collaborative AI
+  url: https://arxiv.org/abs/2604.xxxxx
+- collected_at: '2026-08-06T06:48:35.561328'
+  id: acad-002
+  published_year: 2026
+  source_type: academic
+  status: selected
+  title: 'Graph-based Agent Memory: Taxonomy, Techniques, and ...'
+  url: https://arxiv.org/abs/2605.xxxxx
+- collected_at: '2026-08-06T06:48:35.561329'
+  id: acad-003
+  published_year: 2026
+  source_type: academic
+  status: selected
+  title: 'SAGE: A Self-Evolving Agentic Graph-Memory Engine for ...'
+  url: https://arxiv.org/abs/2605.xxxxx
+- collected_at: '2026-08-06T06:48:35.561330'
+  id: acad-004
+  published_year: 2025
+  source_type: academic
+  status: selected
+  title: A Systematic Review of Key Retrieval-Augmented ...
+  url: https://arxiv.org/abs/2507.xxxxx
+- collected_at: '2026-08-06T06:48:35.561331'
+  id: acad-005
+  published_year: 2026
+  source_type: academic
+  status: selected
+  title: 'Beyond Training: Enabling Self-Evolution of Agents with MobiMem'
+  url: https://arxiv.org/abs/260x.xxxxx

@@ -1,0 +1,21 @@
+- id: ms-research-graphrag
+  title: Microsoft Research - GraphRAG
+  url: https://www.microsoft.com/en-us/research/
+  published_year: 2024
+  source_type: research_org
+  collected_at: '2026-08-06T06:53:21.533332'
+  status: selected
+- id: metr-ai-safety
+  title: METR (Model Evaluation and Threat Research)
+  url: https://metr.org/
+  published_year: 2024
+  source_type: research_org
+  collected_at: '2026-08-06T06:53:21.533332'
+  status: selected
+- id: neo4j-graphrag-research
+  title: Neo4j GraphRAG Research & Implementation
+  url: https://neo4j.com/blog/genai/what-is-graphrag
+  published_year: 2024
+  source_type: research_org
+  collected_at: '2026-08-06T06:53:21.533332'
+  status: selected
