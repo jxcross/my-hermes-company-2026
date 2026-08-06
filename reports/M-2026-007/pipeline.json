@@ -1,0 +1,209 @@
+{
+  "mission": "M-2026-007",
+  "template": "academic-paper",
+  "topic": "온디바이스 소형 언어모델의 효율적 추론 — 양자화·KV 캐시·병렬화",
+  "board": "m-2026-007",
+  "policy_file": "reports/M-2026-007/SCOPE.md",
+  "sources_file": "reports/M-2026-007/raw/sources.yaml",
+  "policy": {
+    "recency_policy": {
+      "cutoff_year_offset": -3,
+      "recent_ratio": 0.5,
+      "hard_block_year_offset": -15,
+      "seminal_exceptions": true
+    },
+    "source_balance_policy": {
+      "categories": [
+        "peer_reviewed",
+        "preprint",
+        "survey",
+        "dataset_code",
+        "standards",
+        "web"
+      ],
+      "min_per_category": {
+        "peer_reviewed": 6,
+        "preprint": 2,
+        "survey": 1,
+        "dataset_code": 0,
+        "standards": 0,
+        "web": 0
+      },
+      "hard_block_if_missing": false
+    },
+    "analysis_substance_policy": {
+      "shard_dir": "analysis",
+      "exclude": [
+        "_index.md"
+      ],
+      "min_words": 150,
+      "max_words": 20000,
+      "min_evidence_bullets": 3,
+      "min_locator_citations": 2,
+      "require_shard_per_selected": true
+    }
+  },
+  "stages": [
+    {
+      "id": 1,
+      "name": "Scoping",
+      "task_id": "t_2bdbcb0b",
+      "profile": "default",
+      "verifier": false,
+      "sam_gate": true,
+      "upstream_task_ids": []
+    },
+    {
+      "id": 2,
+      "name": "Search Strategy",
+      "task_id": "t_a1158aed",
+      "profile": "scout",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_2bdbcb0b"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Collection",
+      "task_id": "t_0eceeaf6",
+      "profile": "scout",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_a1158aed"
+      ],
+      "parallel": {
+        "mode": "workers",
+        "workers": [
+          "peer_reviewed",
+          "preprint",
+          "survey",
+          "dataset_code",
+          "standards"
+        ],
+        "batch_size": 3,
+        "merge_to": "raw/sources.yaml"
+      }
+    },
+    {
+      "id": 4,
+      "name": "Dedup·Relevance",
+      "task_id": "t_8433dfbe",
+      "profile": "curator",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_0eceeaf6"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Deep Analysis",
+      "task_id": "t_fcf6eb73",
+      "profile": "reader",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_8433dfbe"
+      ],
+      "parallel": {
+        "mode": "per_item",
+        "over": "raw/sources.yaml 의 status=selected 자료 각각",
+        "batch_size": 3,
+        "merge_to": "analysis/_index.md"
+      }
+    },
+    {
+      "id": 6,
+      "name": "Cross-Verify",
+      "task_id": "t_16085b85",
+      "profile": "fact-checker",
+      "verifier": true,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_fcf6eb73"
+      ],
+      "gate": {
+        "objective": [
+          "recency_check",
+          "source_balance",
+          "analysis_substance"
+        ],
+        "llm": "fact_checker_verdict",
+        "draft": null
+      }
+    },
+    {
+      "id": 7,
+      "name": "Synthesis",
+      "task_id": "t_f67130c8",
+      "profile": "synthesizer",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_16085b85"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "Draft Sections",
+      "task_id": "t_ad502c79",
+      "profile": "writer",
+      "verifier": false,
+      "sam_gate": true,
+      "upstream_task_ids": [
+        "t_f67130c8"
+      ],
+      "approval_artifact": "reports/M-2026-007/outline.md",
+      "parallel": {
+        "mode": "per_item",
+        "over": "outline.md 의 sections 목록 각각(Abstract·Introduction·Related Work·Method/Analysis·Discussion·Conclusion 등 목차가 정한 것)",
+        "batch_size": 3,
+        "merge_to": "draft.md"
+      }
+    },
+    {
+      "id": 9,
+      "name": "Independent Review",
+      "task_id": "t_9390522c",
+      "profile": "reviewer",
+      "verifier": true,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_ad502c79"
+      ],
+      "gate": {
+        "objective": [
+          "recency_check",
+          "source_balance"
+        ],
+        "llm": "reviewer_verdict",
+        "draft": "reports/M-2026-007/draft.md"
+      }
+    },
+    {
+      "id": 10,
+      "name": "Wiki Update",
+      "task_id": "t_2b8b7dac",
+      "profile": "curator",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_9390522c"
+      ]
+    },
+    {
+      "id": 11,
+      "name": "Deliver",
+      "task_id": "t_fa940ae1",
+      "profile": "default",
+      "verifier": false,
+      "sam_gate": true,
+      "upstream_task_ids": [
+        "t_2b8b7dac"
+      ]
+    }
+  ]
+}
