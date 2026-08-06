@@ -25,7 +25,7 @@
   <!-- 최신 항목이 위로 오도록 역순 기록 -->
 
   <div class="entry">
-    <h2>#54 — <b>걸어 놓은 설정이 53일째 반영되지 않고 있었다</b> · 스테이지 내 병렬화는 로컬에서 직렬로 돌고 있었다</h2>
+    <h2>#54 — <b>걸어 놓은 설정이 53일째 반영되지 않고 있었다</b> · 병렬화는 로컬에서 직렬로 돌고 있었고, <b>이중 게이트는 옳게 판정한 뒤 그 판정을 잘못 전달했다</b></h2>
     <div class="meta">2026-08-06 · 요청자: Sam(Founder)</div>
     <div class="req"><span class="label">요청:</span> "@docs/ollama_맥북_로컬모델_사용방법.md 를 읽어보라. 현재 프로젝트에 적용 가능한지 검토하라." → (검토 후 선택) "로컬 전환까지 — 실미션 테스트"</div>
 
@@ -57,7 +57,18 @@
       <li>그게 카드에 <code>protocol violation</code> 으로만 남고 <b>이유는 어디에도 안 남는</b> 실패다(<code>docs/11 §7 ⑦</code>). 같은 프로브에서 <code>gemma4:26b</code> 는 전 항목 100%. <b>속도로 정확성을 사지 않는다</b> — 배치 유지.</li>
     </ol>
 
-    <div class="label">⑤ 만든 것:</div>
+    <div class="label">⑤ M-2026-006(아키타입 I) 실미션 — 이중 게이트 완주, 그리고 전달 결함 발견:</div>
+    <ol class="steps">
+      <li><b>✅ 이중 게이트가 로컬 백엔드로 처음 완주했다.</b> <code>객관=FAIL · LLM=PASS ⇒ VERDICT=FAIL</code> → 리비전 자동 생성 + downstream 보류. <b>LLM 검증자는 또 틀렸다</b> — "2058개 심볼을 모두 검증했다"며 PASS(실측 항목 977개 · 게이트가 파싱 가능한 형식은 <b>0개</b>). <code>docs/11 §7 ⑧</code> 포함 <b>세 번 다 객관 게이트가 뒤집었다.</b></li>
+      <li><b>⑨-g 그런데 리비전 지시문이 워커를 오도했다.</b> 카드 본문이 게이트 <b>이름만</b> 담고 사유 대신 LLM 의 PASS 요약("다 잘 됐다")을 실었다. 원인은 한 줄 — <code>subprocess.run(..., capture_output=True).returncode</code>, 즉 <b>출력을 잡아 놓고 종료코드만</b> 썼다. <b>대가가 실측됐다</b>: 리비전 1회가 통째로 낭비됐고 워커는 함수 시그니처 하나만 손봤다. <b>⑧-c 가 한 층 옮겨 재발한 것</b>(그때는 사람이 읽었고 이번엔 다음 워커가 읽는다).</li>
+      <li><b>⑨-f 프로브가 100% 를 준 지표가 현장에서 깨졌다.</b> stage 4 run #9 가 362초 일한 뒤 <code>kanban_complete</code> 미호출로 크래시(<code>must_finish</code>). <code>gemma4:26b</code> 는 프로브에서 이 항목 100% 였다. stage 1·2·3 은 크래시 0 — <b>긴 컨텍스트 검증자 단계에서만</b> 났다. 프로브는 <code>num_ctx 16384</code> 에 작은 과제를 준다. <b>프로브 조건이 실무와 다르면 100% 는 보증이 아니다.</b></li>
+      <li><b>⑨-b 게이트가 없는 단계는 과소 산출을 통과시킨다.</b> stage 2 산출물은 <b>진짜였는데</b>(오늘 추가한 코드까지 정확히 서술) 요구 6항목 중 <b>3개가 통째로 없었다</b>(진입점·빌드/테스트·외부 의존성 언급 각 0). 그 단계엔 <code>gate</code> 선언이 없다. ⑧ 이 막은 것이 "날조"라면 여기서 드러난 것은 <b>과소 산출</b>이라는 다른 실패 모양이다.</li>
+      <li><b>⑨-d 워커가 실제 게이트와 같은 상대경로에 깨진 코드를 썼다.</b> <code>scripts/gates/symbol_truth.py</code> — 워크스페이스가 미션 디렉터리라 살았을 뿐이고 <code>HERMES_WRITE_SAFE_ROOT</code> 에 <code>/work/company</code> 가 있다. <b>"자기 저장소를 대상으로 삼지 마라"는 K 전용 경고가 아니다</b> — I·L 로 넓혔다. 우리 게이트 무결은 확인.</li>
+      <li><b>⑨-a 템플릿 문구 모호성(7종 계통 결함).</b> "frontmatter 에 선언하라"가 <i>어디의</i> frontmatter 인지 말하지 않아 워커가 본문 코드블록에 넣었다. 게이트는 파일 맨 앞만 본다.</li>
+      <li><b>세어서 고친 것:</b> 게이트 <b>63종 → 62종</b>(표의 이름 목록은 처음부터 62개였다 · <code>set_backend.py</code> 안에서도 62/63 이 엇갈렸다) · 테스트 <b>355 → 350</b>("22 기타"는 어느 파일에도 대응하지 않았다). <b>기억이 아니라 측정으로 적는다.</b></li>
+    </ol>
+
+    <div class="label">⑥ 만든 것:</div>
     <ol class="steps">
       <li><b><code>scripts/probe_parallel.py</code></b>(신규) — 동시 요청 병렬성 측정. 판정을 순수 함수로 분리해 서버 없이 검사한다.</li>
       <li><b><code>set_backend.py --host-setup</code></b> + <code>HOST_ENV</code>/<code>HOST_ENV_OMITTED</code> — 호스트 서버 설정을 <b>한 곳에</b> 선언하고, 선언·적용·검사가 같은 표를 본다. <b>넣으면 안 되는 것</b>(<code>OLLAMA_CONTEXT_LENGTH</code>)도 이유와 함께 선언한다.</li>
