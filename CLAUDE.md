@@ -311,7 +311,10 @@ curl -s -o /dev/null -w '%{http_code}\n' --max-time 8 https://slack.com/api/auth
 
 **이식 시 1순위 확인 항목(공집합이 11회 반복됐다):** 입력이 **비었을 때** 그 게이트가 PASS 하는지부터 보라 — `len(s) <= 1` · `all(...)` · `not any(...)` · `glob` 결과 0건 · 항목 0개는 전부 공집합에서 참이다. **그리고 아키타입 Q 에서 새 모양이 나왔다 — 검사 대상이 있는데 측정값이 0 인 경우다**(빈 섹션 파일 5개 + 빈 간트가 '규격 통과'). **분량·개수를 재는 게이트에는 상한과 하한을 짝으로 둬라.**
 
-**⚠️ 아키타입 K(`code-migration`)는 미션 밖의 실제 코드를 바꾸고 커밋한다.** 대상 저장소는 `HERMES_WRITE_SAFE_ROOT` 안이어야 하고, **`/work/company` 자신을 대상으로 삼으면 안 된다**(파이프라인이 자기 코드를 고치게 된다). 코드 변경 개시 직전에 Sam 승인 게이트가 있다.
+**⚠️ 코드베이스를 *대상*으로 삼는 아키타입(K `code-migration` · **I `code-docs`** · L `security-audit`)은 그 저장소에 **쓰기를 시도한다.** 대상은 `HERMES_WRITE_SAFE_ROOT` 안이어야 하고, **`/work/company` 자신을 대상으로 삼는 것은 위험하다.**
+- **K** 는 설계상 실제 코드를 바꾸고 커밋한다(코드 변경 개시 직전에 Sam 승인 게이트).
+- **I 는 "문서만 만든다"고 선언하지만 실제로는 쓴다** — **실측 2026-08-06 M-2026-006**: 워커가 심볼 추출기를 만들면서 `scripts/gates/symbol_truth.py`, 즉 **우리 실제 게이트와 같은 상대경로**에 **문법이 깨진 파이썬**을 썼다. 워크스페이스가 미션 디렉터리라 그 안(`reports/M-2026-006/scripts/gates/`)으로 떨어져 살았을 뿐이고, **워커는 실제로 절대경로(`/work/company/reports/...`)를 쓴다**(로그 확인). `HERMES_WRITE_SAFE_ROOT` 에 `/work/company` 가 있으므로 **절대경로 한 글자 차이로 게이트가 깨진 코드로 덮였을 것이다.** 상세 `docs/11 §7 ⑨-d`.
+- → 자기 저장소를 문서화해야 한다면 **읽기 전용 복제본을 대상으로 삼고**, 미션 후 `git status scripts/` 로 무결성을 확인하라.
 
 **⚠️ 아키타입 M(`agent-eval`)은 코드를 만들어 실행하고 LLM API 를 수십~수백 회 호출한다** — 비용이 발생한다. stage 8(Run Plan)이 호출 수·비용을 산정하고 **stage 9 실행 직전에 Sam 승인 게이트**가 있다. 코퍼스 원문과 run 예측(`raw.jsonl`)은 `_private/`(gitignore), 코드·설정·지표·보고서는 커밋 대상이다. **커밋되는 것이 문서만이 아니므로** `secret_redaction` 이 `.py`·`.json`·`.yaml` 까지 훑는다(정책 `scan_extensions`).
 
