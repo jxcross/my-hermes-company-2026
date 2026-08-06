@@ -26,38 +26,43 @@ Hermes Agent 기반 **AI-Native Company**. 창업자 **Sam**(CS 박사, 한국�
 - **⚠️ 추론 백엔드는 갈아끼운다 — 모델을 손으로 고치지 마라**(2026-08-05 신설 · `docs/14`). `model:` 블록은 **`scripts/set_backend.py` 가 생성**한다. 배치표는 그 스크립트 상단 `TIERS`·`BACKENDS` 한 곳에만 있다.
   | 티어 | 프로필 | `codex` | **`ollama`(현재)** |
   |---|---|---|---|
-  | 작성자 | default·scout·reader·curator·synthesizer·writer | `gpt-5.5` | **`devstral-24b-96k`** |
-  | 검증자 | fact-checker·reviewer·tester | `gpt-5.5` | **`devstral-24b-96k`** |
-  | 코더 | architect·developer | `gpt-5.5` | **`devstral-24b-96k`** |
+  | 작성자 | default·scout·reader·curator·synthesizer·writer | `gpt-5.5` | **`gemma4-26b-256k`** |
+  | 검증자 | fact-checker·reviewer·tester | `gpt-5.5` | **`gemma4-26b-256k`** |
+  | 코더 | architect·developer | `gpt-5.5` | **`gemma4-26b-256k`** |
 
-  **창은 262144 이 아니라 98304 다** — 모델마다 KV 비용이 다르기 때문이다(2026-08-06 (3) 실측).
-  `devstral` 은 같은 창에서 `gemma4-26b` 의 **4.6배**를 먹는다: 262144→**83GB·CPU 로 흘러넘침** ❌ ·
-  131072→48GB · **98304→40GB·100% GPU ✅**(대조: gemma4-26b 는 262144 에서 17.9GB).
-  유효 창 81920 > 64000 이라 압축 퇴화 분기는 피한다.
+  **창은 262144 다**(2026-08-06 (4) 에 98304 에서 되돌렸다 — 커밋 `25ed214`).
+  98304 은 **devstral 이 감당하는 창**이었지 우리 창이 아니었다. KV 비용은 모델마다 다르다:
+  `devstral` 262144→**83GB·CPU 로 흘러넘침** ❌ · 98304→40GB ✅ ·
+  **`gemma4-26b` 262144→17GB·100% GPU ✅**(실측 확인 — 같은 창에서 devstral 의 1/4.6).
+  유효 창 245760 > 64000 이라 압축 퇴화 분기는 피한다.
   ⚠️ **`OLLAMA_NUM_CTX` 를 "우리 창"이라고 부르지 마라 — 그 모델이 감당하는 창이다.**
+  ⚠️ **창과 배치 모델은 한 커밋에서 함께 바꿔라** — `test_deployed_models_pin_the_same_window_as_the_config`
+  가 반쪽 되돌리기를 FAIL 시킨다(파생본 이름 `-256k` 가 창을 담고 있기 때문).
 
-  ⛔⛔ **로컬 모델 중 실미션을 이행한 것은 `gemma4-26b-256k` 뿐이다 — 지금 배치(devstral)로는
-  미션을 돌리지 마라.** 2026-08-06 에 같은 카드(stage 1 · 산출물 `SCOPE.md` 1개)로 통제 비교했다:
+  ⛔ **로컬 모델 중 실미션을 이행한 것은 `gemma4-26b-256k` 뿐이다 — 배치를 바꾸지 마라.**
+  2026-08-06 에 같은 카드(stage 1 · 산출물 `SCOPE.md` 1개)로 통제 비교했다:
 
   | 모델 | 시도 | 산출물 | 실패 양상 |
   |---|---|---|---|
   | `gemma4:12b-mlx` | 3회 | **0건** | 오독 2 · **날조 1** |
-  | `devstral-24b-96k`(현 배치) | 1회·656초 | **0건** | 파일 쓰기 도구 **미호출** → nudge → **날조** |
-  | `gemma4-26b-256k` | 1회 | **성공** | 정책값까지 정확 |
+  | `devstral-24b-96k` | 1회·656초 | **0건** | 파일 쓰기 도구 **미호출** → nudge → **날조** |
+  | **`gemma4-26b-256k`(현 배치)** | 1회 | **성공** | 정책값까지 정확 |
 
-  **→ Sam 결정(2026-08-06): 실미션은 `codex` 복귀(2026-08-09 14:07) 후에 한다.**
-  그때 `python3 scripts/set_backend.py --backend codex`. 상세 `docs/11 §7 ⑩`.
+  **→ Sam 지시(2026-08-06): `codex` 복원(2026-08-09 14:07) 전까지 26b 로 간다.**
+  복귀는 `python3 scripts/set_backend.py --backend codex`. 상세 `docs/11 §7 ⑩`.
 
   ✅ **"템플릿이 문제였나?" 는 통제 실험으로 갈랐다 — 템플릿은 결백하다**(`docs/11 §7 ⑩-f`).
   `academic-paper` stage 1 카드를 **본문 한 글자 안 바꾸고** 실미션과 동일한 워크스페이스
   모양(`…/reports/<MID>/` + `pipeline.json`)에서 26b 로 재현했더니 **`SCOPE.md` 2013B 산출 성공**
   (정책값까지 `pipeline.json` 에서 정확히 인용). **모델 하나만 다른 조건에서 갈렸다.**
-  → 로컬로 미션을 돌려야 한다면 **`gemma4-26b-256k` 로 되돌리면 된다**(blob 보존 · 표 4줄 복원).
+  → 되돌리기는 실제로 **4줄**이었다(blob 을 안 지웠기 때문 — 다음에도 `ollama rm` 하지 마라).
 
   ⚠️ **프로브 100% 는 과제 이행을 보증하지 않는다** — `gemma4:12b-mlx` 는 7항목 100%·최속인데
   산출물이 0건이었다. **배치 채택 기준에 "실미션 stage 1 통과"를 넣어라.**
   ⚠️ **`must_finish` 80%**(devstral · reps 10). 5회에서는 100% 라 **표본을 키워야 보였다.**
   ⚠️ MLX 는 `OLLAMA_NUM_PARALLEL` 을 안 따른다(별도 러너 · slot 없음 → 팬아웃 직렬화).
+  ✅ **26b 는 GGUF 라 `NUM_PARALLEL` 이 실효한다** — 재확인(2026-08-06 (4) `probe_parallel.py`):
+  종료 분산 0.00~0.01 · 합산 처리량 이득 ×1.18 → **병렬**. 스테이지 내 팬아웃이 이득을 낸다.
 
   ```bash
   python3 scripts/set_backend.py --show               # 현재 백엔드(불일치면 exit 1)
