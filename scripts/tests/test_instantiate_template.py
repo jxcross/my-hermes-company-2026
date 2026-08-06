@@ -101,6 +101,35 @@ def test_no_parallel_body_unchanged():
     assert it.fanout_body({"id": 2}, "검색식 작성.") == "검색식 작성."
 
 
+def test_body_forbids_making_kanban_cards_instead_of_delegating():
+    """★ 실측 2026-08-06 M-2026-008 stage 3: 워커가 delegation 대신 **Kanban 자식 카드
+    3장**을 만들고 자기는 done 처리했다. 카드들은 존재하지 않는 profile
+    (`researcher-a/b/c`)에 배정돼 아무도 실행하지 않았고, 다음 단계가 **빈 입력으로**
+    돌기 시작했다. 프로토콜이 '카드를 만들지 마라'를 말하지 않아서 모델이 아는 도구로
+    손을 뻗은 것이다 — stage 1 본문에는 있던 금지가 여기엔 없었다.
+    """
+    body = it.fanout_body(STAGE5W, "수집하라.")
+    assert "kanban create" in body and "decompose" in body, body
+    assert "만들지 마라" in body, body
+
+
+def test_body_ties_completion_to_the_merged_artifact():
+    """★ '위임했다'를 '끝냈다'로 읽지 못하게 한다 — 완료 조건을 산출물로 못박는다.
+
+    같은 실측에서 워커의 완료 요약은 "subagent 3개가 ready 상태"였다. 위임은 진행이지
+    완료가 아닌데 카드가 done 이 됐고, **진행 신호 자체가 오염**됐다.
+    """
+    body = it.fanout_body(STAGE5W, "수집하라.")
+    assert "완료 조건" in body and "raw/sources.yaml" in body, body
+    assert "완료 보고는 산출물을 대신하지 못한다" in body, body
+
+
+def test_no_completion_clause_without_a_merge_target():
+    """merge_to 가 없으면 완료 조건으로 못박을 파일도 없다 — 없는 파일을 요구하지 마라."""
+    stage = {"id": 3, "parallel": {"mode": "workers", "workers": ["a"], "batch_size": 3}}
+    assert "완료 조건" not in it.fanout_body(stage, "x")
+
+
 # ── 렌더 라벨 ────────────────────────────────────────────────────────────
 def test_label_shows_batch_and_rounds():
     assert it.fanout_label(STAGE5W) == "⇉5워커/배치3×2R"

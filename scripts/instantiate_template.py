@@ -334,6 +334,13 @@ def fanout_body(stage: dict, base_body: str) -> str:
         "── 병렬 팬아웃 (delegation 배치 위임) ──",
         "이 단계는 순차 처리하지 마라. 아래 작업들을 delegation 도구의 배치(parallel) "
         "기능으로 위임해 subagent 들이 동시에 실행되게 하라(각자 격리 세션).",
+        "⛔ **Kanban task 를 새로 만들지 마라.** `kanban create`·`kanban decompose` 로 "
+        "하위 카드를 만드는 것은 위임이 **아니다** — 파이프라인 카드는 이미 다 생성돼 있고, "
+        "새 카드는 존재하지 않는 profile 에 배정되어 **아무도 실행하지 않는다.** "
+        "쓸 도구는 오직 **delegation(subagent)** 하나다.",
+        "⛔ **subagent 에게 넘겼다는 것은 네 일이 끝났다는 뜻이 아니다.** 위임 → 전원 반환 → "
+        "네가 병합, 이 세 가지를 **네 세션 안에서** 끝내야 이 task 가 완료다. "
+        "위임만 하고 완료를 선언하면 다음 단계가 **빈 입력으로 돌아간다.**",
     ]
     if p["mode"] == "workers":
         workers = p.get("workers") or []
@@ -352,6 +359,9 @@ def fanout_body(stage: dict, base_body: str) -> str:
         lines.append(f"· 모든 subagent 반환 후 **오케스트레이터(너)가** 산출 shard 들을 "
                      f"'{merge_to}'로 병합·dedup(필드 누락·형식 불량 항목 폐기). 이 병합 파일이 "
                      f"다음 단계·게이트의 입력이다.")
+        lines.append(f"· ✅ **완료 조건: '{merge_to}' 가 디스크에 실재하고 내용이 비어 있지 않을 것.** "
+                     f"그 파일을 만들지 못했다면 이 task 는 완료가 아니다 — 완료로 처리하지 말고 "
+                     f"무엇이 막혔는지 남겨라. 완료 보고는 산출물을 대신하지 못한다.")
     return "\n".join(lines)
 
 
