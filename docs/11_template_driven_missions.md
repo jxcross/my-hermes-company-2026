@@ -359,6 +359,52 @@ without calling kanban_complete or kanban_block — protocol violation` 으로 �
 조건**을 추가하지 않으면 이 실패를 예측할 수 없다.
 ⚠️ 재시도(max-retries 2)가 받아 냈다 — 이 실패 모양은 **막히지는 않지만 시간을 두 배로 쓴다.**
 
+**⑨-g ⚠️⚠️ 이중 게이트는 옳게 작동했는데, 그 결과로 만든 *리비전 지시문*이 워커를 오도했다.**
+
+먼저 **좋은 소식**: stage 4 에서 이중 게이트가 로컬 백엔드로 처음 완주했다.
+```
+객관게이트 symbol_truth: exit=2 FAIL(입력없음·fail-closed)
+검증자 완료 감지 → 객관=FAIL · LLM=PASS ⇒ VERDICT=FAIL
+FAIL → create revision 'G4R Revision'(reader) → 're-verify' → downstream 보류
+```
+LLM 검증자는 **또 틀렸다** — `VERDICT: PASS` 와 함께 *"2058개 심볼이 모두 코드에 존재하고
+시그니처가 정확함을 검증했다"* 고 보고했다. 실측은 `- name:` **977개**이고 게이트가 파싱할 수
+있는 형식은 **0개**다. ⑧ 을 포함해 **세 번 다 객관 게이트가 뒤집었다.**
+
+**그런데 리비전 카드 본문이 이랬다:**
+```
+[객관 게이트 실패 gates=['symbol_truth']] . The symbol verification for M-2026-006 is
+complete. Verified that all 2058 symbols ... signatures are correct
+```
+게이트 **이름만** 있고 사유가 없다. 그리고 이어지는 "수정 지시"가 **LLM 의 PASS 요약** —
+즉 *"다 잘 됐다"* 다.
+
+**원인은 한 줄이었다**(`gate_keeper.objective_verdict`):
+```python
+rc = subprocess.run(cmd, capture_output=True, text=True, timeout=60).returncode
+```
+출력을 **잡아 놓고 `.returncode` 만** 썼다. 게이트가 쓴 사유가 그 자리에서 버려진다.
+
+**대가는 실측됐다 — 리비전 라운드 1회가 통째로 낭비됐다.**
+워커는 붙잡을 것이 없어 *"Corrected signature mismatch for 'log' function"* 이라며 **함수
+시그니처 하나를 손보고 끝냈다.** 근본 원인(SCOPE frontmatter 부재 · symbols 형식)은 그대로다.
+
+**수정**(커밋 참조): 게이트 stdout/stderr 를 사유로 싣고(게이트당 500자 상한·자른 사실 명시),
+**LLM=PASS 인데 객관=FAIL 이면 지시문이 그 사실을 못박는다**("검증자 요약은 참고일 뿐 사실이
+아니다"), 게이트가 침묵하면 '사유 없음'이 아니라 **침묵했다는 사실**을 적는다(방어는 호출부가
+아니라 **렌더링 경계**에 — 어느 경로로 와도 걸린다).
+수정 후:
+```
+gates=['symbol_truth']
+· symbol_truth: FAIL(usage): SCOPE.md frontmatter 에 `codebase:` 가 없다 — … fail-closed
+```
+⚠️ 침묵 케이스는 **테스트가 먼저 잡았다**(방어가 호출부에만 있어 빈 사유가 그대로 렌더링됐다).
+테스트 34 → 38.
+
+> **⑧-c 가 한 층 옮겨 재발한 것이다.** ⑧-c 는 "잘못된 판정이 그대로 **사람**에게 갔다"였고,
+> ⑨-g 는 "잘못된 지시가 그대로 **다음 워커**에게 갔다"이다. **판정을 옳게 내는 것과 그 판정을
+> 옳게 전달하는 것은 별개의 일이다** — 게이트를 고칠 때마다 *그 결과를 누가 읽는가* 를 함께 봐라.
+
 **교훈(⑨ 잠정)**
 > ① **게이트가 없는 단계는 과소 산출을 통과시킨다.** ⑧ 이 만든 `analysis_substance` 는
 >    "산출물이 실체가 있는가"를 보지만, **"요구한 항목을 다 채웠는가"** 를 보는 게이트는
@@ -368,6 +414,9 @@ without calling kanban_complete or kanban_block — protocol violation` 으로 �
 > ③ **자기 저장소를 대상으로 삼는 아키타입은 모두** 쓰기 위험이 있다(I·K 둘 다).
 > ④ **프로브의 조건이 실무와 다르면 프로브의 100% 는 보증이 아니다.** `must_finish` 가
 >    프로브 100% 인데 긴 컨텍스트 검증자 단계에서 깨졌다 — 프로브에 긴 입력 조건을 넣어라.
+> ⑤ **판정을 옳게 내는 것과 그 판정을 옳게 전달하는 것은 별개의 일이다**(⑨-g).
+>    게이트를 고칠 때마다 **그 결과를 누가 읽는가**(사람? 다음 워커?)를 함께 봐라.
+>    출력을 capture 해 놓고 returncode 만 쓰는 코드가 있으면 사유는 이미 버려진 것이다.
 
 ## 8. 검증 (설계 타당성 판정)
 - Pilot에서 `instantiate_template.py trend-report M-2026-003`가 현 11단계와 **동등한 Kanban 그래프** 생성(수동 대비 diff 0).
