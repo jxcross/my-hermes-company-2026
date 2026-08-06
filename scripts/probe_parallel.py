@@ -65,7 +65,7 @@ def _default_model() -> str:
 
         return sb.backend_models("ollama")[0]
     except Exception:
-        return "gemma4-26b-256k"
+        return "gpt-oss-20b-128k"
 
 
 DEFAULT_MODEL = _default_model()

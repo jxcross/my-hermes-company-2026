@@ -281,9 +281,15 @@ def test_context_mismatch_is_detected_from_the_server_not_the_config():
     #    이 픽스처가 '배치 밖 모델'이 되어 아래 test_..._ignores_models_outside_the_batch
     #    경로로 빠지고, 검사는 **조용히 아무것도 재지 않게 된다**(2026-08-06 실제 발생).
     batch_model = sb.backend_models("ollama")[0]
+    # ⚠️ **'틀린 창'도 배치표에서 파생시킨다.** 2026-08-06 (5) 에 배치를 `gpt-oss-20b-128k`
+    #    (창 131072)로 바꾸자, 여기 박혀 있던 '틀린 값' 131072 가 **맞는 값이 되어** 이
+    #    테스트가 FAIL 했다. 위 주석이 경고한 함정을 정확히 반대 방향으로 밟은 것이다 —
+    #    상수는 언젠가 진짜 값과 충돌한다. 배치 창의 절반이면 어떤 창에서도 다르다.
+    stale_ctx = sb.OLLAMA_NUM_CTX // 2
+    assert stale_ctx != sb.OLLAMA_NUM_CTX
     orig_ps = ur.ollama_ps
     ur.ollama_ps = lambda url="": ([{"name": f"{batch_model}:latest",
-                                     "context_length": 131072, "size": 17_000_000_000}], "")
+                                     "context_length": stale_ctx, "size": 17_000_000_000}], "")
     try:
         rt = ur.check_runtime()
         assert rt["context_mismatch"], "서버가 옛 창을 서빙하는데 못 잡았다"
