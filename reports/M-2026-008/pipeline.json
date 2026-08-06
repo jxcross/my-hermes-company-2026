@@ -1,0 +1,194 @@
+{
+  "mission": "M-2026-008",
+  "template": "trend-report",
+  "topic": "LLM 에이전트를 위한 지식베이스·위키 구축 동향 — 지식 그래프·GraphRAG·메모리 아키텍처·재사용률 측정",
+  "board": "m-2026-008",
+  "policy_file": "reports/M-2026-008/SCOPE.md",
+  "sources_file": "reports/M-2026-008/raw/sources.yaml",
+  "policy": {
+    "recency_policy": {
+      "cutoff_year_offset": -2,
+      "recent_ratio": 0.6,
+      "hard_block_year_offset": -5,
+      "seminal_exceptions": true
+    },
+    "source_balance_policy": {
+      "categories": [
+        "academic",
+        "vendor",
+        "research_org",
+        "standards",
+        "news"
+      ],
+      "min_per_category": {
+        "academic": 2,
+        "vendor": 2,
+        "research_org": 1,
+        "standards": 0,
+        "news": 0
+      },
+      "hard_block_if_missing": false
+    }
+  },
+  "stages": [
+    {
+      "id": 1,
+      "name": "Scoping",
+      "task_id": "t_b00904e6",
+      "profile": "default",
+      "verifier": false,
+      "sam_gate": true,
+      "upstream_task_ids": []
+    },
+    {
+      "id": 2,
+      "name": "Search Strategy",
+      "task_id": "t_6c32e275",
+      "profile": "scout",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_b00904e6"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Collection",
+      "task_id": "t_dd937c62",
+      "profile": "scout",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_6c32e275"
+      ],
+      "parallel": {
+        "mode": "workers",
+        "workers": [
+          "academic",
+          "vendor",
+          "research_org",
+          "standards",
+          "news"
+        ],
+        "batch_size": 3,
+        "merge_to": "raw/sources.yaml"
+      }
+    },
+    {
+      "id": 4,
+      "name": "Dedup·Relevance",
+      "task_id": "t_1ae1ce16",
+      "profile": "curator",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_dd937c62"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Deep Analysis",
+      "task_id": "t_2607cd4f",
+      "profile": "reader",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_1ae1ce16"
+      ],
+      "parallel": {
+        "mode": "per_item",
+        "over": "raw/sources.yaml 의 status=selected 자료 각각",
+        "batch_size": 3,
+        "merge_to": "analysis/_index.md"
+      }
+    },
+    {
+      "id": 6,
+      "name": "Cross-Verify",
+      "task_id": "t_5039f689",
+      "profile": "fact-checker",
+      "verifier": true,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_2607cd4f"
+      ],
+      "gate": {
+        "objective": [
+          "recency_check",
+          "source_balance"
+        ],
+        "llm": "fact_checker_verdict",
+        "draft": null
+      }
+    },
+    {
+      "id": 7,
+      "name": "Synthesis",
+      "task_id": "t_05e02398",
+      "profile": "synthesizer",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_5039f689"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "Report Draft",
+      "task_id": "t_1dbcd363",
+      "profile": "writer",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_05e02398"
+      ],
+      "parallel": {
+        "mode": "per_item",
+        "over": "보고서 섹션(개요·기술분류·성숙도·적용후보·결론 등 7단계 종합 기준)",
+        "batch_size": 3,
+        "merge_to": "report.md"
+      }
+    },
+    {
+      "id": 9,
+      "name": "Independent Review",
+      "task_id": "t_6d72dd25",
+      "profile": "reviewer",
+      "verifier": true,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_1dbcd363"
+      ],
+      "gate": {
+        "objective": [
+          "recency_check",
+          "source_balance"
+        ],
+        "llm": "reviewer_verdict",
+        "draft": "reports/M-2026-008/report.md"
+      }
+    },
+    {
+      "id": 10,
+      "name": "Wiki Update",
+      "task_id": "t_4b9daed4",
+      "profile": "curator",
+      "verifier": false,
+      "sam_gate": false,
+      "upstream_task_ids": [
+        "t_6d72dd25"
+      ]
+    },
+    {
+      "id": 11,
+      "name": "Deliver",
+      "task_id": "t_397b68cb",
+      "profile": "default",
+      "verifier": false,
+      "sam_gate": true,
+      "upstream_task_ids": [
+        "t_4b9daed4"
+      ]
+    }
+  ]
+}
