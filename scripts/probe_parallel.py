@@ -30,8 +30,8 @@
    병렬성이 아니라 길이 차이를 반영한다.
 
 사용
-  python3 scripts/probe_parallel.py                      # 배치 모델 · 동시 3
-  python3 scripts/probe_parallel.py -m gemma4-26b-256k -n 3
+  python3 scripts/probe_parallel.py                      # 배치 모델(set_backend 표) · 동시 3
+  python3 scripts/probe_parallel.py -m gemma4-12b-mlx-256k -n 3
   python3 scripts/probe_parallel.py --json
 
 exit: 0 병렬(또는 판정 보류) · 1 **직렬 검출**(병렬화 이득 없음) · 2 Ollama 에 닿지 못함
@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import pathlib
 import statistics
 import sys
 import threading
@@ -48,7 +49,26 @@ import urllib.error
 import urllib.request
 
 OLLAMA = "http://127.0.0.1:11434"
-DEFAULT_MODEL = "gemma4-26b-256k"
+
+
+def _default_model() -> str:
+    """기본 모델은 **배치표에서 읽는다** — 문자열로 박아 두면 백엔드를 갈 때 여기만 남는다.
+
+    ⚠️ 2026-08-06 실측: 이 파일만 `set_backend` 를 import 하지 않아 배치가
+       `gemma4-26b-256k` 에서 바뀌어도 따라오지 않았다. `probe_protocol.py:239-243` 과
+       `usage_report.py:174` 는 이미 표를 읽는다 — 같은 방식으로 맞춘다.
+       import 이 실패해도 프로브 자체는 돌아야 하므로 폴백만 문자열로 둔다.
+    """
+    try:
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+        import set_backend as sb  # noqa: PLC0415
+
+        return sb.backend_models("ollama")[0]
+    except Exception:
+        return "gemma4-12b-mlx-256k"
+
+
+DEFAULT_MODEL = _default_model()
 
 # 생성 길이를 못박는다 — 요청마다 다르면 종료 분포가 병렬성이 아니라 길이를 반영한다.
 NUM_PREDICT = 96

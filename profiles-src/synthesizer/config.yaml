@@ -1,7 +1,7 @@
 # 로컬 Ollama 백엔드 — scripts/set_backend.py 가 생성한다. 직접 고치지 말 것.
 # 전환: python3 scripts/set_backend.py --backend codex|ollama   (docs/14 참조)
 model:
-  default: "gemma4-26b-256k"
+  default: "gemma4-12b-mlx-256k"
   provider: "ollama"
   base_url: "http://host.docker.internal:11434/v1"
   api_key: "ollama"

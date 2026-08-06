@@ -97,7 +97,19 @@ OLLAMA_NUM_CTX = 262144
 #
 # ⚠️ 슬롯마다 KV 캐시가 따로 잡힌다 → `NUM_PARALLEL` 을 올리면 메모리가 배수로 는다.
 #    그래서 `KV_CACHE_TYPE=q8_0`(f16 대비 절반) + `FLASH_ATTENTION=1` 과 **짝으로** 건다.
+# ⚠️⚠️ **MLX 배치에서는 `OLLAMA_NUM_PARALLEL` 이 듣지 않는다 (2026-08-06 실측 · Ollama 0.32.6).**
+#    MLX 모델은 llama.cpp 가 아니라 **별도 `mlx runner` 서브프로세스**가 서빙한다
+#    (서버 로그 `msg="starting mlx runner subprocess"`). 그 러너에는 llama.cpp 의 `slot`
+#    개념이 없어서 동시 요청을 **한 줄로 세운다.** `ollama serve --help` 의 환경변수 목록에
+#    MLX 병렬 손잡이는 **없다** — 우리가 끌 수 있는 손잡이가 아니다.
+#      · `gemma4-12b-mlx-256k` 동시 3 → 종료 오프셋 [1.11, 2.34, 3.66] · 분산 1.82 = **직렬**
+#      · `gemma4-26b-256k`(GGUF) 동시 3 → 종료 오프셋 [4.58, 4.58, 4.58] · 분산 0.00 = 동시
+#    **그런데 배치를 바꾼 판단은 뒤집히지 않는다** — 3샤드 배치 총 벽시계가
+#    **12b-mlx 3.66초 < 26b 4.58초** 다. 직렬이어도 요청당 훨씬 빨라 총량에서 이긴다.
+#    → `probe_parallel.py` 는 배치 모델에 **'직렬'을 계속 보고한다. 그게 사실이다.**
+#      끄지 마라. 끄면 진짜 회귀(GGUF 로 돌아갔는데 NUM_PARALLEL 이 빠진 경우)를 놓친다.
 HOST_ENV: dict[str, str] = {
+    # ⚠️ 아래 주석 참조 — MLX 러너에는 적용되지 않는다. GGUF 로 되돌릴 때를 위해 유지한다.
     "OLLAMA_NUM_PARALLEL":      "3",      # = delegation.max_concurrent_children · 템플릿 batch_size
     "OLLAMA_KV_CACHE_TYPE":     "q8_0",   # 슬롯 3개분 KV 를 감당하기 위한 짝
     "OLLAMA_FLASH_ATTENTION":   "1",      # q8_0 KV 의 전제
@@ -128,8 +140,16 @@ COMPRESSION_THRESHOLD = 0.85
 # ⚠️ 폴백 3종을 **지우지 않는 이유**: 배치에서 빠졌을 뿐 측정으로 검증된 대안이다
 #    (docs/14 §2.1). 어설션을 맞추려고 측정 기록을 버리는 것은, 이 저장소가
 #    `shared_verifier_model` 선언으로 막아둔 바로 그 실패 모양이다.
+#
+# ⚠️ **`gemma4-26b-256k` 는 2026-08-06 에 이 표에서 제거했다 — Sam 명시 지시다.**
+#    위 "폴백을 지우지 않는 이유"와 형식상 충돌하므로 사유를 남긴다. 배치를
+#    `gemma4:12b-mlx` 로 단일화하면서 26b 를 폴백으로도 남기지 말라는 지시였다.
+#    ⚠️ **모델 blob 은 지우지 않았다** — `ollama list` 에 `gemma4-26b-256k:latest` 가 그대로
+#    있으므로 되돌리기는 아래 한 줄 복원이면 된다(재다운로드 불필요):
+#        "gemma4-26b-256k": {"base": "gemma4:26b", "num_ctx": 262144, "ceiling": 262144},
+#    26b 의 측정 기록은 `docs/14 §2.1` 표에 남아 있다.
 BASE_MODELS: dict[str, dict] = {
-    "gemma4-26b-256k":   {"base": "gemma4:26b",      "num_ctx": 262144, "ceiling": 262144},
+    "gemma4-12b-mlx-256k": {"base": "gemma4:12b-mlx", "num_ctx": 262144, "ceiling": 262144},
     # 폴백(배치에서 빠졌지만 측정으로 검증된 대안 — docs/14 §2.1)
     "gemma4-e4b-128k":   {"base": "gemma4:e4b",      "num_ctx": 131072, "ceiling": 131072},
     "qwen3.6-256k":      {"base": "qwen3.6:35b",     "num_ctx": 262144, "ceiling": 262144},
@@ -176,17 +196,26 @@ BACKENDS: dict[str, dict] = {
         "label": "ollama (호스트 로컬 · host.docker.internal:11434)",
         # ⚠️ 배치 모델은 **-256k 파생본**이다(원본이 아니다). 이유는 위 BASE_MODELS 주석.
         # 선정 근거는 추측이 아니라 측정이다 — `scripts/probe_protocol.py` (docs/14 §2.1).
-        # 무경합 실측(2026-08-05): 프로토콜 3회 벽시계 26b 45s = e4b 45s < 12b 97s ·
-        # 실작업(18.8k 입력) 26b 61.5s ≈ e4b 57.2s. 속도가 동률이라 **창 여유**로 갈랐다
-        # (26b 262144 > e4b 131072=천장) + 마지막줄 규격 26b 100% vs e4b 33%.
-        # → 2026-08-05 (3) Sam 지시로 그 여유를 실제로 쓴다: 131072 → **262144(천장)**.
+        #
+        # **2026-08-06 (2) Sam 지시로 전 티어 `gemma4:12b-mlx` 단일화.**
+        # 근거가 된 기존 측정(docs/14 §2.1): `gemma4:12b` 는 프로토콜 7항목이 **전부 100%** 로
+        # 26b 와 동률이었고, 탈락 사유는 오직 **벽시계 2배**(97초 vs 45초 · 47 vs 96 tok/s)였다.
+        # MLX 는 Apple Silicon 에서 정확히 그 벽시계를 겨냥한 런타임이므로 "정확도는 유지하고
+        # 속도만 회복" 을 노린다. 그 베팅의 실측치는 아래 PROBE 주석에 적는다.
+        #
+        # ⚠️ MLX 모델은 **Ollama 0.32.0+ 를 요구한다** — 0.30.8 에서는 `pull` 이 412 로 거부된다.
+        #    이 배치를 쓰려면 호스트 Ollama 가 0.32.6 이상이어야 한다(2026-08-06 에 업그레이드).
+        #
+        # ↩︎ 이전 배치(참고 · 되돌리려면 아래 3줄 + BASE_MODELS 한 줄):
+        #       writer/verifier/coder `gemma4-26b-256k` (2026-08-05 (3) ~ 2026-08-06)
+        #
         # ⚠️ 창은 성실성을 사주지 않는다 — 26b 는 131072 에서 원문을 가지고 있으면서
         #    읽지 않고 분석 7편을 지어냈다(docs/11 §7 ⑧). 날조는 `analysis_substance`
-        #    게이트가 막는다. 창 증설은 그것과 **별개의** 조치다.
+        #    게이트가 막는다. 창 증설도, 모델 교체도 그것과 **별개의** 조치다.
         "models": {
-            "writer":   "gemma4-26b-256k",
-            "verifier": "gemma4-26b-256k",
-            "coder":    "gemma4-26b-256k",
+            "writer":   "gemma4-12b-mlx-256k",
+            "verifier": "gemma4-12b-mlx-256k",
+            "coder":    "gemma4-12b-mlx-256k",
         },
         # ⚠️ **작성자≠검증자를 모델 계열 수준에서 포기한 것은 의도된 예외다.**
         # Sam 승인(2026-08-05): 속도 우선으로 전 프로필 단일 모델. 남는 분리는

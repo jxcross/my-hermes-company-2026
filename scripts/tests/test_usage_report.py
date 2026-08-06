@@ -277,8 +277,12 @@ def test_context_mismatch_is_detected_from_the_server_not_the_config():
     두 층 떨어진 실패다 — 그래서 **서버가 보고하는 값**(/api/ps)을 본다.
     """
     import set_backend as sb
+    # ⚠️ 서빙 모델명을 **배치표에서 읽는다.** 문자열로 박아 두면 배치가 바뀌는 순간
+    #    이 픽스처가 '배치 밖 모델'이 되어 아래 test_..._ignores_models_outside_the_batch
+    #    경로로 빠지고, 검사는 **조용히 아무것도 재지 않게 된다**(2026-08-06 실제 발생).
+    batch_model = sb.backend_models("ollama")[0]
     orig_ps = ur.ollama_ps
-    ur.ollama_ps = lambda url="": ([{"name": "gemma4-26b-256k:latest",
+    ur.ollama_ps = lambda url="": ([{"name": f"{batch_model}:latest",
                                      "context_length": 131072, "size": 17_000_000_000}], "")
     try:
         rt = ur.check_runtime()
